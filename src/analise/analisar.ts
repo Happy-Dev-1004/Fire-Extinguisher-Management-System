@@ -3,6 +3,7 @@ import { supabase } from "../db";
 import { logger } from "../logger";
 import { RespostaIASchema, type RespostaIA } from "./schema";
 import { SYSTEM_PROMPT, buildUserMessage } from "./prompt";
+import { salvarResultado } from "../persistencia/salvar";
 
 const MIN_FOTOS = 1;
 
@@ -17,11 +18,23 @@ export interface LoteFotos {
   legenda: string;
   fotos: string[];
   status: string;
+  unidade_contexto?: string; // site passed in from the phone→site mapping
+  mes_referencia?: string;
+  data_inspecao?: string;
 }
 
 // Strip accidental ```json ... ``` fences the model sometimes adds
 function limparFences(raw: string): string {
   return raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/, "").trim();
+}
+
+const MESES_PT = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
+function resolverMesAtual(): string {
+  const d = new Date();
+  return `${MESES_PT[d.getMonth()]}/${d.getFullYear()}`;
+}
+function resolverDataHoje(): string {
+  return new Date().toISOString().slice(0, 10);
 }
 
 // Apply domain rules that the model must follow but might miss
@@ -107,11 +120,28 @@ export async function analisarLote(lote: LoteFotos): Promise<RespostaIA | null> 
 
   log.info({ confianca: resultado.confianca, status_geral: resultado.status_geral }, "análise concluída");
 
-  // Mark batch as analyzed
-  await supabase
-    .from("lotes_fotos")
-    .update({ status: "analisado" })
-    .eq("id", lote.id);
+  // Persist to registry + inspecoes, then mark batch processado
+  try {
+    await salvarResultado({
+      resultado,
+      loteId: lote.id,
+      fotos: lote.fotos,
+      unidadeContexto: lote.unidade_contexto ?? "",
+      mesReferencia: lote.mes_referencia ?? resolverMesAtual(),
+      dataInspecao: lote.data_inspecao ?? resolverDataHoje(),
+    });
+
+    await supabase
+      .from("lotes_fotos")
+      .update({ status: "processado" })
+      .eq("id", lote.id);
+  } catch (err: any) {
+    log.error({ err: err.message }, "falha ao persistir resultado — lote marcado como erro_persistencia");
+    await supabase
+      .from("lotes_fotos")
+      .update({ status: "erro_persistencia" })
+      .eq("id", lote.id);
+  }
 
   return resultado;
 }
