@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="160" height="70" viewBox="0 0 160 70">
+  <!-- Mansur dark red/maroon logo -->
+  <rect width="160" height="70" fill="#8B0000" rx="2"/>
+  <!-- Stylized M lettermark -->
+  <text x="80" y="38" font-family="Arial,Helvetica,sans-serif" font-size="28" font-weight="bold"
+        fill="white" text-anchor="middle" letter-spacing="2">M</text>
+  <!-- MANSUR brand name -->
+  <text x="80" y="52" font-family="Arial,Helvetica,sans-serif" font-size="10" font-weight="bold"
+        fill="white" text-anchor="middle" letter-spacing="3">MANSUR</text>
+  <!-- Tagline -->
+  <text x="80" y="63" font-family="Arial,Helvetica,sans-serif" font-size="5.5" fill="#ffbbbb"
+        text-anchor="middle" letter-spacing="0.5">EXTINTORES E PROJETOS CONTRA INCÊNDIO</text>
+</svg>
