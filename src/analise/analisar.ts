@@ -4,6 +4,7 @@ import { logger } from "../logger";
 import { RespostaIASchema, type RespostaIA } from "./schema";
 import { SYSTEM_PROMPT, buildUserMessage } from "./prompt";
 import { salvarResultado } from "../persistencia/salvar";
+import { notificarInspetorPorLote } from "../notificacao/notificar";
 
 const MIN_FOTOS = 1;
 
@@ -15,6 +16,7 @@ function getOpenAI(): OpenAI {
 
 export interface LoteFotos {
   id: string;
+  phone: string;
   legenda: string;
   fotos: string[];
   status: string;
@@ -120,7 +122,8 @@ export async function analisarLote(lote: LoteFotos): Promise<RespostaIA | null> 
 
   log.info({ confianca: resultado.confianca, status_geral: resultado.status_geral }, "análise concluída");
 
-  // Persist to registry + inspecoes, then mark batch processado
+  // Persist to registry + inspecoes, then notify inspector, then mark batch processado
+  const unidade = resultado.unidade ?? lote.unidade_contexto ?? "";
   try {
     await salvarResultado({
       resultado,
@@ -129,6 +132,14 @@ export async function analisarLote(lote: LoteFotos): Promise<RespostaIA | null> 
       unidadeContexto: lote.unidade_contexto ?? "",
       mesReferencia: lote.mes_referencia ?? resolverMesAtual(),
       dataInspecao: lote.data_inspecao ?? resolverDataHoje(),
+    });
+
+    // Send WhatsApp confirmation — never throws, never blocks the batch status update
+    await notificarInspetorPorLote({
+      loteId: lote.id,
+      phone: lote.phone,
+      resultado,
+      unidade,
     });
 
     await supabase

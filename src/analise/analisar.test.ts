@@ -32,6 +32,11 @@ vi.mock("../logger", () => ({
   },
 }));
 
+// Stub out the notificacao module so analisar tests never make real HTTP calls
+vi.mock("../notificacao/notificar", () => ({
+  notificarInspetorPorLote: vi.fn().mockResolvedValue(undefined),
+}));
+
 import { analisarLote, type LoteFotos } from "./analisar";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -50,6 +55,7 @@ function rewireSupabaseMock() {
 
 const LOTE_VALIDO: LoteFotos = {
   id: "test-id-123",
+  phone: "5573999990000",
   legenda: "01",
   fotos: ["https://example.com/foto1.jpg", "https://example.com/foto2.jpg"],
   status: "pronto",
