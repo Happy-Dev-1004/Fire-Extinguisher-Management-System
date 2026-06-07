@@ -1,4 +1,5 @@
 import { Router, Request, Response } from "express";
+import { supabase } from "../db";
 
 const router = Router();
 
@@ -10,13 +11,36 @@ const NUMEROS_AUTORIZADOS: string[] = [
   "PLACEHOLDER_NUMERO_2",
 ];
 
+// Per-phone queue: ensures messages from the same inspector
+// are processed one at a time, never in parallel.
+// This prevents race conditions when photos arrive in quick succession.
+const filas = new Map<string, Promise<void>>();
+
+function enqueueForPhone(phone: string, task: () => Promise<void>): void {
+  const anterior = filas.get(phone) ?? Promise.resolve();
+  const proxima = anterior.then(task).catch((err) =>
+    console.error(`Erro na fila de ${phone}:`, err)
+  );
+  filas.set(phone, proxima);
+}
+
 router.post("/", (req: Request, res: Response) => {
   // Always respond 200 immediately so Z-API stops retrying
   res.status(200).json({ received: true });
 
   const body = req.body;
+  const phone: string | undefined = body?.phone ?? body?.message?.phone;
 
-  // Log the full raw payload so you can see Z-API's exact shape
+  if (phone) {
+    enqueueForPhone(phone, () => processWebhook(body));
+  } else {
+    processWebhook(body).catch((err) =>
+      console.error("Erro ao processar webhook:", err)
+    );
+  }
+});
+
+async function processWebhook(body: any): Promise<void> {
   console.log("=== Webhook recebido ===");
   console.log(JSON.stringify(body, null, 2));
 
@@ -34,10 +58,12 @@ router.post("/", (req: Request, res: Response) => {
   const imageUrl: string | undefined =
     body?.image?.imageUrl ?? body?.message?.imageMessage?.url;
 
-  const caption: string | undefined =
+  // Treat empty string as no caption
+  const rawCaption: string | undefined =
     body?.image?.caption ?? body?.message?.imageMessage?.caption;
+  const caption: string | undefined =
+    rawCaption && rawCaption.trim() !== "" ? rawCaption.trim() : undefined;
 
-  // Extract the fields we care about
   console.log("--- Campos extraídos ---");
   console.log("Telefone :", phone ?? "não encontrado");
   console.log("Timestamp:", timestamp ?? "não encontrado");
@@ -47,7 +73,7 @@ router.post("/", (req: Request, res: Response) => {
     console.log("Legenda   :", caption ?? "sem legenda");
   }
 
-  // Ignore messages from unknown numbers
+  // Ignore unauthorized numbers
   if (!phone || !NUMEROS_AUTORIZADOS.includes(phone)) {
     console.log(`⚠ Número não autorizado: ${phone ?? "desconhecido"} — mensagem ignorada`);
     return;
@@ -55,12 +81,104 @@ router.post("/", (req: Request, res: Response) => {
 
   console.log(`✓ Número autorizado: ${phone}`);
 
-  if (!isImage) {
-    console.log("Mensagem não é uma imagem — ignorada por enquanto");
+  if (!isImage || !imageUrl) {
+    console.log("Mensagem não é uma imagem — ignorada");
     return;
   }
 
-  console.log("✓ Imagem recebida — pronto para processar");
-});
+  if (caption) {
+    await handleImageWithCaption(phone, caption, imageUrl);
+  } else {
+    await handleImageWithoutCaption(phone, imageUrl);
+  }
+}
+
+// An image WITH a caption = start of a new extinguisher batch.
+// Close any open batch for this phone first, then open a new one.
+async function handleImageWithCaption(
+  phone: string,
+  caption: string,
+  imageUrl: string
+): Promise<void> {
+  console.log(`📋 Nova legenda recebida: "${caption}" — iniciando novo lote`);
+
+  // Close the current open batch for this phone, if there is one
+  const { data: loteAberto } = await supabase
+    .from("lotes_fotos")
+    .select("id, legenda, fotos")
+    .eq("phone", phone)
+    .eq("status", "aberto")
+    .maybeSingle();
+
+  if (loteAberto) {
+    await supabase
+      .from("lotes_fotos")
+      .update({ status: "pronto" })
+      .eq("id", loteAberto.id);
+
+    console.log(
+      `✅ Lote anterior finalizado: extintor "${loteAberto.legenda}" — ${loteAberto.fotos.length} foto(s) — status: pronto`
+    );
+  }
+
+  // Open a new batch with this first photo
+  const { data: novoLote, error } = await supabase
+    .from("lotes_fotos")
+    .insert({
+      phone,
+      legenda: caption,
+      fotos: [imageUrl],
+      status: "aberto",
+      started_at: new Date().toISOString(),
+    })
+    .select()
+    .single();
+
+  if (error) {
+    console.error("Erro ao criar novo lote:", error.message);
+    return;
+  }
+
+  console.log(`📂 Novo lote aberto: extintor "${caption}" — id: ${novoLote.id}`);
+}
+
+// An image WITHOUT a caption = append to the current open batch.
+async function handleImageWithoutCaption(
+  phone: string,
+  imageUrl: string
+): Promise<void> {
+  const { data: loteAberto, error: fetchError } = await supabase
+    .from("lotes_fotos")
+    .select("id, legenda, fotos")
+    .eq("phone", phone)
+    .eq("status", "aberto")
+    .maybeSingle();
+
+  if (fetchError) {
+    console.error("Erro ao buscar lote aberto:", fetchError.message);
+    return;
+  }
+
+  if (!loteAberto) {
+    console.log(`⚠ Nenhum lote aberto para ${phone} — foto sem legenda descartada`);
+    return;
+  }
+
+  const fotosAtualizadas = [...loteAberto.fotos, imageUrl];
+
+  const { error: updateError } = await supabase
+    .from("lotes_fotos")
+    .update({ fotos: fotosAtualizadas })
+    .eq("id", loteAberto.id);
+
+  if (updateError) {
+    console.error("Erro ao adicionar foto ao lote:", updateError.message);
+    return;
+  }
+
+  console.log(
+    `📸 Foto adicionada ao lote "${loteAberto.legenda}" — total: ${fotosAtualizadas.length} foto(s)`
+  );
+}
 
 export default router;
