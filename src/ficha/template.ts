@@ -88,8 +88,8 @@ function renderExtintor(ext: ExtintorFicha, index: number): string {
 }
 
 export function renderHtml(dados: DadosFicha): string {
-  const logoMansurSrc = logoBase64("logo-mansur.svg") || logoBase64("logo-mansur.png");
-  const logoBarrySrc  = logoBase64("logo-barry.svg")  || logoBase64("logo-barry.png");
+  const logoMansurSrc = logoBase64("logo-mansur.png") || logoBase64("logo-mansur.svg");
+  const logoBarrySrc  = logoBase64("logo-barry.png")  || logoBase64("logo-barry.svg");
 
   // Group extintores into pages of 3 for page-break logic
   const blocos = dados.extintores.map((ext, i) => renderExtintor(ext, i)).join("\n");
