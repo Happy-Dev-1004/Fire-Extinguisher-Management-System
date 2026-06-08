@@ -7,8 +7,7 @@ const router = Router();
 // Format: country code + area code + number, no spaces or symbols.
 // Example: "5573999990000"
 const NUMEROS_AUTORIZADOS: string[] = [
-  "PLACEHOLDER_NUMERO_1",
-  "PLACEHOLDER_NUMERO_2",
+  "5542920012441",
 ];
 
 // Per-phone queue: ensures messages from the same inspector
