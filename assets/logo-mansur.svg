@@ -1,13 +1,25 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="160" height="70" viewBox="0 0 160 70">
-  <!-- Mansur dark red/maroon logo -->
-  <rect width="160" height="70" fill="#8B0000" rx="2"/>
-  <!-- Stylized M lettermark -->
-  <text x="80" y="38" font-family="Arial,Helvetica,sans-serif" font-size="28" font-weight="bold"
-        fill="white" text-anchor="middle" letter-spacing="2">M</text>
-  <!-- MANSUR brand name -->
-  <text x="80" y="52" font-family="Arial,Helvetica,sans-serif" font-size="10" font-weight="bold"
-        fill="white" text-anchor="middle" letter-spacing="3">MANSUR</text>
+  <!-- White background -->
+  <rect width="160" height="70" fill="#ffffff"/>
+
+  <!-- Stylized "M" icon — two red rectangular pillars with a notch, top-left -->
+  <!-- Left pillar -->
+  <rect x="18" y="8" width="12" height="28" fill="#C8102E" rx="1"/>
+  <!-- Right pillar -->
+  <rect x="40" y="8" width="12" height="28" fill="#C8102E" rx="1"/>
+  <!-- Center bridge (top of M shape) -->
+  <rect x="18" y="8" width="34" height="10" fill="#C8102E" rx="1"/>
+  <!-- Notch cut-out to form the M valley -->
+  <rect x="26" y="16" width="18" height="10" fill="#ffffff"/>
+  <!-- Small bottom feet of the M -->
+  <rect x="18" y="30" width="12" height="6" fill="#C8102E" rx="1"/>
+  <rect x="40" y="30" width="12" height="6" fill="#C8102E" rx="1"/>
+
+  <!-- MANSUR in dark navy/charcoal bold -->
+  <text x="80" y="46" font-family="Arial,Helvetica,sans-serif" font-size="18" font-weight="bold"
+        fill="#1a1a2e" text-anchor="middle" letter-spacing="3">MANSUR</text>
+
   <!-- Tagline -->
-  <text x="80" y="63" font-family="Arial,Helvetica,sans-serif" font-size="5.5" fill="#ffbbbb"
-        text-anchor="middle" letter-spacing="0.5">EXTINTORES E PROJETOS CONTRA INCÊNDIO</text>
+  <text x="80" y="58" font-family="Arial,Helvetica,sans-serif" font-size="5.8" fill="#444444"
+        text-anchor="middle" letter-spacing="0.8">EXTINTORES E PROJETOS CONTRA INCÊNDIO</text>
 </svg>

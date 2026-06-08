@@ -1,17 +1,25 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="200" height="60" viewBox="0 0 200 60">
-  <!-- Barry Callebaut red banner logo -->
-  <rect width="200" height="60" fill="#C8102E" rx="2"/>
-  <!-- Cacao pod icon (simplified oval shape) -->
-  <ellipse cx="82" cy="30" rx="10" ry="14" fill="none" stroke="white" stroke-width="1.5"/>
-  <line x1="82" y1="16" x2="82" y2="13" stroke="white" stroke-width="1.5"/>
-  <line x1="82" y1="13" x2="86" y2="10" stroke="white" stroke-width="1.5"/>
-  <line x1="76" y1="24" x2="72" y2="22" stroke="white" stroke-width="1"/>
-  <line x1="76" y1="30" x2="72" y2="30" stroke="white" stroke-width="1"/>
-  <line x1="76" y1="36" x2="72" y2="38" stroke="white" stroke-width="1"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="220" height="44" viewBox="0 0 220 44">
+  <!-- Red background banner -->
+  <rect width="220" height="44" fill="#C8102E"/>
+
+  <!-- Thin white border inside -->
+  <rect x="3" y="3" width="214" height="38" fill="none" stroke="white" stroke-width="1.2"/>
+
   <!-- BARRY text -->
-  <text x="96" y="26" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="bold" fill="white">BARRY</text>
+  <text x="52" y="29" font-family="Arial,Helvetica,sans-serif" font-size="20" font-weight="bold"
+        fill="white" text-anchor="end" letter-spacing="1">BARRY</text>
+
+  <!-- Cacao pod icon — oval with vertical ridges -->
+  <ellipse cx="115" cy="22" rx="11" ry="15" fill="none" stroke="white" stroke-width="1.8"/>
+  <!-- Vertical ridges on pod -->
+  <line x1="110" y1="9"  x2="109" y2="35" stroke="white" stroke-width="0.9"/>
+  <line x1="115" y1="7"  x2="115" y2="37" stroke="white" stroke-width="0.9"/>
+  <line x1="120" y1="9"  x2="121" y2="35" stroke="white" stroke-width="0.9"/>
+  <!-- Stem -->
+  <line x1="115" y1="7" x2="115" y2="4"  stroke="white" stroke-width="1.5"/>
+  <line x1="115" y1="4" x2="119" y2="2"  stroke="white" stroke-width="1.2"/>
+
   <!-- CALLEBAUT text -->
-  <text x="96" y="42" font-family="Arial,Helvetica,sans-serif" font-size="11" font-weight="bold" fill="white" letter-spacing="1">CALLEBAUT</text>
-  <!-- Left side vertical stripe accent -->
-  <rect x="0" y="0" width="6" height="60" fill="#A00020"/>
+  <text x="178" y="29" font-family="Arial,Helvetica,sans-serif" font-size="20" font-weight="bold"
+        fill="white" text-anchor="end" letter-spacing="1">CALLEBAUT</text>
 </svg>
