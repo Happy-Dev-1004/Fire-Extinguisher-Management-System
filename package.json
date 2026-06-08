@@ -14,7 +14,9 @@
   "author": "",
   "license": "ISC",
   "vitest": {
-    "environment": "node"
+    "environment": "node",
+    "include": ["src/**/*.test.ts"],
+    "exclude": ["dist/**", "node_modules/**"]
   },
   "devDependencies": {
     "@types/express": "^5.0.6",
