@@ -1,13 +1,14 @@
 import "dotenv/config";
 import express from "express";
-import extintoresRouter  from "./routes/extintores";
-import inspecoesRouter   from "./routes/inspecoes";
-import webhookRouter     from "./routes/webhook";
-import fichaRouter       from "./routes/ficha";
-import setupRouter       from "./routes/setup";
-import meRouter          from "./routes/me";
+import extintoresRouter    from "./routes/extintores";
+import inspecoesRouter     from "./routes/inspecoes";
+import webhookRouter       from "./routes/webhook";
+import fichaRouter         from "./routes/ficha";
+import setupRouter         from "./routes/setup";
+import meRouter            from "./routes/me";
 import equipeRouter        from "./routes/equipe";
 import configuracoesRouter from "./routes/configuracoes";
+import inspetoresRouter    from "./routes/inspetores";
 import { requireAuth, requireAdmin, requireOwner } from "./auth/middleware";
 
 // Import types augmentation so req.admin is available everywhere
@@ -47,6 +48,9 @@ app.use("/equipe",          requireAuth, requireOwner, equipeRouter);
 
 // Secrets management: owner only — members are rejected 403 by requireOwner
 app.use("/configuracoes",   requireAuth, requireOwner, configuracoesRouter);
+
+// Inspector management: owner + member (field roster is not sensitive config)
+app.use("/inspetores",      requireAuth, requireAdmin, inspetoresRouter);
 
 app.listen(PORT, () => {
   console.log(`Server starting... listening on port ${PORT}`);

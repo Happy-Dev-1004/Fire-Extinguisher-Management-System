@@ -1,6 +1,7 @@
 import path from "path";
 import fs from "fs";
 import { supabase } from "../db";
+import { supabaseAdmin } from "../db-admin";
 import { logger } from "../logger";
 import { renderHtml, type ExtintorFicha, type ItemInspecao, type DadosFicha } from "./template";
 export { buildSampleData } from "./sample";
@@ -84,13 +85,26 @@ export async function generateFicha(input: GerarFichaInput): Promise<GerarFichaR
     extintores,
   };
 
-  // ── 3. Render HTML ───────────────────────────────────────────────────────
+  // ── 3. Fetch active inspectors for the PARTICIPANTES footer ─────────────
+  const { data: inspetoresAtivos } = await supabaseAdmin
+    .from("inspetores")
+    .select("nome")
+    .eq("ativo", true)
+    .order("nome");
+
+  if (inspetoresAtivos && inspetoresAtivos.length > 0) {
+    dados.participantes = (inspetoresAtivos as { nome: string }[]).map((i) =>
+      i.nome.toUpperCase()
+    );
+  }
+
+  // ── 4. Render HTML ───────────────────────────────────────────────────────
   const html = renderHtml(dados);
 
-  // ── 4. Convert to PDF via Playwright ────────────────────────────────────
+  // ── 5. Convert to PDF via Playwright ────────────────────────────────────
   const pdfBuffer = await renderPdf(html, log);
 
-  // ── 5. Save to disk ──────────────────────────────────────────────────────
+  // ── 6. Save to disk ──────────────────────────────────────────────────────
   const outputDir = path.join(process.cwd(), "fichas");
   fs.mkdirSync(outputDir, { recursive: true });
   const fileName = `ficha_${input.unidade.replace(/\s+/g, "_")}_${input.mesReferencia.replace("/", "-")}.pdf`;

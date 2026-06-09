@@ -20,7 +20,17 @@ export interface DadosFicha {
   mesReferencia: string;
   dataInspecao: string;
   extintores: ExtintorFicha[];
+  // Active inspectors to show in the PARTICIPANTES footer.
+  // Falls back to PARTICIPANTES_PADRAO when not provided or empty.
+  participantes?: string[];
 }
+
+// Hardcoded fallback used when the inspetores table has no active records.
+const PARTICIPANTES_PADRAO = [
+  "RODRIGO LIMA SANTOS",
+  "JOÃO VICTOR A. DOS SANTOS",
+  "GABRIEL REIS P. DOS SANTOS",
+];
 
 const CHECKMARK = "&#10003;"; // ✓
 
@@ -88,6 +98,9 @@ function renderExtintor(ext: ExtintorFicha, index: number): string {
 }
 
 export function renderHtml(dados: DadosFicha): string {
+  const nomes = dados.participantes && dados.participantes.length > 0
+    ? dados.participantes
+    : PARTICIPANTES_PADRAO;
   const logoMansurSrc = logoBase64("logo-mansur.png") || logoBase64("logo-mansur.svg");
   const logoBarrySrc  = logoBase64("logo-barry.png")  || logoBase64("logo-barry.svg");
 
@@ -195,7 +208,7 @@ ${blocos}
   </div>
   <div class="footer-title">PARTICIPANTES</div>
   <div class="participantes">
-    ${["RODRIGO LIMA SANTOS", "JOÃO VICTOR A. DOS SANTOS", "GABRIEL REIS P. DOS SANTOS"].map((nome) => `
+    ${nomes.map((nome) => `
     <div class="participante">
       <div class="participante-nome">${nome}</div>
       <div class="participante-ass">Ass.:</div>

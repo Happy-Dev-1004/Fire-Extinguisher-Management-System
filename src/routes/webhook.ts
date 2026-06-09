@@ -1,6 +1,7 @@
 import { Router, Request, Response } from "express";
 import { supabase } from "../db";
-import { getSecret } from "../segredos/getSecret";
+import { supabaseAdmin } from "../db-admin";
+import { normalizar } from "../inspetores/normalizar";
 
 const router = Router();
 
@@ -15,6 +16,32 @@ function enqueueForPhone(phone: string, task: () => Promise<void>): void {
     console.error(`Erro na fila de ${phone}:`, err)
   );
   filas.set(phone, proxima);
+}
+
+// Checks the inspetores table for an active record with the same normalized
+// number. Returns true if authorized, false otherwise.
+export async function isAuthorized(phone: string): Promise<boolean> {
+  let normalizado: string;
+  try {
+    normalizado = normalizar(phone);
+  } catch {
+    // Phone has too few digits to be valid — definitely not authorized
+    return false;
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from("inspetores")
+    .select("id")
+    .eq("telefone_normalizado", normalizado)
+    .eq("ativo", true)
+    .maybeSingle();
+
+  if (error) {
+    console.error("Erro ao verificar autorização no banco:", error.message);
+    return false;
+  }
+
+  return data !== null;
 }
 
 router.post("/", (req: Request, res: Response) => {
@@ -66,17 +93,8 @@ async function processWebhook(body: any): Promise<void> {
     console.log("Legenda   :", caption ?? "sem legenda");
   }
 
-  // Ignore unauthorized numbers — loaded from DB (or .env fallback) at request time
-  let numerosAutorizados: string[];
-  try {
-    const numero = await getSecret("WHATSAPP_NUMERO");
-    numerosAutorizados = [numero.trim()];
-  } catch {
-    console.error("WHATSAPP_NUMERO não configurado — rejeitando todas as mensagens");
-    return;
-  }
-
-  if (!phone || !numerosAutorizados.includes(phone)) {
+  // Authorization: the incoming number (normalized) must match an active inspector.
+  if (!phone || !(await isAuthorized(phone))) {
     console.log(`⚠ Número não autorizado: ${phone ?? "desconhecido"} — mensagem ignorada`);
     return;
   }
