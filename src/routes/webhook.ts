@@ -1,14 +1,8 @@
 import { Router, Request, Response } from "express";
 import { supabase } from "../db";
+import { getSecret } from "../segredos/getSecret";
 
 const router = Router();
-
-// Replace these with the real inspector phone numbers later.
-// Format: country code + area code + number, no spaces or symbols.
-// Example: "5573999990000"
-const NUMEROS_AUTORIZADOS: string[] = [
-  "5542920012441",
-];
 
 // Per-phone queue: ensures messages from the same inspector
 // are processed one at a time, never in parallel.
@@ -72,8 +66,17 @@ async function processWebhook(body: any): Promise<void> {
     console.log("Legenda   :", caption ?? "sem legenda");
   }
 
-  // Ignore unauthorized numbers
-  if (!phone || !NUMEROS_AUTORIZADOS.includes(phone)) {
+  // Ignore unauthorized numbers — loaded from DB (or .env fallback) at request time
+  let numerosAutorizados: string[];
+  try {
+    const numero = await getSecret("WHATSAPP_NUMERO");
+    numerosAutorizados = [numero.trim()];
+  } catch {
+    console.error("WHATSAPP_NUMERO não configurado — rejeitando todas as mensagens");
+    return;
+  }
+
+  if (!phone || !numerosAutorizados.includes(phone)) {
     console.log(`⚠ Número não autorizado: ${phone ?? "desconhecido"} — mensagem ignorada`);
     return;
   }

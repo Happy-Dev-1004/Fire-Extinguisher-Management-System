@@ -1,4 +1,5 @@
 import { logger } from "../logger";
+import { getSecret } from "../segredos/getSecret";
 
 // Z-API docs: POST https://api.z-api.io/instances/{instanceId}/token/{token}/send-text
 // Headers: Client-Token: <clientToken>
@@ -6,16 +7,12 @@ import { logger } from "../logger";
 const MAX_TENTATIVAS = 3;
 const BACKOFF_MS = [1_000, 3_000, 7_000]; // 1s, 3s, 7s
 
-function getConfig(): { instanceId: string; token: string; clientToken: string } {
-  const instanceId   = process.env.ZAPI_INSTANCE_ID;
-  const token        = process.env.ZAPI_TOKEN;
-  const clientToken  = process.env.ZAPI_CLIENT_TOKEN;
-
-  if (!instanceId || !token || !clientToken) {
-    throw new Error(
-      "Variáveis de ambiente Z-API não configuradas: ZAPI_INSTANCE_ID, ZAPI_TOKEN, ZAPI_CLIENT_TOKEN"
-    );
-  }
+async function getConfig(): Promise<{ instanceId: string; token: string; clientToken: string }> {
+  const [instanceId, token, clientToken] = await Promise.all([
+    getSecret("ZAPI_INSTANCE_ID"),
+    getSecret("ZAPI_TOKEN"),
+    getSecret("ZAPI_CLIENT_TOKEN"),
+  ]);
   return { instanceId, token, clientToken };
 }
 
@@ -36,9 +33,9 @@ function deveRetentar(status: number): boolean {
 export async function sendWhatsAppMessage(phone: string, text: string): Promise<boolean> {
   const log = logger.child({ modulo: "zapi", phone });
 
-  let config: ReturnType<typeof getConfig>;
+  let config: Awaited<ReturnType<typeof getConfig>>;
   try {
-    config = getConfig();
+    config = await getConfig();
   } catch (err: any) {
     log.error({ err: err.message }, "falha ao enviar confirmação — configuração Z-API ausente");
     return false;

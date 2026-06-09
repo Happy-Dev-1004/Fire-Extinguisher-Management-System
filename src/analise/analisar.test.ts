@@ -37,6 +37,10 @@ vi.mock("../notificacao/notificar", () => ({
   notificarInspetorPorLote: vi.fn().mockResolvedValue(undefined),
 }));
 
+vi.mock("../segredos/getSecret", () => ({
+  getSecret: vi.fn().mockResolvedValue("sk-test-fake-key"),
+}));
+
 import { analisarLote, type LoteFotos } from "./analisar";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -111,7 +115,6 @@ const RESPOSTA_CO2 = JSON.stringify({
 describe("analisarLote", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    process.env.OPENAI_API_KEY = "sk-test-fake-key";
     rewireSupabaseMock();
   });
 

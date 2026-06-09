@@ -6,7 +6,8 @@ import webhookRouter     from "./routes/webhook";
 import fichaRouter       from "./routes/ficha";
 import setupRouter       from "./routes/setup";
 import meRouter          from "./routes/me";
-import equipeRouter      from "./routes/equipe";
+import equipeRouter        from "./routes/equipe";
+import configuracoesRouter from "./routes/configuracoes";
 import { requireAuth, requireAdmin, requireOwner } from "./auth/middleware";
 
 // Import types augmentation so req.admin is available everywhere
@@ -42,7 +43,10 @@ app.use("/ficha",      requireAuth, requireAdmin,      fichaRouter);
 // Team management: owner only — except /equipe/convites/aceitar which is public
 // (the public sub-route is declared first inside the router before requireOwner applies)
 app.use("/equipe/convites/aceitar", equipeRouter); // public: token is the credential
-app.use("/equipe",     requireAuth, requireOwner,      equipeRouter);
+app.use("/equipe",          requireAuth, requireOwner, equipeRouter);
+
+// Secrets management: owner only — members are rejected 403 by requireOwner
+app.use("/configuracoes",   requireAuth, requireOwner, configuracoesRouter);
 
 app.listen(PORT, () => {
   console.log(`Server starting... listening on port ${PORT}`);

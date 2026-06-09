@@ -5,12 +5,12 @@ import { RespostaIASchema, type RespostaIA } from "./schema";
 import { SYSTEM_PROMPT, buildUserMessage } from "./prompt";
 import { salvarResultado } from "../persistencia/salvar";
 import { notificarInspetorPorLote } from "../notificacao/notificar";
+import { getSecret } from "../segredos/getSecret";
 
 const MIN_FOTOS = 1;
 
-function getOpenAI(): OpenAI {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) throw new Error("OPENAI_API_KEY não definida no .env");
+async function getOpenAI(): Promise<OpenAI> {
+  const apiKey = await getSecret("OPENAI_API_KEY");
   return new OpenAI({ apiKey });
 }
 
@@ -80,7 +80,7 @@ export async function analisarLote(lote: LoteFotos): Promise<RespostaIA | null> 
 
   let rawResposta: string;
   try {
-    const completion = await getOpenAI().chat.completions.create({
+    const completion = await (await getOpenAI()).chat.completions.create({
       model: "gpt-4o",
       max_tokens: 1024,
       messages: [

@@ -28,6 +28,17 @@ const {
 
 vi.mock("../db",     () => ({ supabase: { from: fromFn } }));
 vi.mock("../logger", () => ({ logger: { child: logChild } }));
+vi.mock("../segredos/getSecret", () => ({
+  getSecret: vi.fn(async (nome: string) => {
+    const map: Record<string, string> = {
+      ZAPI_INSTANCE_ID:  "inst-fake",
+      ZAPI_TOKEN:        "tok-fake",
+      ZAPI_CLIENT_TOKEN: "client-fake",
+    };
+    if (map[nome]) return map[nome];
+    throw new Error(`getSecret: '${nome}' não configurado no mock`);
+  }),
+}));
 
 // Stub global fetch so no real HTTP calls are made
 vi.stubGlobal("fetch", fetchMock);
@@ -120,10 +131,6 @@ describe("notificarInspetorPorLote", () => {
     rewire();
     // Default: Z-API returns 200 OK
     fetchMock.mockResolvedValue({ ok: true, status: 200 });
-    // Ensure env vars are present so getConfig() doesn't throw
-    process.env.ZAPI_INSTANCE_ID  = "inst-fake";
-    process.env.ZAPI_TOKEN        = "tok-fake";
-    process.env.ZAPI_CLIENT_TOKEN = "client-fake";
   });
 
   it("inspeção conforme: envia mensagem com ✅ contendo número e unidade corretos", async () => {
