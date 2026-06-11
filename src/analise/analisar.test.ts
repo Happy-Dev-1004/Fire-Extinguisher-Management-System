@@ -14,6 +14,16 @@ vi.mock("../db", () => ({
   supabase: { from: fromFn },
 }));
 
+// db-admin throws at import without SUPABASE env vars; mock it. The inspector
+// unit lookup (getUnidadeInspetor) chains .select().eq().eq().maybeSingle().
+vi.mock("../db-admin", () => {
+  const maybeSingle = vi.fn().mockResolvedValue({ data: null, error: null });
+  const eq2 = vi.fn().mockReturnValue({ maybeSingle });
+  const eq1 = vi.fn().mockReturnValue({ eq: eq2 });
+  const select = vi.fn().mockReturnValue({ eq: eq1 });
+  return { supabaseAdmin: { from: vi.fn().mockReturnValue({ select }) } };
+});
+
 // Must use `function` keyword — vi.fn() arrow mocks don't work as constructors
 vi.mock("openai", () => {
   const FakeOpenAI = function(this: any) {
@@ -41,7 +51,7 @@ vi.mock("../segredos/getSecret", () => ({
   getSecret: vi.fn().mockResolvedValue("sk-test-fake-key"),
 }));
 
-import { analisarLote, type LoteFotos } from "./analisar";
+import { analisarLote, extrairNumeroTag, type LoteFotos } from "./analisar";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 function mockOpenAIResponse(content: string) {
@@ -177,5 +187,32 @@ describe("analisarLote", () => {
 
     expect(resultado).toBeNull();
     expect(mockCreate).not.toHaveBeenCalled();
+  });
+});
+
+describe("extrairNumeroTag", () => {
+  it("aceita número puro e mantém zero à esquerda (igual à etiqueta)", () => {
+    expect(extrairNumeroTag("57")).toBe("57");
+    expect(extrairNumeroTag("01")).toBe("01");
+    expect(extrairNumeroTag("100")).toBe("100");
+    expect(extrairNumeroTag("  42 ")).toBe("42");
+  });
+
+  it("aceita etiquetas com letra e normaliza", () => {
+    expect(extrairNumeroTag("A-12")).toBe("A-12");
+    expect(extrairNumeroTag("r 3")).toBe("R3");
+    expect(extrairNumeroTag("12b")).toBe("12B");
+  });
+
+  it("rejeita o placeholder 'Extintor'", () => {
+    expect(extrairNumeroTag("Extintor")).toBeNull();
+    expect(extrairNumeroTag("extintor")).toBeNull();
+  });
+
+  it("rejeita texto livre e vazio", () => {
+    expect(extrairNumeroTag("foto do manometro")).toBeNull();
+    expect(extrairNumeroTag("")).toBeNull();
+    expect(extrairNumeroTag(null)).toBeNull();
+    expect(extrairNumeroTag(undefined)).toBeNull();
   });
 });

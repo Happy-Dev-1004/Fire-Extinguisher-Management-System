@@ -23,6 +23,9 @@ const log = logger.child({ rota: "/inspetores" });
 const InspetorBodySchema = z.object({
   nome:     z.string().min(2, "Nome deve ter pelo menos 2 caracteres."),
   telefone: z.string().min(1, "Telefone é obrigatório."),
+  // Fixed unit this inspector covers. Every photo they send is auto-tagged with
+  // this unit, so they never need to type a "unidade:" command in WhatsApp.
+  unidade:  z.string().min(1, "Unidade é obrigatória."),
   ativo:    z.boolean().optional(),
 });
 
@@ -32,7 +35,7 @@ const InspetorBodySchema = z.object({
 router.get("/", async (_req: Request, res: Response) => {
   const { data, error } = await supabaseAdmin
     .from("inspetores")
-    .select("id, nome, telefone, telefone_normalizado, ativo, created_at, updated_at")
+    .select("id, nome, telefone, telefone_normalizado, unidade_contexto, ativo, created_at, updated_at")
     .order("nome");
 
   if (error) {
@@ -40,7 +43,13 @@ router.get("/", async (_req: Request, res: Response) => {
     return res.status(500).json({ erro: "Erro ao buscar inspetores." });
   }
 
-  return res.json({ inspetores: data ?? [] });
+  // Expose unidade_contexto to the client under the friendlier name "unidade".
+  const inspetores = (data ?? []).map(({ unidade_contexto, ...rest }: any) => ({
+    ...rest,
+    unidade: unidade_contexto ?? "",
+  }));
+
+  return res.json({ inspetores });
 });
 
 // ── POST /inspetores ──────────────────────────────────────────────────────────
@@ -51,7 +60,7 @@ router.post("/", async (req: Request, res: Response) => {
   if (!parsed.success) {
     return res.status(400).json({ erro: parsed.error.flatten().fieldErrors });
   }
-  const { nome, telefone } = parsed.data;
+  const { nome, telefone, unidade } = parsed.data;
 
   let telefoneNormalizado: string;
   try {
@@ -80,9 +89,10 @@ router.post("/", async (req: Request, res: Response) => {
       nome,
       telefone,
       telefone_normalizado: telefoneNormalizado,
+      unidade_contexto: unidade,
       ativo: true,
     })
-    .select("id, nome, telefone, telefone_normalizado, ativo, created_at, updated_at")
+    .select("id, nome, telefone, telefone_normalizado, unidade_contexto, ativo, created_at, updated_at")
     .single();
 
   if (error) {
@@ -90,8 +100,9 @@ router.post("/", async (req: Request, res: Response) => {
     return res.status(500).json({ erro: "Erro ao cadastrar inspetor." });
   }
 
-  log.info({ id: data.id, nome: data.nome }, "inspetor criado");
-  return res.status(201).json(data);
+  log.info({ id: data.id, nome: data.nome, unidade }, "inspetor criado");
+  const { unidade_contexto, ...rest } = data as any;
+  return res.status(201).json({ ...rest, unidade: unidade_contexto ?? "" });
 });
 
 // ── PUT /inspetores/:id ───────────────────────────────────────────────────────
@@ -127,8 +138,9 @@ router.put("/:id", async (req: Request, res: Response) => {
 
   const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
 
-  if (updates.nome !== undefined)  patch.nome = updates.nome;
-  if (updates.ativo !== undefined) patch.ativo = updates.ativo;
+  if (updates.nome !== undefined)    patch.nome = updates.nome;
+  if (updates.ativo !== undefined)   patch.ativo = updates.ativo;
+  if (updates.unidade !== undefined) patch.unidade_contexto = updates.unidade;
 
   if (updates.telefone !== undefined) {
     let novoNormalizado: string;
@@ -167,7 +179,7 @@ router.put("/:id", async (req: Request, res: Response) => {
     .from("inspetores")
     .update(patch)
     .eq("id", id)
-    .select("id, nome, telefone, telefone_normalizado, ativo, created_at, updated_at")
+    .select("id, nome, telefone, telefone_normalizado, unidade_contexto, ativo, created_at, updated_at")
     .single();
 
   if (error) {
@@ -176,7 +188,8 @@ router.put("/:id", async (req: Request, res: Response) => {
   }
 
   log.info({ id, patch: Object.keys(patch) }, "inspetor atualizado");
-  return res.json(data);
+  const { unidade_contexto, ...rest } = data as any;
+  return res.json({ ...rest, unidade: unidade_contexto ?? "" });
 });
 
 // ── DELETE /inspetores/:id ────────────────────────────────────────────────────

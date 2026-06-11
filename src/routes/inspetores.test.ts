@@ -64,11 +64,25 @@ const MEMBER: AdminRecord = {
   id: "member-uid", email: "member@test.com", nome: "Membro", role: "member", ativo: true, created_at: "2026-01-01",
 };
 
+// What the DB returns (column is unidade_contexto).
 const INSPETOR_ROW = {
   id: "ins-uuid-1",
   nome: "Rodrigo Lima",
   telefone: "(11) 9 1234-5678",
   telefone_normalizado: "11912345678",
+  unidade_contexto: "Barry Callebaut",
+  ativo: true,
+  created_at: "2026-01-01T00:00:00Z",
+  updated_at: "2026-01-01T00:00:00Z",
+};
+
+// What the route returns to the client (unidade_contexto mapped → unidade).
+const INSPETOR_RESPOSTA = {
+  id: "ins-uuid-1",
+  nome: "Rodrigo Lima",
+  telefone: "(11) 9 1234-5678",
+  telefone_normalizado: "11912345678",
+  unidade: "Barry Callebaut",
   ativo: true,
   created_at: "2026-01-01T00:00:00Z",
   updated_at: "2026-01-01T00:00:00Z",
@@ -113,7 +127,7 @@ describe("normalizar (phone normalization)", () => {
     singleFn.mockResolvedValueOnce({ data: { ...INSPETOR_ROW }, error: null });
 
     const handler = getHandler("post", "/");
-    const req = makeReq({ body: { nome: "João", telefone: "(11) 9 1234-5678" }, admin: OWNER });
+    const req = makeReq({ body: { nome: "João", telefone: "(11) 9 1234-5678", unidade: "Barry Callebaut" }, admin: OWNER });
     const { res } = makeRes();
     await handler(req, res);
 
@@ -126,7 +140,7 @@ describe("normalizar (phone normalization)", () => {
     singleFn.mockResolvedValueOnce({ data: { ...INSPETOR_ROW }, error: null });
 
     const handler = getHandler("post", "/");
-    const req = makeReq({ body: { nome: "Ana", telefone: "+5511912345678" }, admin: OWNER });
+    const req = makeReq({ body: { nome: "Ana", telefone: "+5511912345678", unidade: "Barry Callebaut" }, admin: OWNER });
     const { res } = makeRes();
     await handler(req, res);
 
@@ -145,7 +159,7 @@ describe("GET /inspetores", () => {
     const { res, json } = makeRes();
     await handler(makeReq({ admin: OWNER }), res);
 
-    expect(json).toHaveBeenCalledWith({ inspetores: [INSPETOR_ROW] });
+    expect(json).toHaveBeenCalledWith({ inspetores: [INSPETOR_RESPOSTA] });
   });
 
   it("membro também recebe lista (requireAdmin permite owner e member)", async () => {
@@ -156,7 +170,7 @@ describe("GET /inspetores", () => {
     const { res, json } = makeRes();
     await handler(makeReq({ admin: MEMBER }), res);
 
-    expect(json).toHaveBeenCalledWith({ inspetores: [INSPETOR_ROW] });
+    expect(json).toHaveBeenCalledWith({ inspetores: [INSPETOR_RESPOSTA] });
   });
 
   it("retorna lista vazia quando não há inspetores", async () => {
@@ -180,15 +194,16 @@ describe("POST /inspetores", () => {
     singleFn.mockResolvedValueOnce({ data: INSPETOR_ROW, error: null });
 
     const handler = getHandler("post", "/");
-    const req = makeReq({ body: { nome: "Rodrigo Lima", telefone: "(11) 9 1234-5678" }, admin: OWNER });
+    const req = makeReq({ body: { nome: "Rodrigo Lima", telefone: "(11) 9 1234-5678", unidade: "Barry Callebaut" }, admin: OWNER });
     const { res, status, json } = makeRes();
     await handler(req, res);
 
     expect(status).toHaveBeenCalledWith(201);
-    expect(json).toHaveBeenCalledWith(INSPETOR_ROW);
+    expect(json).toHaveBeenCalledWith(INSPETOR_RESPOSTA);
     expect(insertFn.mock.calls[0][0]).toMatchObject({
       nome: "Rodrigo Lima",
       telefone_normalizado: "11912345678",
+      unidade_contexto: "Barry Callebaut",
       ativo: true,
     });
   });
@@ -199,7 +214,7 @@ describe("POST /inspetores", () => {
     singleFn.mockResolvedValueOnce({ data: INSPETOR_ROW, error: null });
 
     const handler = getHandler("post", "/");
-    const req = makeReq({ body: { nome: "Ana Silva", telefone: "11912345678" }, admin: MEMBER });
+    const req = makeReq({ body: { nome: "Ana Silva", telefone: "11912345678", unidade: "Barry Callebaut" }, admin: MEMBER });
     const { res, status } = makeRes();
     await handler(req, res);
 
@@ -214,7 +229,7 @@ describe("POST /inspetores", () => {
     });
 
     const handler = getHandler("post", "/");
-    const req = makeReq({ body: { nome: "Novo", telefone: "11912345678" }, admin: OWNER });
+    const req = makeReq({ body: { nome: "Novo", telefone: "11912345678", unidade: "Barry Callebaut" }, admin: OWNER });
     const { res, status, json } = makeRes();
     await handler(req, res);
 
@@ -227,8 +242,8 @@ describe("POST /inspetores", () => {
   it("rejeita telefone com menos de 8 dígitos", async () => {
     buildChain();
     const handler = getHandler("post", "/");
-    // Nome must pass Zod min(2) so the request reaches normalizar()
-    const req = makeReq({ body: { nome: "Xavier", telefone: "123" }, admin: OWNER });
+    // Nome + unidade must pass Zod so the request reaches normalizar()
+    const req = makeReq({ body: { nome: "Xavier", telefone: "123", unidade: "Barry Callebaut" }, admin: OWNER });
     const { res, status } = makeRes();
     await handler(req, res);
 

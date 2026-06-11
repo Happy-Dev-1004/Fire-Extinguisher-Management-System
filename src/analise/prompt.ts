@@ -9,6 +9,7 @@ Regras obrigatórias:
 - Para ambientes externos (área externa), sinalizacao_piso pode ser "N.A"
 - Use "Indeterminado" quando a foto não permite observar o item com clareza
 - Para campos de texto (unidade, setor, inspetor): use null se não estiver visível nas fotos
+- Para vencimento_carga e vencimento_teste: informe no formato "MM/AAAA" (ex: "04/2026") ou "mmm/AAAA" (ex: "abr/2026"). Se só o ano estiver visível, use "12/AAAA". Se não estiver visível, use ""
 
 Campos obrigatórios no JSON:
 {

@@ -1,31 +1,59 @@
 import { Router, Request, Response } from "express";
 import { supabase } from "../db";
 import { supabaseAdmin } from "../db-admin";
+import { logger } from "../logger";
 import { normalizar } from "../inspetores/normalizar";
+import { analisarLote, type LoteFotos } from "../analise/analisar";
 
 const router = Router();
+const log = logger.child({ rota: "webhook" });
 
 // Per-phone queue: ensures messages from the same inspector
 // are processed one at a time, never in parallel.
-// This prevents race conditions when photos arrive in quick succession.
 const filas = new Map<string, Promise<void>>();
+
+// Auto-close timer: after BATCH_TIMEOUT_MS of inactivity the batch closes automatically
+const BATCH_TIMEOUT_MS = 30_000;
+const timers = new Map<string, ReturnType<typeof setTimeout>>();
+
+function resetBatchTimer(phone: string): void {
+  const existing = timers.get(phone);
+  if (existing) clearTimeout(existing);
+  const t = setTimeout(() => {
+    timers.delete(phone);
+    enqueueForPhone(phone, () => autoFecharLote(phone));
+  }, BATCH_TIMEOUT_MS);
+  timers.set(phone, t);
+}
+
+async function autoFecharLote(phone: string): Promise<void> {
+  const { data: lote, error } = await supabase
+    .from("lotes_fotos")
+    .select("id, legenda, fotos, phone, unidade_contexto, mes_referencia, data_inspecao")
+    .eq("phone", phone)
+    .eq("status", "aberto")
+    .maybeSingle();
+
+  if (error || !lote) return;
+
+  await supabase.from("lotes_fotos").update({ status: "pronto" }).eq("id", lote.id);
+  log.info({ phone, loteId: lote.id, extintor: lote.legenda, qtdFotos: lote.fotos.length }, "lote finalizado por timeout automático");
+  triggerAnalise({ ...lote, status: "pronto" });
+}
 
 function enqueueForPhone(phone: string, task: () => Promise<void>): void {
   const anterior = filas.get(phone) ?? Promise.resolve();
   const proxima = anterior.then(task).catch((err) =>
-    console.error(`Erro na fila de ${phone}:`, err)
+    log.error({ phone, err: err.message }, "erro na fila de processamento")
   );
   filas.set(phone, proxima);
 }
 
-// Checks the inspetores table for an active record with the same normalized
-// number. Returns true if authorized, false otherwise.
 export async function isAuthorized(phone: string): Promise<boolean> {
   let normalizado: string;
   try {
     normalizado = normalizar(phone);
   } catch {
-    // Phone has too few digits to be valid — definitely not authorized
     return false;
   }
 
@@ -37,7 +65,7 @@ export async function isAuthorized(phone: string): Promise<boolean> {
     .maybeSingle();
 
   if (error) {
-    console.error("Erro ao verificar autorização no banco:", error.message);
+    log.error({ err: error.message }, "erro ao verificar autorização no banco");
     return false;
   }
 
@@ -51,58 +79,88 @@ router.post("/", (req: Request, res: Response) => {
   const body = req.body;
   const phone: string | undefined = body?.phone ?? body?.message?.phone;
 
+  // Full body dump for debugging — remove after confirming Z-API payload shape
+  log.info({ payload: JSON.stringify(body).slice(0, 800) }, "webhook payload completo");
+
+  log.info(
+    {
+      phone: phone ?? "desconhecido",
+      tipo: body?.type ?? "?",
+      temImagem: !!(body?.image ?? body?.message?.imageMessage),
+      temTexto: !!(body?.text ?? body?.message?.conversation ?? body?.message?.extendedTextMessage),
+    },
+    "webhook recebido"
+  );
+
   if (phone) {
     enqueueForPhone(phone, () => processWebhook(body));
   } else {
     processWebhook(body).catch((err) =>
-      console.error("Erro ao processar webhook:", err)
+      log.error({ err: err.message }, "erro ao processar webhook sem telefone")
     );
   }
 });
 
 async function processWebhook(body: any): Promise<void> {
-  console.log("=== Webhook recebido ===");
-  console.log(JSON.stringify(body, null, 2));
+  const phone: string | undefined = body?.phone ?? body?.message?.phone;
 
-  // Z-API wraps the message inside body.message for most types
-  const phone: string | undefined =
-    body?.phone ?? body?.message?.phone;
-
-  const timestamp: number | undefined =
-    body?.momment ?? body?.message?.momment;
+  const isReceivedCallback = body?.type === "ReceivedCallback";
 
   const isImage: boolean =
-    body?.type === "ReceivedCallback" &&
+    isReceivedCallback &&
     (body?.image != null || body?.message?.imageMessage != null);
 
   const imageUrl: string | undefined =
-    body?.image?.imageUrl ?? body?.message?.imageMessage?.url;
+    body?.image?.imageUrl ??
+    body?.image?.url ??
+    body?.message?.imageMessage?.url;
 
-  // Treat empty string as no caption
   const rawCaption: string | undefined =
-    body?.image?.caption ?? body?.message?.imageMessage?.caption;
-  const caption: string | undefined =
-    rawCaption && rawCaption.trim() !== "" ? rawCaption.trim() : undefined;
+    body?.image?.caption ??
+    body?.message?.imageMessage?.caption;
+  const caption: string | undefined = rawCaption?.trim() || undefined;
 
-  console.log("--- Campos extraídos ---");
-  console.log("Telefone :", phone ?? "não encontrado");
-  console.log("Timestamp:", timestamp ?? "não encontrado");
-  console.log("É imagem :", isImage);
-  if (isImage) {
-    console.log("URL imagem:", imageUrl ?? "não encontrada");
-    console.log("Legenda   :", caption ?? "sem legenda");
-  }
+  const isText: boolean =
+    isReceivedCallback &&
+    (body?.text != null ||
+     body?.message?.conversation != null ||
+     body?.message?.extendedTextMessage != null);
 
-  // Authorization: the incoming number (normalized) must match an active inspector.
+  const textBody: string | undefined = (
+    body?.text?.message ??
+    body?.message?.conversation ??
+    body?.message?.extendedTextMessage?.text
+  )?.trim().toLowerCase();
+
   if (!phone || !(await isAuthorized(phone))) {
-    console.log(`⚠ Número não autorizado: ${phone ?? "desconhecido"} — mensagem ignorada`);
+    log.warn({ phone: phone ?? "desconhecido" }, "número não autorizado — mensagem ignorada");
     return;
   }
 
-  console.log(`✓ Número autorizado: ${phone}`);
+  log.info({ phone }, "inspetor autorizado");
+
+  const FINALIZADORES = ["fim", "ok", "pronto", "finalizar", "concluir", "done"];
+  if (isText && textBody && FINALIZADORES.includes(textBody)) {
+    await handleFinalizarLote(phone);
+    return;
+  }
+
+  // "unidade: Nome da Unidade" — sets the active unit context for this inspector
+  if (isText && textBody) {
+    const matchUnidade = textBody.match(/^unidade\s*[:\-]\s*(.+)/i);
+    if (matchUnidade) {
+      const nomeUnidade = matchUnidade[1].trim();
+      await supabaseAdmin
+        .from("inspetores")
+        .update({ unidade_contexto: nomeUnidade })
+        .eq("telefone_normalizado", normalizar(phone));
+      log.info({ phone, unidade: nomeUnidade }, "unidade de contexto definida pelo inspetor");
+      return;
+    }
+  }
 
   if (!isImage || !imageUrl) {
-    console.log("Mensagem não é uma imagem — ignorada");
+    log.info({ phone, textBody }, "mensagem não é imagem nem comando — ignorada");
     return;
   }
 
@@ -113,19 +171,27 @@ async function processWebhook(body: any): Promise<void> {
   }
 }
 
-// An image WITH a caption = start of a new extinguisher batch.
-// Close any open batch for this phone first, then open a new one.
+async function getUnidadeContexto(phone: string): Promise<string | null> {
+  const normalizado = normalizar(phone);
+  const { data } = await supabaseAdmin
+    .from("inspetores")
+    .select("unidade_contexto")
+    .eq("telefone_normalizado", normalizado)
+    .maybeSingle();
+  return (data as any)?.unidade_contexto ?? null;
+}
+
 async function handleImageWithCaption(
   phone: string,
   caption: string,
   imageUrl: string
 ): Promise<void> {
-  console.log(`📋 Nova legenda recebida: "${caption}" — iniciando novo lote`);
+  const unidade_contexto = await getUnidadeContexto(phone);
 
-  // Close the current open batch for this phone, if there is one
+  // Close any open batch for this phone first
   const { data: loteAberto } = await supabase
     .from("lotes_fotos")
-    .select("id, legenda, fotos")
+    .select("id, legenda, fotos, phone, unidade_contexto, mes_referencia, data_inspecao")
     .eq("phone", phone)
     .eq("status", "aberto")
     .maybeSingle();
@@ -136,12 +202,15 @@ async function handleImageWithCaption(
       .update({ status: "pronto" })
       .eq("id", loteAberto.id);
 
-    console.log(
-      `✅ Lote anterior finalizado: extintor "${loteAberto.legenda}" — ${loteAberto.fotos.length} foto(s) — status: pronto`
+    log.info(
+      { phone, loteId: loteAberto.id, extintor: loteAberto.legenda, qtdFotos: loteAberto.fotos.length },
+      "lote anterior finalizado — nova legenda recebida"
     );
+
+    triggerAnalise({ ...loteAberto, status: "pronto" });
   }
 
-  // Open a new batch with this first photo
+  // Open new batch
   const { data: novoLote, error } = await supabase
     .from("lotes_fotos")
     .insert({
@@ -150,19 +219,61 @@ async function handleImageWithCaption(
       fotos: [imageUrl],
       status: "aberto",
       started_at: new Date().toISOString(),
+      ...(unidade_contexto ? { unidade_contexto } : {}),
     })
     .select()
     .single();
 
   if (error) {
-    console.error("Erro ao criar novo lote:", error.message);
+    log.error({ phone, caption, err: error.message }, "erro ao criar novo lote");
     return;
   }
 
-  console.log(`📂 Novo lote aberto: extintor "${caption}" — id: ${novoLote.id}`);
+  log.info(
+    { phone, loteId: novoLote.id, extintor: caption, qtdFotos: 1 },
+    "lote aberto — primeira foto recebida com legenda"
+  );
+  resetBatchTimer(phone);
 }
 
-// An image WITHOUT a caption = append to the current open batch.
+async function handleFinalizarLote(phone: string): Promise<void> {
+  const { data: loteAberto, error } = await supabase
+    .from("lotes_fotos")
+    .select("id, legenda, fotos, phone, unidade_contexto, mes_referencia, data_inspecao")
+    .eq("phone", phone)
+    .eq("status", "aberto")
+    .maybeSingle();
+
+  if (error) {
+    log.error({ phone, err: error.message }, "erro ao buscar lote aberto para finalizar");
+    return;
+  }
+
+  if (!loteAberto) {
+    log.warn({ phone }, "comando 'fim' recebido mas nenhum lote aberto encontrado");
+    return;
+  }
+
+  await supabase
+    .from("lotes_fotos")
+    .update({ status: "pronto" })
+    .eq("id", loteAberto.id);
+
+  log.info(
+    { phone, loteId: loteAberto.id, extintor: loteAberto.legenda, qtdFotos: loteAberto.fotos.length },
+    "lote finalizado por comando 'fim'"
+  );
+
+  triggerAnalise({ ...loteAberto, status: "pronto" });
+}
+
+function triggerAnalise(lote: LoteFotos): void {
+  log.info({ loteId: lote.id, extintor: lote.legenda }, "disparando análise de IA em segundo plano");
+  analisarLote(lote).catch((err: Error) =>
+    log.error({ loteId: lote.id, err: err.message }, "erro na análise do lote")
+  );
+}
+
 async function handleImageWithoutCaption(
   phone: string,
   imageUrl: string
@@ -175,12 +286,32 @@ async function handleImageWithoutCaption(
     .maybeSingle();
 
   if (fetchError) {
-    console.error("Erro ao buscar lote aberto:", fetchError.message);
+    log.error({ phone, err: fetchError.message }, "erro ao buscar lote aberto");
     return;
   }
 
   if (!loteAberto) {
-    console.log(`⚠ Nenhum lote aberto para ${phone} — foto sem legenda descartada`);
+    // No open batch — auto-open one with a placeholder name
+    const unidade_contexto = await getUnidadeContexto(phone);
+    const { data: novoLote, error: insertError } = await supabase
+      .from("lotes_fotos")
+      .insert({
+        phone,
+        legenda: "Extintor",
+        fotos: [imageUrl],
+        status: "aberto",
+        started_at: new Date().toISOString(),
+        ...(unidade_contexto ? { unidade_contexto } : {}),
+      })
+      .select()
+      .single();
+
+    if (insertError) {
+      log.error({ phone, err: insertError.message }, "erro ao criar lote automático");
+      return;
+    }
+    log.info({ phone, loteId: novoLote.id, qtdFotos: 1 }, "lote automático aberto — foto sem legenda");
+    resetBatchTimer(phone);
     return;
   }
 
@@ -192,13 +323,15 @@ async function handleImageWithoutCaption(
     .eq("id", loteAberto.id);
 
   if (updateError) {
-    console.error("Erro ao adicionar foto ao lote:", updateError.message);
+    log.error({ phone, loteId: loteAberto.id, err: updateError.message }, "erro ao adicionar foto ao lote");
     return;
   }
 
-  console.log(
-    `📸 Foto adicionada ao lote "${loteAberto.legenda}" — total: ${fotosAtualizadas.length} foto(s)`
+  log.info(
+    { phone, loteId: loteAberto.id, extintor: loteAberto.legenda, qtdFotos: fotosAtualizadas.length },
+    "lote atualizado — foto adicionada"
   );
+  resetBatchTimer(phone);
 }
 
 export default router;
