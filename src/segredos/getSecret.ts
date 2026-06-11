@@ -12,6 +12,8 @@ const ENV_FALLBACK: Record<string, string> = {
   ZAPI_TOKEN:          "ZAPI_TOKEN",
   ZAPI_CLIENT_TOKEN:   "ZAPI_CLIENT_TOKEN",
   WHATSAPP_NUMERO:     "WHATSAPP_NUMERO",
+  RESEND_API_KEY:      "RESEND_API_KEY",
+  RESEND_FROM:         "RESEND_FROM",
 };
 
 /**
