@@ -27,61 +27,121 @@ const NOMES_ITENS: Record<string, string> = {
   quadro_instrucao:       "Quadro de Instrução",
 };
 
-// The client's rule: the OBSERVAÇÕES column carries the vencimento da carga value
-// for the relevant rows; N.A where applicable.
+// Builds the 9 checklist rows from an inspection. The OBSERVAÇÕES text (when the
+// AI captured one) is attached to the "Sinalização Piso" row — that is where the
+// real sheet records notes like "Sugestão de melhoria" / "Falta pintura".
 function montarItens(inspecao: Record<string, any>): ItemInspecao[] {
+  const obs = inspecao.observacoes ?? "";
   return [
     { nome: "Lacre",               status: inspecao.lacre,              observacao: "" },
-    { nome: "Vencimento Carga",    status: inspecao.vencimento_carga,   observacao: inspecao.observacoes ?? "" },
+    { nome: "Vencimento Carga",    status: inspecao.vencimento_carga,   observacao: "" },
     { nome: "Vencimento Teste",    status: inspecao.vencimento_teste,   observacao: "" },
     { nome: "Manômetro",           status: inspecao.manometro,          observacao: "" },
     { nome: "Sinalização Parede",  status: inspecao.sinalizacao_parede, observacao: "" },
-    { nome: "Sinalização Piso",    status: inspecao.sinalizacao_piso,   observacao: "" },
+    { nome: "Sinalização Piso",    status: inspecao.sinalizacao_piso,   observacao: obs },
     { nome: "Suporte",             status: inspecao.suporte,            observacao: "" },
     { nome: "Mangueira",           status: inspecao.mangueira,          observacao: "" },
     { nome: "Quadro de Instrução", status: inspecao.quadro_instrucao,   observacao: "" },
   ];
 }
 
+// Blank 9-row checklist for an extinguisher with no inspection in the month.
+function montarItensVazios(): ItemInspecao[] {
+  return [
+    "Lacre", "Vencimento Carga", "Vencimento Teste", "Manômetro",
+    "Sinalização Parede", "Sinalização Piso", "Suporte", "Mangueira",
+    "Quadro de Instrução",
+  ].map((nome) => ({ nome, status: "" as const, observacao: "" }));
+}
+
+// Extinguisher numbers are stored as strings ("1", "01", "100", "Reserva").
+// Sort numerically when possible so the sheet runs 1 → last; non-numeric tags
+// (rare) fall to the end, ordered alphabetically.
+function compararNumero(a: string, b: string): number {
+  const na = parseInt(a, 10);
+  const nb = parseInt(b, 10);
+  const aNum = !Number.isNaN(na);
+  const bNum = !Number.isNaN(nb);
+  if (aNum && bNum) return na - nb;
+  if (aNum) return -1;
+  if (bNum) return 1;
+  return a.localeCompare(b, "pt-BR");
+}
+
 export async function generateFicha(input: GerarFichaInput): Promise<GerarFichaResult> {
   const log = logger.child({ unidade: input.unidade, mes: input.mesReferencia });
 
-  // ── 1. Query inspections joined with registry ────────────────────────────
-  const { data: inspecoes, error } = await supabase
+  // ── 1. Fetch the FULL registry for the unit (1 → last, incl. reserva) ─────
+  const { data: extintoresDb, error: errExt } = await supabase
+    .from("extintores")
+    .select("numero, unidade, setor, tipo_carga, capacidade")
+    .eq("unidade", input.unidade);
+
+  if (errExt) {
+    log.error({ err: errExt.message }, "falha ao buscar extintores da unidade");
+    return { ok: false, motivo: `Erro ao buscar dados: ${errExt.message}` };
+  }
+
+  if (!extintoresDb || extintoresDb.length === 0) {
+    log.warn("nenhum extintor cadastrado para esta unidade");
+    return { ok: false, motivo: `Nenhum extintor cadastrado para ${input.unidade}.` };
+  }
+
+  // ── 2. Fetch this month's inspections for the unit, keyed by extinguisher ─
+  const { data: inspecoes, error: errInsp } = await supabase
     .from("inspecoes")
-    .select(`
-      *,
-      extintor:extintores!inner(numero, unidade, setor, tipo_carga, capacidade, vencimento_carga, vencimento_teste)
-    `)
+    .select("*")
     .eq("extintor_unidade", input.unidade)
     .eq("mes_referencia", input.mesReferencia)
-    .order("extintor_numero", { ascending: true });
+    .order("data_inspecao", { ascending: false });
 
-  if (error) {
-    log.error({ err: error.message }, "falha ao buscar inspeções para a ficha");
-    return { ok: false, motivo: `Erro ao buscar dados: ${error.message}` };
+  if (errInsp) {
+    log.error({ err: errInsp.message }, "falha ao buscar inspeções para a ficha");
+    return { ok: false, motivo: `Erro ao buscar inspeções: ${errInsp.message}` };
   }
 
-  if (!inspecoes || inspecoes.length === 0) {
-    log.warn("nenhuma inspeção encontrada para esta unidade/mês");
-    return { ok: false, motivo: `Sem inspeções para ${input.unidade} em ${input.mesReferencia}.` };
+  // Latest inspection per extinguisher number (most recent wins within the month)
+  const inspPorNumero = new Map<string, any>();
+  for (const ins of (inspecoes ?? [])) {
+    if (!inspPorNumero.has(ins.extintor_numero)) inspPorNumero.set(ins.extintor_numero, ins);
   }
 
-  log.info({ total: inspecoes.length }, "inspeções carregadas para a ficha");
+  log.info(
+    { totalExtintores: extintoresDb.length, totalInspecoes: inspPorNumero.size },
+    "dados carregados para a ficha"
+  );
 
-  // ── 2. Map DB rows → template data ──────────────────────────────────────
-  const extintores: ExtintorFicha[] = inspecoes.map((ins: any) => ({
-    numero:     ins.extintor_numero,
-    setor:      ins.extintor?.setor ?? ins.extintor_unidade,
-    tipo_carga: ins.extintor?.tipo_carga ?? "",
-    itens:      montarItens(ins),
-    fotos:      Array.isArray(ins.fotos) ? ins.fotos : [],
-  }));
+  // ── 3. Map every registered extinguisher → template block ───────────────
+  //      Inspected → filled checklist + photos; uninspected → blank block.
+  const ordenados = [...extintoresDb].sort((a: any, b: any) =>
+    compararNumero(a.numero, b.numero)
+  );
+
+  const extintores: ExtintorFicha[] = ordenados.map((e: any) => {
+    const ins = inspPorNumero.get(e.numero);
+    if (ins) {
+      return {
+        numero:     e.numero,
+        setor:      e.setor || input.unidade,
+        tipo_carga: e.tipo_carga ?? "",
+        itens:      montarItens(ins),
+        fotos:      Array.isArray(ins.fotos) ? ins.fotos : [],
+      };
+    }
+    return {
+      numero:          e.numero,
+      setor:           e.setor || input.unidade,
+      tipo_carga:      e.tipo_carga ?? "",
+      itens:           montarItensVazios(),
+      fotos:           [],
+      naoInspecionado: true,
+    };
+  });
 
   const dados: DadosFicha = {
     unidade:      input.unidade,
     mesReferencia: input.mesReferencia,
-    dataInspecao: inspecoes[0]?.data_inspecao ?? "",
+    dataInspecao: inspecoes?.[0]?.data_inspecao ?? "",
     extintores,
   };
 
@@ -111,7 +171,10 @@ export async function generateFicha(input: GerarFichaInput): Promise<GerarFichaR
   const pdfPath = path.join(outputDir, fileName);
   fs.writeFileSync(pdfPath, pdfBuffer);
 
-  log.info({ pdfPath }, "ficha gerada com sucesso");
+  log.info(
+    { pdfPath, unidade: input.unidade, mes: input.mesReferencia, qtdExtintores: extintores.length },
+    "ficha gerada"
+  );
   return { ok: true, pdfPath, pdfBuffer };
 }
 

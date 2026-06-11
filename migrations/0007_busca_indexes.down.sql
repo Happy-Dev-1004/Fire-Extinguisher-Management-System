@@ -1,0 +1,10 @@
+DROP INDEX IF EXISTS extintores_unidade_idx;
+DROP INDEX IF EXISTS extintores_numero_idx;
+DROP INDEX IF EXISTS extintores_setor_idx;
+DROP INDEX IF EXISTS extintores_status_ativo_idx;
+DROP INDEX IF EXISTS inspecoes_extintor_idx;
+DROP INDEX IF EXISTS inspecoes_mes_idx;
+DROP INDEX IF EXISTS inspecoes_inspetor_idx;
+DROP INDEX IF EXISTS inspecoes_status_geral_idx;
+DROP INDEX IF EXISTS inspecoes_irregularidade_idx;
+DROP INDEX IF EXISTS inspecoes_data_idx;
