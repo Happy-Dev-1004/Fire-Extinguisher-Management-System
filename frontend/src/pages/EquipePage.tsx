@@ -5,26 +5,27 @@ import type { AdminMember, Convite } from "../lib/types";
 import { Modal } from "../components/Modal";
 import { toast } from "../components/Toast";
 import { formatarData, formatarDataHora } from "../lib/formatters";
+import {
+  UserPlus, UserX, ArrowLeftRight, Clock, Users,
+  Mail, Copy, CheckCircle2, AlertTriangle, Crown, UserCircle,
+} from "lucide-react";
 
 export function EquipePage() {
   const { profile } = useAuth();
-  const [membros, setMembros]   = useState<AdminMember[]>([]);
-  const [convites, setConvites] = useState<Convite[]>([]);
-  const [carregando, setCarregando] = useState(true);
-  const [erro, setErro]             = useState("");
+  const [membros, setMembros]           = useState<AdminMember[]>([]);
+  const [convites, setConvites]         = useState<Convite[]>([]);
+  const [carregando, setCarregando]     = useState(true);
+  const [erro, setErro]                 = useState("");
 
-  // Convidar
-  const [modalConvite, setModalConvite] = useState(false);
-  const [emailConvite, setEmailConvite] = useState("");
-  const [enviando, setEnviando]         = useState(false);
-  const [linkGerado, setLinkGerado]     = useState("");
+  const [modalConvite, setModalConvite]     = useState(false);
+  const [emailConvite, setEmailConvite]     = useState("");
+  const [enviando, setEnviando]             = useState(false);
+  const [linkGerado, setLinkGerado]         = useState("");
 
-  // Transferir posse
   const [modalTransferir, setModalTransferir] = useState(false);
-  const [novoOwner, setNovoOwner]           = useState<AdminMember | null>(null);
-  const [transferindo, setTransferindo]     = useState(false);
+  const [novoOwner, setNovoOwner]             = useState<AdminMember | null>(null);
+  const [transferindo, setTransferindo]       = useState(false);
 
-  // Confirmações
   const [confirmRemover, setConfirmRemover] = useState<AdminMember | null>(null);
   const [confirmRevogar, setConfirmRevogar] = useState<Convite | null>(null);
 
@@ -99,129 +100,141 @@ export function EquipePage() {
     }
   };
 
-  const statusConviteBadge = (status: string) => {
-    if (status === "pendente") return <span className="badge-yellow">Pendente</span>;
-    if (status === "aceito")   return <span className="badge-green">Aceito</span>;
-    return <span className="badge-gray">{status}</span>;
-  };
-
   const membrosAtivos = membros.filter((m) => m.ativo);
 
   return (
-    <div className="space-y-8">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+    <div className="space-y-8 animate-fade-in">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="page-title mb-0.5">Equipe</h1>
-          <p className="text-sm text-gray-500">Gerencie administradores e convites de acesso.</p>
+          <h1 className="page-title">Equipe</h1>
+          <p className="text-sm text-gray-500 mt-0.5">Gerencie administradores e convites de acesso.</p>
         </div>
         <div className="flex gap-2 flex-wrap">
           <button
             onClick={() => { setModalConvite(true); setEmailConvite(""); setLinkGerado(""); }}
             className="btn-primary"
           >
-            + Convidar membro
+            <UserPlus className="w-4 h-4" /> Convidar membro
           </button>
           {membrosAtivos.some((m) => m.role === "member") && (
             <button onClick={() => setModalTransferir(true)} className="btn-secondary">
-              Transferir posse
+              <ArrowLeftRight className="w-4 h-4" /> Transferir posse
             </button>
           )}
         </div>
       </div>
 
+      {/* Error */}
       {erro && (
-        <div className="bg-red-50 text-red-700 rounded-lg px-4 py-3 text-sm">{erro}</div>
+        <div className="flex items-center gap-2.5 rounded-lg bg-red-50 border border-red-200 px-4 py-3">
+          <AlertTriangle className="w-4 h-4 text-red-500 shrink-0" />
+          <p className="text-sm text-red-700">{erro}</p>
+        </div>
       )}
 
-      {carregando ? (
-        <div className="flex justify-center py-12">
-          <div className="h-8 w-8 animate-spin rounded-full border-4 border-brand-600 border-t-transparent" />
+      {/* Skeleton */}
+      {carregando && (
+        <div className="card divide-y divide-gray-100">
+          {[...Array(3)].map((_, i) => (
+            <div key={i} className="flex items-center gap-4 p-4">
+              <div className="skeleton w-10 h-10 rounded-full" />
+              <div className="flex-1 space-y-2">
+                <div className="skeleton h-4 w-32" />
+                <div className="skeleton h-3 w-48" />
+              </div>
+            </div>
+          ))}
         </div>
-      ) : (
+      )}
+
+      {!carregando && (
         <>
-          {/* ── Membros ────────────────────────────────────────────────────── */}
+          {/* Members */}
           <section>
-            <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-3">
-              Administradores ({membrosAtivos.length})
-            </h2>
+            <div className="flex items-center gap-2 mb-4">
+              <Users className="w-4 h-4 text-gray-400" />
+              <h2 className="section-title">Administradores ({membrosAtivos.length})</h2>
+            </div>
             <div className="card overflow-hidden">
               <ul className="divide-y divide-gray-100">
-                {membrosAtivos.map((m) => (
-                  <li
-                    key={m.id}
-                    className="flex items-center gap-3 px-4 py-3"
-                  >
-                    {/* Avatar */}
-                    <div className="h-9 w-9 rounded-full bg-brand-100 flex items-center justify-center text-brand-700 font-bold text-sm shrink-0">
-                      {m.nome[0]?.toUpperCase() ?? "?"}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-sm font-medium text-gray-900">{m.nome}</span>
-                        {m.role === "owner" ? (
-                          <span className="badge-blue">Proprietário</span>
-                        ) : (
-                          <span className="badge-gray">Membro</span>
-                        )}
-                        {m.email === profile?.email && (
-                          <span className="badge-green">Você</span>
-                        )}
+                {membrosAtivos.map((m) => {
+                  const isMe = m.email === profile?.email;
+                  const isOwner = m.role === "owner";
+                  const initials = m.nome.split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase();
+
+                  return (
+                    <li key={m.id} className="flex items-center gap-4 px-5 py-4">
+                      <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm shrink-0 ${
+                        isOwner ? "bg-brand-100 text-brand-700" : "bg-gray-100 text-gray-600"
+                      }`}>
+                        {initials}
                       </div>
-                      <p className="text-xs text-gray-400 truncate">{m.email}</p>
-                      <p className="text-xs text-gray-400">
-                        Desde {formatarData(m.created_at)}
-                      </p>
-                    </div>
-                    {/* Actions — cannot remove owner or self */}
-                    {m.role !== "owner" && m.email !== profile?.email && (
-                      <button
-                        onClick={() => setConfirmRemover(m)}
-                        className="btn-danger btn-sm shrink-0"
-                      >
-                        Remover
-                      </button>
-                    )}
-                  </li>
-                ))}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-sm font-semibold text-gray-900">{m.nome}</span>
+                          {isOwner ? (
+                            <span className="badge-brand">
+                              <Crown className="w-3 h-3" /> Proprietário
+                            </span>
+                          ) : (
+                            <span className="badge-gray">
+                              <UserCircle className="w-3 h-3" /> Membro
+                            </span>
+                          )}
+                          {isMe && <span className="badge-green">Você</span>}
+                        </div>
+                        <p className="text-xs text-gray-400 truncate mt-0.5">{m.email}</p>
+                        <p className="text-xs text-gray-300 mt-0.5">Desde {formatarData(m.created_at)}</p>
+                      </div>
+                      {!isOwner && !isMe && (
+                        <button
+                          onClick={() => setConfirmRemover(m)}
+                          className="btn-ghost btn-sm text-red-500 hover:bg-red-50 hover:text-red-600 shrink-0"
+                        >
+                          <UserX className="w-4 h-4" /> Remover
+                        </button>
+                      )}
+                    </li>
+                  );
+                })}
               </ul>
             </div>
           </section>
 
-          {/* ── Convites pendentes ────────────────────────────────────────── */}
+          {/* Pending invites */}
           <section>
-            <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-3">
-              Convites pendentes ({convites.length})
-            </h2>
+            <div className="flex items-center gap-2 mb-4">
+              <Mail className="w-4 h-4 text-gray-400" />
+              <h2 className="section-title">Convites pendentes ({convites.length})</h2>
+            </div>
             {convites.length === 0 ? (
-              <p className="text-sm text-gray-400">Nenhum convite pendente.</p>
+              <div className="card p-6 text-center">
+                <p className="text-sm text-gray-400">Nenhum convite pendente.</p>
+              </div>
             ) : (
               <div className="card overflow-hidden">
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
-                      <tr className="border-b border-gray-200 bg-gray-50">
+                      <tr className="border-b border-gray-200">
                         {["E-mail", "Status", "Expira em", ""].map((h) => (
-                          <th
-                            key={h}
-                            className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap"
-                          >
-                            {h}
-                          </th>
+                          <th key={h} className="table-th">{h}</th>
                         ))}
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-100">
+                    <tbody>
                       {convites.map((c) => (
-                        <tr key={c.id} className="hover:bg-gray-50">
-                          <td className="px-4 py-3 text-gray-900">{c.email}</td>
-                          <td className="px-4 py-3">{statusConviteBadge(c.status)}</td>
-                          <td className="px-4 py-3 text-gray-500 whitespace-nowrap">
-                            {formatarDataHora(c.expira_em)}
+                        <tr key={c.id} className="table-row">
+                          <td className="table-td font-medium text-gray-900">{c.email}</td>
+                          <td className="table-td">
+                            <span className="badge-amber"><Clock className="w-3 h-3" /> Pendente</span>
                           </td>
-                          <td className="px-4 py-3 text-right">
+                          <td className="table-td text-gray-500">{formatarDataHora(c.expira_em)}</td>
+                          <td className="table-td text-right">
                             <button
                               onClick={() => setConfirmRevogar(c)}
-                              className="btn-secondary btn-sm"
+                              className="btn-ghost btn-sm text-red-500 hover:bg-red-50"
                             >
                               Revogar
                             </button>
@@ -237,7 +250,7 @@ export function EquipePage() {
         </>
       )}
 
-      {/* ── Modal: convidar ──────────────────────────────────────────────── */}
+      {/* Modal: convidar */}
       <Modal
         open={modalConvite}
         titulo="Convidar novo membro"
@@ -247,36 +260,36 @@ export function EquipePage() {
         {!linkGerado ? (
           <form onSubmit={handleConvidar} className="space-y-4">
             <div>
-              <label htmlFor="email-convite" className="label">
-                E-mail do novo membro
-              </label>
-              <input
-                id="email-convite"
-                type="email"
-                className="input"
-                placeholder="colaborador@empresa.com"
-                required
-                value={emailConvite}
-                onChange={(e) => setEmailConvite(e.target.value)}
-              />
-              <p className="text-xs text-gray-400 mt-1">
-                O link de convite expira em 7 dias. Compartilhe-o com a pessoa.
-              </p>
+              <label htmlFor="email-convite" className="label">E-mail do novo membro</label>
+              <div className="relative">
+                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                <input
+                  id="email-convite"
+                  type="email"
+                  className="input pl-9"
+                  placeholder="colaborador@empresa.com"
+                  required
+                  value={emailConvite}
+                  onChange={(e) => setEmailConvite(e.target.value)}
+                />
+              </div>
+              <p className="field-hint">O link de convite expira em 7 dias. Compartilhe-o com a pessoa.</p>
             </div>
             <div className="flex gap-3">
               <button type="button" onClick={() => setModalConvite(false)} className="btn-secondary flex-1">
                 Cancelar
               </button>
               <button type="submit" disabled={enviando || !emailConvite} className="btn-primary flex-1">
-                {enviando ? "Enviando…" : "Gerar convite"}
+                {enviando ? "Gerando…" : "Gerar convite"}
               </button>
             </div>
           </form>
         ) : (
           <div className="space-y-4">
-            <p className="text-sm text-green-700 bg-green-50 rounded-lg px-3 py-2">
-              ✓ Convite criado! Compartilhe o link abaixo com o novo membro.
-            </p>
+            <div className="flex items-center gap-2.5 p-3.5 bg-green-50 border border-green-200 rounded-xl">
+              <CheckCircle2 className="w-4 h-4 text-green-600 shrink-0" />
+              <p className="text-sm text-green-700 font-medium">Convite criado! Compartilhe o link abaixo.</p>
+            </div>
             <div>
               <label className="label">Link de convite</label>
               <div className="flex gap-2">
@@ -294,7 +307,7 @@ export function EquipePage() {
                     toast("Link copiado!");
                   }}
                 >
-                  Copiar
+                  <Copy className="w-3.5 h-3.5" />
                 </button>
               </div>
             </div>
@@ -305,7 +318,7 @@ export function EquipePage() {
         )}
       </Modal>
 
-      {/* ── Modal: transferir posse ─────────────────────────────────────── */}
+      {/* Modal: transferir */}
       <Modal
         open={modalTransferir}
         titulo="Transferir propriedade"
@@ -313,10 +326,13 @@ export function EquipePage() {
         largura="max-w-md"
       >
         <div className="space-y-4">
-          <p className="text-sm text-amber-700 bg-amber-50 rounded-lg px-3 py-2">
-            ⚠️ Atenção: você perderá acesso às configurações e ao gerenciamento de equipe.
-            Esta ação não pode ser desfeita sem a cooperação do novo proprietário.
-          </p>
+          <div className="flex items-start gap-3 p-3.5 bg-amber-50 border border-amber-200 rounded-xl">
+            <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+            <p className="text-sm text-amber-800">
+              Você perderá acesso às configurações e ao gerenciamento de equipe.
+              Esta ação não pode ser desfeita sem a cooperação do novo proprietário.
+            </p>
+          </div>
           <div>
             <label className="label">Selecione o novo proprietário</label>
             <select
@@ -331,9 +347,7 @@ export function EquipePage() {
               {membrosAtivos
                 .filter((m) => m.role === "member")
                 .map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.nome} ({m.email})
-                  </option>
+                  <option key={m.id} value={m.id}>{m.nome} ({m.email})</option>
                 ))}
             </select>
           </div>
@@ -356,33 +370,23 @@ export function EquipePage() {
         </div>
       </Modal>
 
-      {/* ── Confirm: remover membro ─────────────────────────────────────── */}
-      <Modal
-        open={!!confirmRemover}
-        titulo="Remover membro"
-        onClose={() => setConfirmRemover(null)}
-        largura="max-w-sm"
-      >
+      {/* Confirm remove */}
+      <Modal open={!!confirmRemover} titulo="Remover membro" onClose={() => setConfirmRemover(null)} largura="max-w-sm">
         <p className="text-sm text-gray-700 mb-4">
-          Tem certeza que deseja remover <strong>{confirmRemover?.nome}</strong> da equipe?
-          O acesso será revogado imediatamente.
+          Remover <strong>{confirmRemover?.nome}</strong> da equipe? O acesso será revogado imediatamente.
         </p>
         <div className="flex gap-3">
           <button onClick={() => setConfirmRemover(null)} className="btn-secondary flex-1">Cancelar</button>
-          <button onClick={handleRemover} className="btn-danger flex-1">Remover</button>
+          <button onClick={handleRemover} className="btn-danger flex-1">
+            <UserX className="w-4 h-4" /> Remover
+          </button>
         </div>
       </Modal>
 
-      {/* ── Confirm: revogar convite ────────────────────────────────────── */}
-      <Modal
-        open={!!confirmRevogar}
-        titulo="Revogar convite"
-        onClose={() => setConfirmRevogar(null)}
-        largura="max-w-sm"
-      >
+      {/* Confirm revoke */}
+      <Modal open={!!confirmRevogar} titulo="Revogar convite" onClose={() => setConfirmRevogar(null)} largura="max-w-sm">
         <p className="text-sm text-gray-700 mb-4">
-          Revogar o convite para <strong>{confirmRevogar?.email}</strong>?
-          O link não poderá mais ser usado.
+          Revogar o convite para <strong>{confirmRevogar?.email}</strong>? O link não poderá mais ser usado.
         </p>
         <div className="flex gap-3">
           <button onClick={() => setConfirmRevogar(null)} className="btn-secondary flex-1">Cancelar</button>

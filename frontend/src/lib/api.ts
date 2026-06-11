@@ -11,7 +11,14 @@ import type {
   AdminMember,
   Convite,
   Extintor,
+  Inspecao,
+  Situacao,
   Configuracao,
+  Destinatario,
+  DestinatarioResolvido,
+  ResultadoEnvioMulti,
+  FiltrosBusca,
+  PaginaBusca,
 } from "./types";
 
 const BASE = import.meta.env.VITE_API_BASE as string ?? "/api";
@@ -96,17 +103,131 @@ export const configApi = {
 // ── /extintores ───────────────────────────────────────────────────────────────
 
 export const extintoresApi = {
-  listar: (unidade?: string) => {
-    const qs = unidade ? `?unidade=${encodeURIComponent(unidade)}` : "";
-    return request<Extintor[]>("GET", `/extintores${qs}`);
+  listar: (params?: { unidade?: string; situacao?: Situacao }) => {
+    const qs = new URLSearchParams();
+    if (params?.unidade)  qs.set("unidade",  params.unidade);
+    if (params?.situacao) qs.set("situacao", params.situacao);
+    const q = qs.toString();
+    return request<{ extintores: Extintor[] }>("GET", `/extintores${q ? `?${q}` : ""}`);
   },
 
-  criar: (body: Omit<Extintor, "id" | "created_at" | "cadastro_pendente">) =>
-    request<Extintor>("POST", "/extintores", body),
+  detalhe: (id: string) =>
+    request<{ extintor: Extintor; inspecoes: Inspecao[] }>("GET", `/extintores/${id}`),
+};
 
-  atualizar: (id: string, body: Partial<Omit<Extintor, "id" | "created_at">>) =>
-    request<Extintor>("PUT", `/extintores/${id}`, body),
+// ── /inspetores ───────────────────────────────────────────────────────────────
 
-  excluir: (id: string) =>
-    request<void>("DELETE", `/extintores/${id}`),
+export const inspetoresApi = {
+  listar: () =>
+    request<{ inspetores: import("./types").Inspetor[] }>("GET", "/inspetores"),
+
+  criar: (body: { nome: string; telefone: string; unidade: string }) =>
+    request<import("./types").Inspetor>("POST", "/inspetores", body),
+
+  atualizar: (id: string, body: Partial<{ nome: string; telefone: string; unidade: string; ativo: boolean }>) =>
+    request<import("./types").Inspetor>("PUT", `/inspetores/${id}`, body),
+
+  desativar: (id: string) =>
+    request<{ mensagem: string }>("DELETE", `/inspetores/${id}`),
+};
+
+// ── /destinatarios ────────────────────────────────────────────────────────────
+
+export const destinatariosApi = {
+  listar: (unidade?: string) => {
+    const qs = unidade ? `?unidade=${encodeURIComponent(unidade)}` : "";
+    return request<{ destinatarios: Destinatario[] }>("GET", `/destinatarios${qs}`);
+  },
+
+  criar: (body: { nome: string; telefone?: string; email?: string; unidade: string; ativo?: boolean }) =>
+    request<Destinatario>("POST", "/destinatarios", body),
+
+  atualizar: (id: string, body: Partial<{ nome: string; telefone: string; email: string; unidade: string; ativo: boolean }>) =>
+    request<Destinatario>("PUT", `/destinatarios/${id}`, body),
+
+  remover: (id: string) =>
+    request<{ mensagem: string }>("DELETE", `/destinatarios/${id}`),
+};
+
+// ── /busca ────────────────────────────────────────────────────────────────────
+
+export const buscaApi = {
+  buscar: (filtros: FiltrosBusca) => {
+    const qs = new URLSearchParams();
+    for (const [k, v] of Object.entries(filtros)) {
+      if (v !== undefined && v !== null && v !== "") {
+        qs.set(k, String(v));
+      }
+    }
+    const q = qs.toString();
+    return request<PaginaBusca>("GET", `/busca${q ? `?${q}` : ""}`);
+  },
+};
+
+// ── /relatorio ────────────────────────────────────────────────────────────────
+
+async function downloadBlob(path: string, body: unknown, filename: string): Promise<void> {
+  const token = _getToken ? await _getToken() : null;
+  const res = await fetch(`${BASE}${path}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const json = await res.json().catch(() => ({}));
+    throw new Error(json.erro ?? json.error ?? `Erro HTTP ${res.status}`);
+  }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+export const relatorioApi = {
+  ficha: (unidade: string, mes_referencia: string) =>
+    downloadBlob(
+      "/relatorio/ficha",
+      { unidade, mes_referencia },
+      `ficha_${unidade.replace(/\s+/g, "_")}_${mes_referencia.replace("/", "-")}.pdf`
+    ),
+
+  generico: (filtros: Omit<FiltrosBusca, "page">, formato: "pdf" | "csv" = "pdf") => {
+    const ts = new Date().toISOString().slice(0, 10);
+    const ext = formato === "csv" ? "csv" : "pdf";
+    return downloadBlob(
+      "/relatorio/generico",
+      { ...filtros, formato },
+      `extintores_${ts}.${ext}`
+    );
+  },
+
+  extintor: (id: string, unidade: string, numero: string) =>
+    downloadBlob(
+      `/relatorio/extintor/${id}`,
+      {},
+      `extintor_${unidade.replace(/\s+/g, "_")}_${numero}.pdf`
+    ),
+};
+
+// ── /ficha ────────────────────────────────────────────────────────────────────
+
+export const fichaApi = {
+  previewDestinatarios: (unidade: string) =>
+    request<{ unidade: string; destinatarios: DestinatarioResolvido[] }>(
+      "GET", `/ficha/destinatarios?unidade=${encodeURIComponent(unidade)}`
+    ),
+
+  enviar: (unidade: string, mes: string) =>
+    request<{
+      mensagem: string;
+      enviados: number;
+      falhas: number;
+      detalhes: ResultadoEnvioMulti[];
+    }>("POST", "/ficha/enviar", { unidade, mes }),
 };

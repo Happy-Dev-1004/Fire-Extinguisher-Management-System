@@ -7,15 +7,66 @@ import fichaRouter         from "./routes/ficha";
 import setupRouter         from "./routes/setup";
 import meRouter            from "./routes/me";
 import equipeRouter        from "./routes/equipe";
-import configuracoesRouter from "./routes/configuracoes";
-import inspetoresRouter    from "./routes/inspetores";
+import configuracoesRouter  from "./routes/configuracoes";
+import inspetoresRouter     from "./routes/inspetores";
+import destinatariosRouter  from "./routes/destinatarios";
+import buscaRouter          from "./routes/busca";
+import relatorioRouter      from "./routes/relatorio";
 import { requireAuth, requireAdmin, requireOwner } from "./auth/middleware";
+import { logger } from "./logger";
+import { supabaseAdmin } from "./db-admin";
 
 // Import types augmentation so req.admin is available everywhere
 import "./auth/types";
 
 const app  = express();
 const PORT = process.env.PORT ?? 3000;
+
+// ── Startup secrets audit ─────────────────────────────────────────────────────
+// Checks each required secret: DB row takes priority over .env fallback.
+// Prints only "presente" / "ausente" — NEVER prints the actual value.
+async function auditarSegredos(): Promise<void> {
+  const SEGREDOS = [
+    "OPENAI_API_KEY",
+    "ZAPI_INSTANCE_ID",
+    "ZAPI_TOKEN",
+    "ZAPI_CLIENT_TOKEN",
+    "WHATSAPP_NUMERO",
+  ] as const;
+
+  const ENV_FALLBACK: Record<string, string> = {
+    OPENAI_API_KEY:   "OPENAI_API_KEY",
+    ZAPI_INSTANCE_ID: "ZAPI_INSTANCE_ID",
+    ZAPI_TOKEN:       "ZAPI_TOKEN",
+    ZAPI_CLIENT_TOKEN:"ZAPI_CLIENT_TOKEN",
+    WHATSAPP_NUMERO:  "WHATSAPP_NUMERO",
+  };
+
+  const { data: rows } = await supabaseAdmin
+    .from("configuracoes")
+    .select("nome, ciphertext")
+    .in("nome", [...SEGREDOS]);
+
+  const noDb = new Set((rows ?? []).filter((r: any) => r.ciphertext).map((r: any) => r.nome));
+
+  const log = logger.child({ etapa: "startup" });
+  log.info("=== Auditoria de segredos ===");
+
+  let todasPresentes = true;
+  for (const nome of SEGREDOS) {
+    const noEnv = !!process.env[ENV_FALLBACK[nome]]?.trim();
+    const fonte = noDb.has(nome) ? "banco (criptografado)" : noEnv ? ".env (fallback)" : null;
+    const status = fonte ? `presente [${fonte}]` : "AUSENTE ⚠";
+    if (!fonte) todasPresentes = false;
+    log.info({ segredo: nome, status }, `segredo: ${nome} → ${status}`);
+  }
+
+  if (todasPresentes) {
+    log.info("Todos os segredos presentes — sistema pronto para operação.");
+  } else {
+    log.warn("Um ou mais segredos ausentes — algumas funções podem falhar. Configure via /configuracoes.");
+  }
+}
 
 app.use(express.json());
 
@@ -52,6 +103,17 @@ app.use("/configuracoes",   requireAuth, requireOwner, configuracoesRouter);
 // Inspector management: owner + member (field roster is not sensitive config)
 app.use("/inspetores",      requireAuth, requireAdmin, inspetoresRouter);
 
+// Recipient management: owner + member (operational data, not sensitive config)
+app.use("/destinatarios",   requireAuth, requireAdmin, destinatariosRouter);
+
+// Search + reports: owner + member (read-only inspection data)
+app.use("/busca",           requireAuth, requireAdmin, buscaRouter);
+app.use("/relatorio",       requireAuth, requireAdmin, relatorioRouter);
+
 app.listen(PORT, () => {
-  console.log(`Server starting... listening on port ${PORT}`);
+  logger.info({ porta: PORT }, `Servidor iniciado na porta ${PORT}`);
+  // Run audit after the server is up so DB connection is ready
+  auditarSegredos().catch((err) =>
+    logger.warn({ err: err.message }, "falha na auditoria de segredos na inicialização")
+  );
 });

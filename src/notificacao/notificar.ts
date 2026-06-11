@@ -11,20 +11,11 @@ export interface EntradaNotificacao {
   unidade: string;
 }
 
-/**
- * Sends exactly one WhatsApp confirmation per processed batch.
- * Idempotency is enforced by the `notificado` flag on lotes_fotos:
- * - If already true, skip silently.
- * - If false, send the message, then set the flag.
- * The flag is set only after a successful send, so a send failure
- * leaves it false and allows a future retry — but the inspection
- * record is never at risk regardless of what happens here.
- */
 export async function notificarInspetorPorLote(entrada: EntradaNotificacao): Promise<void> {
   const { loteId, phone, resultado, unidade } = entrada;
-  const log = logger.child({ modulo: "notificacao", loteId, phone });
+  const log = logger.child({ loteId, phone, extintor: resultado.numero_extintor });
 
-  // ── Idempotency check ────────────────────────────────────────────────────────
+  // Idempotency check
   const { data: lote, error: fetchError } = await supabase
     .from("lotes_fotos")
     .select("notificado")
@@ -46,33 +37,24 @@ export async function notificarInspetorPorLote(entrada: EntradaNotificacao): Pro
     return;
   }
 
-  // ── Build and send ───────────────────────────────────────────────────────────
   const texto = montarMensagemConfirmacao(resultado, unidade);
-  log.info({ extintor: resultado.numero_extintor }, "enviando confirmação ao inspetor");
+  log.info("enviando confirmação WhatsApp ao inspetor");
 
   const enviado = await sendWhatsAppMessage(phone, texto);
 
   if (!enviado) {
-    // sendWhatsAppMessage already logged the error — do not rethrow.
-    // The inspection is saved; only the notification failed.
+    log.error("falha ao enviar confirmação — sendWhatsAppMessage retornou false");
     return;
   }
 
-  // ── Mark as notified ─────────────────────────────────────────────────────────
   const { error: updateError } = await supabase
     .from("lotes_fotos")
     .update({ notificado: true })
     .eq("id", loteId);
 
   if (updateError) {
-    // Notification was sent but the flag failed to set.
-    // Log clearly so an operator can manually reset if needed;
-    // the next reprocess attempt will re-send, which is the safer failure mode.
-    log.error(
-      { err: updateError.message },
-      "confirmação enviada mas falha ao marcar notificado=true — próximo reprocessamento pode reenviar"
-    );
+    log.error({ err: updateError.message }, "confirmação enviada mas falha ao marcar notificado=true");
   } else {
-    log.info("flag notificado=true persistida com sucesso");
+    log.info("confirmação enviada ao inspetor");
   }
 }

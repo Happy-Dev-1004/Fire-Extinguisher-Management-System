@@ -4,8 +4,13 @@ import { LoginPage } from "./pages/LoginPage";
 import { Shell } from "./components/Shell";
 import { DashboardPage } from "./pages/DashboardPage";
 import { ExtintoresPage } from "./pages/ExtintoresPage";
+import { ExtintorDetailPage } from "./pages/ExtintorDetailPage";
 import { ConfiguracoesPage } from "./pages/ConfiguracoesPage";
 import { EquipePage } from "./pages/EquipePage";
+import { InspetoresPage } from "./pages/InspetoresPage";
+import { DestinatariosPage } from "./pages/DestinatariosPage";
+import { FichasPage } from "./pages/FichasPage";
+import { BuscaPage } from "./pages/BuscaPage";
 import { RequireAuth } from "./components/RequireAuth";
 import { RequireOwner } from "./components/RequireOwner";
 
@@ -22,6 +27,11 @@ export function App() {
               <Route index element={<Navigate to="/dashboard" replace />} />
               <Route path="/dashboard" element={<DashboardPage />} />
               <Route path="/extintores" element={<ExtintoresPage />} />
+              <Route path="/extintores/:id" element={<ExtintorDetailPage />} />
+              <Route path="/inspetores" element={<InspetoresPage />} />
+              <Route path="/destinatarios" element={<DestinatariosPage />} />
+              <Route path="/fichas" element={<FichasPage />} />
+              <Route path="/busca" element={<BuscaPage />} />
 
               {/* Owner-only routes — backend also enforces 403 */}
               <Route element={<RequireOwner />}>
