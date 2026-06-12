@@ -5,7 +5,7 @@ import { Modal } from "../components/Modal";
 import { toast } from "../components/Toast";
 import {
   Plus, Pencil, UserMinus, UserCheck, Send, Globe, MapPin,
-  CheckCircle2, XCircle, Loader2, AlertTriangle, Users,
+  CheckCircle2, Loader2, AlertTriangle, Users,
   MessageCircle, Mail,
 } from "lucide-react";
 

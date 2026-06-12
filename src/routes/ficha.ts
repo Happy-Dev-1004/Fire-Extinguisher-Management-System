@@ -7,6 +7,7 @@ import { logger } from "../logger";
 import { resolverDestinatarios } from "../destinatarios/resolver";
 import { enviarFichaWhatsApp } from "../notificacao/enviarFicha";
 import { enviarFichaEmail } from "../notificacao/enviarFichaEmail";
+import { renderPdfFromHtml } from "../pdf/browser";
 
 const router = Router();
 
@@ -27,21 +28,11 @@ router.get("/", async (req: Request, res: Response) => {
   if (sample) {
     log.info("gerando ficha de amostra (sem banco de dados)");
     try {
-      const { chromium } = await import("playwright");
       const dados = buildSampleData(unidade, mes);
-      const html  = renderHtml(dados);
-      const browser = await chromium.launch({ headless: true, channel: "chrome" });
-      const page    = await browser.newPage();
-      await page.setContent(html, { waitUntil: "networkidle" });
-      const pdf = await page.pdf({
-        format: "A4",
-        printBackground: true,
-        margin: { top: "10mm", bottom: "10mm", left: "10mm", right: "10mm" },
-      });
-      await browser.close();
+      const pdf   = await renderPdfFromHtml(renderHtml(dados));
       res.setHeader("Content-Type", "application/pdf");
       res.setHeader("Content-Disposition", `inline; filename="ficha_${unidade}_${mes}.pdf"`);
-      return res.send(Buffer.from(pdf));
+      return res.send(pdf);
     } catch (err: any) {
       log.error({ err: err.message }, "falha ao gerar ficha de amostra");
       return res.status(500).json({ error: `Falha ao gerar PDF: ${err.message}` });

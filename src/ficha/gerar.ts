@@ -4,6 +4,7 @@ import { supabase } from "../db";
 import { supabaseAdmin } from "../db-admin";
 import { logger } from "../logger";
 import { renderHtml, type ExtintorFicha, type ItemInspecao, type DadosFicha } from "./template";
+import { renderPdfFromHtml } from "../pdf/browser";
 export { buildSampleData } from "./sample";
 
 export interface GerarFichaInput {
@@ -178,21 +179,6 @@ export async function generateFicha(input: GerarFichaInput): Promise<GerarFichaR
   return { ok: true, pdfPath, pdfBuffer };
 }
 
-async function renderPdf(html: string, log: any): Promise<Buffer> {
-  const { chromium } = await import("playwright");
-  // channel:"chrome" uses the full Chromium build (not headless-shell)
-  // which is the binary confirmed present after install
-  const browser = await chromium.launch({ headless: true, channel: "chrome" });
-  try {
-    const page = await browser.newPage();
-    await page.setContent(html, { waitUntil: "networkidle" });
-    const pdf = await page.pdf({
-      format: "A4",
-      printBackground: true,
-      margin: { top: "10mm", bottom: "10mm", left: "10mm", right: "10mm" },
-    });
-    return Buffer.from(pdf);
-  } finally {
-    await browser.close();
-  }
+async function renderPdf(html: string, _log: any): Promise<Buffer> {
+  return renderPdfFromHtml(html);
 }

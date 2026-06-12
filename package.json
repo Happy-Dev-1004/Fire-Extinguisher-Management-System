@@ -7,6 +7,7 @@
     "dev": "nodemon --watch src --ext ts --exec ts-node src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
+    "postinstall": "playwright install --with-deps chromium || playwright install chromium || true",
     "test": "vitest run --config vitest.config.mjs",
     "test:watch": "vitest --config vitest.config.mjs",
     "migrate:up": "ts-node src/migrations/runner.ts up",
@@ -30,6 +31,7 @@
     ]
   },
   "devDependencies": {
+    "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
     "@types/node": "^25.9.2",
     "@types/ws": "^8.18.1",
@@ -42,6 +44,7 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.107.0",
+    "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "openai": "^6.42.0",

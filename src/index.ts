@@ -1,5 +1,6 @@
 import "dotenv/config";
 import express from "express";
+import cors from "cors";
 import extintoresRouter    from "./routes/extintores";
 import inspecoesRouter     from "./routes/inspecoes";
 import webhookRouter       from "./routes/webhook";
@@ -68,7 +69,25 @@ async function auditarSegredos(): Promise<void> {
   }
 }
 
-app.use(express.json());
+// ── CORS ──────────────────────────────────────────────────────────────────────
+// The frontend (Vercel) and backend (Railway) are on different origins in
+// production, so cross-origin requests must be allowed. CORS_ORIGINS is a
+// comma-separated allowlist (e.g. "https://app.vercel.app,https://www.foo.com").
+// When unset (local dev), all origins are allowed since the Vite proxy keeps
+// requests same-origin anyway.
+const corsOrigins = (process.env.CORS_ORIGINS ?? "")
+  .split(",")
+  .map((o) => o.trim())
+  .filter(Boolean);
+
+app.use(
+  cors({
+    origin: corsOrigins.length > 0 ? corsOrigins : true,
+    credentials: true,
+  })
+);
+
+app.use(express.json({ limit: "10mb" }));
 
 // ── Public routes (no auth) ───────────────────────────────────────────────────
 app.get("/health", (_req, res) => res.json({ status: "ok" }));

@@ -11,29 +11,11 @@ import { logger } from "../logger";
 import { generateFicha } from "../ficha/gerar";
 import { renderHtml, type DadosFicha, type ExtintorFicha, type ItemInspecao } from "../ficha/template";
 import { supabaseAdmin } from "../db-admin";
-import { FiltrosSchema, executarBusca, type ResultadoBusca } from "../busca/filtros";
+import { executarBusca, type ResultadoBusca } from "../busca/filtros";
+import { renderPdfFromHtml as renderPdf } from "../pdf/browser";
 
 const router = Router();
 const log    = logger.child({ rota: "/relatorio" });
-
-// ── Shared PDF renderer ───────────────────────────────────────────────────────
-
-async function renderPdf(html: string): Promise<Buffer> {
-  const { chromium } = await import("playwright");
-  const browser = await chromium.launch({ headless: true, channel: "chrome" });
-  try {
-    const page = await browser.newPage();
-    await page.setContent(html, { waitUntil: "networkidle" });
-    const pdf = await page.pdf({
-      format: "A4",
-      printBackground: true,
-      margin: { top: "12mm", bottom: "12mm", left: "12mm", right: "12mm" },
-    });
-    return Buffer.from(pdf);
-  } finally {
-    await browser.close();
-  }
-}
 
 // ── POST /relatorio/ficha ─────────────────────────────────────────────────────
 
