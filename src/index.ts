@@ -129,7 +129,9 @@ app.use("/destinatarios",   requireAuth, requireAdmin, destinatariosRouter);
 app.use("/busca",           requireAuth, requireAdmin, buscaRouter);
 app.use("/relatorio",       requireAuth, requireAdmin, relatorioRouter);
 
-app.listen(PORT, () => {
+// Bind to 0.0.0.0 so the platform's proxy (Railway/Render) can reach the
+// container — binding to localhost/IPv6-only causes a 502 at the edge.
+app.listen(Number(PORT), "0.0.0.0", () => {
   logger.info({ porta: PORT }, `Servidor iniciado na porta ${PORT}`);
   // Run audit after the server is up so DB connection is ready
   auditarSegredos().catch((err) =>
