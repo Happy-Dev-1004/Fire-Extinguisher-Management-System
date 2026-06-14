@@ -124,7 +124,11 @@ export async function analisarLote(lote: LoteFotos): Promise<RespostaIA | null> 
   try {
     const completion = await (await getOpenAI()).chat.completions.create({
       model: "gpt-4o",
-      max_tokens: 1024,
+      // temperature 0 = deterministic extraction: the model reports what it
+      // reads instead of "creatively" guessing dates. Higher token budget
+      // gives it room to examine the label carefully before answering.
+      temperature: 0,
+      max_tokens: 1500,
       messages: [
         { role: "system", content: SYSTEM_PROMPT },
         { role: "user",   content: buildUserMessage(lote.legenda, lote.fotos) },
