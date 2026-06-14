@@ -27,12 +27,10 @@ function resetBatchTimer(phone: string): void {
 }
 
 async function autoFecharLote(phone: string): Promise<void> {
-  const { data: lote, error } = await supabase
-    .from("lotes_fotos")
-    .select("id, legenda, fotos, phone, unidade_contexto, mes_referencia, data_inspecao")
-    .eq("phone", phone)
-    .eq("status", "aberto")
-    .maybeSingle();
+  const { data: lote, error } = await buscarLoteAberto<any>(
+    phone,
+    "id, legenda, fotos, phone, unidade_contexto, mes_referencia, data_inspecao"
+  );
 
   if (error || !lote) return;
 
@@ -47,6 +45,33 @@ function enqueueForPhone(phone: string, task: () => Promise<void>): void {
     log.error({ phone, err: err.message }, "erro na fila de processamento")
   );
   filas.set(phone, proxima);
+}
+
+// Fetches the most-recent open batch for a phone, tolerating duplicates.
+//
+// The old code used .maybeSingle(), which THROWS "multiple (or no) rows
+// returned" whenever more than one 'aberto' row exists for the phone — which
+// happens if a batch is opened but never closed (server redeploy mid-batch,
+// two photos racing, an abandoned session). That error aborted the handler so
+// the incoming photo was silently dropped — never stored, never analysed.
+//
+// Selecting the newest row with limit(1) instead makes the webhook self-heal:
+// it always finds a batch to work with and never crashes on duplicates.
+// `colunas` lets callers request the exact columns they need.
+async function buscarLoteAberto<T = any>(
+  phone: string,
+  colunas: string
+): Promise<{ data: T | null; error: { message: string } | null }> {
+  const { data, error } = await supabase
+    .from("lotes_fotos")
+    .select(colunas)
+    .eq("phone", phone)
+    .eq("status", "aberto")
+    .order("started_at", { ascending: false })
+    .limit(1);
+
+  if (error) return { data: null, error };
+  return { data: (data?.[0] as T) ?? null, error: null };
 }
 
 export async function isAuthorized(phone: string): Promise<boolean> {
@@ -189,12 +214,10 @@ async function handleImageWithCaption(
   const unidade_contexto = await getUnidadeContexto(phone);
 
   // Close any open batch for this phone first
-  const { data: loteAberto } = await supabase
-    .from("lotes_fotos")
-    .select("id, legenda, fotos, phone, unidade_contexto, mes_referencia, data_inspecao")
-    .eq("phone", phone)
-    .eq("status", "aberto")
-    .maybeSingle();
+  const { data: loteAberto } = await buscarLoteAberto<any>(
+    phone,
+    "id, legenda, fotos, phone, unidade_contexto, mes_referencia, data_inspecao"
+  );
 
   if (loteAberto) {
     await supabase
@@ -237,12 +260,10 @@ async function handleImageWithCaption(
 }
 
 async function handleFinalizarLote(phone: string): Promise<void> {
-  const { data: loteAberto, error } = await supabase
-    .from("lotes_fotos")
-    .select("id, legenda, fotos, phone, unidade_contexto, mes_referencia, data_inspecao")
-    .eq("phone", phone)
-    .eq("status", "aberto")
-    .maybeSingle();
+  const { data: loteAberto, error } = await buscarLoteAberto<any>(
+    phone,
+    "id, legenda, fotos, phone, unidade_contexto, mes_referencia, data_inspecao"
+  );
 
   if (error) {
     log.error({ phone, err: error.message }, "erro ao buscar lote aberto para finalizar");
@@ -278,12 +299,11 @@ async function handleImageWithoutCaption(
   phone: string,
   imageUrl: string
 ): Promise<void> {
-  const { data: loteAberto, error: fetchError } = await supabase
-    .from("lotes_fotos")
-    .select("id, legenda, fotos")
-    .eq("phone", phone)
-    .eq("status", "aberto")
-    .maybeSingle();
+  const { data: loteAberto, error: fetchError } = await buscarLoteAberto<{
+    id: string;
+    legenda: string;
+    fotos: string[];
+  }>(phone, "id, legenda, fotos");
 
   if (fetchError) {
     log.error({ phone, err: fetchError.message }, "erro ao buscar lote aberto");
