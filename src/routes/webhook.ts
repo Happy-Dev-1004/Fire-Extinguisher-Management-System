@@ -29,7 +29,7 @@ function resetBatchTimer(phone: string): void {
 async function autoFecharLote(phone: string): Promise<void> {
   const { data: lote, error } = await buscarLoteAberto<any>(
     phone,
-    "id, legenda, fotos, phone, unidade_contexto, mes_referencia, data_inspecao"
+    "id, legenda, fotos, phone, unidade_contexto"
   );
 
   if (error || !lote) return;
@@ -216,7 +216,7 @@ async function handleImageWithCaption(
   // Close any open batch for this phone first
   const { data: loteAberto } = await buscarLoteAberto<any>(
     phone,
-    "id, legenda, fotos, phone, unidade_contexto, mes_referencia, data_inspecao"
+    "id, legenda, fotos, phone, unidade_contexto"
   );
 
   if (loteAberto) {
@@ -262,7 +262,7 @@ async function handleImageWithCaption(
 async function handleFinalizarLote(phone: string): Promise<void> {
   const { data: loteAberto, error } = await buscarLoteAberto<any>(
     phone,
-    "id, legenda, fotos, phone, unidade_contexto, mes_referencia, data_inspecao"
+    "id, legenda, fotos, phone, unidade_contexto"
   );
 
   if (error) {
@@ -367,9 +367,12 @@ export async function varrerLotesAbandonados(): Promise<void> {
   // NULL — which is exactly the case for batches created before that column
   // was reliably set, leaving them stuck 'aberto' forever. A NULL started_at
   // is treated as "old enough" so those legacy batches get recovered too.
+  // Only columns that exist on lotes_fotos. mes_referencia / data_inspecao are
+  // NOT columns here — analisarLote derives them (resolverMesAtual / hoje) when
+  // absent, so we must not request them or the query errors out entirely.
   const { data: lotes, error } = await supabase
     .from("lotes_fotos")
-    .select("id, phone, legenda, fotos, status, started_at, created_at, unidade_contexto, mes_referencia, data_inspecao")
+    .select("id, phone, legenda, fotos, status, started_at, created_at, unidade_contexto")
     .eq("status", "aberto");
 
   if (error) {
