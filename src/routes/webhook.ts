@@ -362,21 +362,33 @@ async function handleImageWithoutCaption(
 export async function varrerLotesAbandonados(): Promise<void> {
   const limite = new Date(Date.now() - BATCH_TIMEOUT_MS).toISOString();
 
+  // Select ALL open batches, then filter by age in JS. Filtering by
+  // started_at in the query (.lt) silently drops rows where started_at is
+  // NULL — which is exactly the case for batches created before that column
+  // was reliably set, leaving them stuck 'aberto' forever. A NULL started_at
+  // is treated as "old enough" so those legacy batches get recovered too.
   const { data: lotes, error } = await supabase
     .from("lotes_fotos")
-    .select("id, phone, legenda, fotos, status, unidade_contexto, mes_referencia, data_inspecao")
-    .eq("status", "aberto")
-    .lt("started_at", limite);
+    .select("id, phone, legenda, fotos, status, started_at, created_at, unidade_contexto, mes_referencia, data_inspecao")
+    .eq("status", "aberto");
 
   if (error) {
     log.error({ err: error.message }, "varredura: falha ao buscar lotes abandonados");
     return;
   }
-  if (!lotes || lotes.length === 0) return;
 
-  log.info({ qtd: lotes.length }, "varredura: lotes abandonados encontrados — fechando e analisando");
+  const abandonados = (lotes ?? []).filter((l: any) => {
+    const ts = l.started_at ?? l.created_at;
+    if (!ts) return true; // no timestamp at all → treat as abandoned
+    return new Date(ts).toISOString() < limite;
+  });
 
-  for (const lote of lotes) {
+  if (abandonados.length === 0) return;
+  const lotesParaFechar = abandonados;
+
+  log.info({ qtd: lotesParaFechar.length }, "varredura: lotes abandonados encontrados — fechando e analisando");
+
+  for (const lote of lotesParaFechar) {
     const { error: lockErr } = await supabase
       .from("lotes_fotos")
       .update({ status: "pronto" })
