@@ -44,13 +44,20 @@ export function buildUserMessage(
     {
       type: "text",
       text:
-        `Analise as fotos do extintor número "${numeroExtintor}" para apoiar o inspetor humano.\n` +
-        `IMPORTANTE — leitura de dados impressos/manuscritos:\n` +
-        `- Examine a etiqueta/selo de perto e transcreva LITERALMENTE o que está escrito.\n` +
-        `- Para datas de vencimento (carga e teste de hidrostático), leia dígito por dígito. ` +
-        `Não deduza, não arredonde e não invente. Se houver dúvida sobre qualquer dígito, prefira "" e marque o status como "Indeterminado".\n` +
-        `- Procure a data em TODAS as fotos (a etiqueta pode estar mais legível em uma delas).\n` +
-        `- Distinga claramente mês de ano (ex.: "04/2027" = abril de 2027).\n` +
+        `Estas ${imageUrls.length} fotos são TODAS do MESMO extintor (número "${numeroExtintor}"). ` +
+        `Analise TODAS as fotos em conjunto — NÃO se baseie apenas na primeira.\n` +
+        `As informações estão DISTRIBUÍDAS entre as fotos. Tipicamente o inspetor envia 4 a 6 fotos por extintor:\n` +
+        `- uma foto da ETIQUETA/SELO de manutenção (contém os VENCIMENTOS de carga e teste, tipo, capacidade, nº);\n` +
+        `- uma foto do MANÔMETRO (pressão / ponteiro na faixa verde ou vermelha);\n` +
+        `- uma foto do EXTINTOR inteiro na parede (suporte, mangueira, sinalização de parede);\n` +
+        `- uma foto do PISO / localização (sinalização de piso).\n` +
+        `Combine os dados de todas as fotos numa única avaliação. Cada campo deve usar a foto onde aquele dado aparece.\n\n` +
+        `LEITURA DE DADOS IMPRESSOS/MANUSCRITOS (datas de vencimento):\n` +
+        `- Localize a ETIQUETA de manutenção e transcreva LITERALMENTE as datas (ex.: "Vencimento 2º Nível 04/05/2027", "3º Nível 2028").\n` +
+        `- Leia dígito por dígito. Não deduza, não arredonde, não invente.\n` +
+        `- vencimento_carga = recarga (2º nível). vencimento_teste = teste hidrostático (3º nível). São datas diferentes.\n` +
+        `- Procure em TODAS as fotos antes de concluir que um dado está ausente.\n` +
+        `- Só use "" + "Indeterminado" se a etiqueta realmente não estiver legível em NENHUMA foto.\n` +
         `Retorne apenas o JSON conforme instruído.`,
     },
     // detail: "high" forces GPT-4o to process the image at full resolution.
