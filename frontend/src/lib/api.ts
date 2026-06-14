@@ -216,6 +216,15 @@ export const relatorioApi = {
       {},
       `extintor_${unidade.replace(/\s+/g, "_")}_${numero}.pdf`
     ),
+
+  regiao: (regiao: string, formato: "pdf" | "csv" = "pdf") => {
+    const ts = new Date().toISOString().slice(0, 10);
+    return downloadBlob(
+      "/relatorio/regiao",
+      { regiao, formato },
+      `regiao_${regiao.replace(/\s+/g, "_")}_${ts}.${formato}`
+    );
+  },
 };
 
 // ── /ficha ────────────────────────────────────────────────────────────────────

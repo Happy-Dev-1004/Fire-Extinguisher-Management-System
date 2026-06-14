@@ -193,7 +193,103 @@ router.post("/extintor/:id", async (req: Request, res: Response) => {
     .send(pdf);
 });
 
+// ── POST /relatorio/regiao ────────────────────────────────────────────────────
+// Full report for ONE region: every extinguisher (1..N), including those NOT yet
+// inspected (blank rows). Verified ones are flagged. formato: "pdf" | "csv".
+
+const RegiaoBodySchema = z.object({
+  regiao:  z.string().min(1),
+  formato: z.enum(["pdf", "csv"]).default("pdf"),
+});
+
+router.post("/regiao", async (req: Request, res: Response) => {
+  const parse = RegiaoBodySchema.safeParse(req.body);
+  if (!parse.success) {
+    return res.status(400).json({ erro: "Dados inválidos.", detalhes: parse.error.flatten().fieldErrors });
+  }
+  const { regiao, formato } = parse.data;
+  const rlog = log.child({ regiao, formato, tipo: "regiao" });
+
+  const { data: extintores, error } = await supabase
+    .from("extintores")
+    .select("numero, numero_int, setor, tipo_carga, capacidade, vencimento_carga, vencimento_teste, status_geral, inspetor, status_inspecao")
+    .eq("regiao", regiao)
+    .order("numero_int", { ascending: true });
+  if (error) return res.status(500).json({ erro: error.message });
+
+  const rows = (extintores ?? []) as any[];
+  const ts = new Date().toISOString().slice(0, 10);
+  rlog.info({ total: rows.length }, "relatório de região gerado");
+
+  if (formato === "csv") {
+    const csv = buildRegiaoCsv(regiao, rows);
+    return res
+      .header("Content-Type", "text/csv; charset=utf-8")
+      .header("Content-Disposition", `attachment; filename="regiao_${regiao.replace(/\s+/g, "_")}_${ts}.csv"`)
+      .send(csv);
+  }
+
+  const html = buildRegiaoPdfHtml(regiao, rows, ts);
+  const pdf  = await renderPdf(html);
+  return res
+    .header("Content-Type", "application/pdf")
+    .header("Content-Disposition", `attachment; filename="regiao_${regiao.replace(/\s+/g, "_")}_${ts}.pdf"`)
+    .send(pdf);
+});
+
 export default router;
+
+const STATUS_INSPECAO_PT: Record<string, string> = {
+  nao_inspecionado:       "Não inspecionado",
+  aguardando_verificacao: "Aguardando verificação",
+  verificado:             "Verificado",
+};
+
+function buildRegiaoCsv(regiao: string, rows: any[]): string {
+  const headers = ["Região","Nº","Setor","Tipo","Capacidade","Venc. Carga","Venc. Teste","Status Geral","Inspetor","Verificação"];
+  const lines = [headers.join(",")];
+  for (const r of rows) {
+    lines.push([
+      regiao, r.numero, r.setor ?? "", r.tipo_carga ?? "", r.capacidade ?? "",
+      r.vencimento_carga ?? "", r.vencimento_teste ?? "", r.status_geral ?? "", r.inspetor ?? "",
+      STATUS_INSPECAO_PT[r.status_inspecao] ?? r.status_inspecao,
+    ].map(csvEscape).join(","));
+  }
+  return lines.join("\n");
+}
+
+function buildRegiaoPdfHtml(regiao: string, rows: any[], ts: string): string {
+  const verificados = rows.filter((r) => r.status_inspecao === "verificado").length;
+  const aguardando  = rows.filter((r) => r.status_inspecao === "aguardando_verificacao").length;
+  const naoInsp     = rows.filter((r) => r.status_inspecao === "nao_inspecionado").length;
+
+  const corStatus = (s: string) =>
+    s === "verificado" ? "#16a34a" : s === "aguardando_verificacao" ? "#d97706" : "#9ca3af";
+
+  const tableRows = rows.map((r) => `<tr>
+      <td>${escHtml(r.numero)}</td>
+      <td>${escHtml(r.setor ?? "—")}</td>
+      <td>${escHtml(r.tipo_carga ?? "—")}</td>
+      <td>${escHtml(r.vencimento_carga ?? "—")}</td>
+      <td>${escHtml(r.vencimento_teste ?? "—")}</td>
+      <td>${escHtml(r.status_geral ?? "—")}</td>
+      <td>${escHtml(r.inspetor ?? "—")}</td>
+      <td><span style="color:${corStatus(r.status_inspecao)};font-weight:600">${escHtml(STATUS_INSPECAO_PT[r.status_inspecao] ?? r.status_inspecao)}</span></td>
+    </tr>`).join("\n");
+
+  return `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><style>
+  body{font-family:Arial,sans-serif;font-size:11px;margin:0;color:#111}
+  h1{font-size:15px;margin-bottom:2px} .sub{color:#555;font-size:10px;margin-bottom:14px}
+  table{width:100%;border-collapse:collapse} th{background:#1e40af;color:#fff;text-align:left;padding:5px 6px;font-size:10px}
+  td{padding:4px 6px;border-bottom:1px solid #e5e7eb} tr:nth-child(even) td{background:#f9fafb}
+  </style></head><body>
+  <h1>Relatório por Região — ${escHtml(regiao)}</h1>
+  <p class="sub">Gerado em ${ts} &nbsp;|&nbsp; ${rows.length} extintores &nbsp;|&nbsp; ${verificados} verificados, ${aguardando} aguardando, ${naoInsp} não inspecionados</p>
+  <table><thead><tr>
+    <th>Nº</th><th>Setor</th><th>Tipo</th><th>Venc. Carga</th><th>Venc. Teste</th><th>Status Geral</th><th>Inspetor</th><th>Verificação</th>
+  </tr></thead><tbody>${tableRows}</tbody></table>
+  </body></html>`;
+}
 
 // ── CSV builder ───────────────────────────────────────────────────────────────
 

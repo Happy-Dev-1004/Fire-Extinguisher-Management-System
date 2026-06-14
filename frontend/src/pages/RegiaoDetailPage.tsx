@@ -1,11 +1,11 @@
 import { useState, useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
-import { regioesApi } from "../lib/api";
+import { regioesApi, relatorioApi } from "../lib/api";
 import type { ExtintorRegiao, StatusInspecao } from "../lib/types";
 import { toast } from "../components/Toast";
 import { Modal } from "../components/Modal";
 import {
-  ArrowLeft, Loader2, ShieldCheck, Clock, Circle, Pencil, Check, Search, X,
+  ArrowLeft, Loader2, ShieldCheck, Clock, Circle, Pencil, Check, Search, X, Download,
 } from "lucide-react";
 
 const STATUS_META: Record<StatusInspecao, { label: string; cls: string; Icon: typeof Circle }> = {
@@ -51,6 +51,19 @@ export function RegiaoDetailPage() {
   const [editando, setEditando] = useState<ExtintorRegiao | null>(null);
   const [form, setForm]         = useState<Partial<ExtintorRegiao>>({});
   const [salvando, setSalvando] = useState(false);
+  const [baixando, setBaixando] = useState(false);
+
+  async function baixarRelatorio(formato: "pdf" | "csv") {
+    setBaixando(true);
+    try {
+      await relatorioApi.regiao(nomeRegiao, formato);
+      toast("Relatório baixado.", "sucesso");
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Erro ao baixar relatório.", "erro");
+    } finally {
+      setBaixando(false);
+    }
+  }
 
   useEffect(() => { void carregar(); }, [regiao]);
 
@@ -110,8 +123,20 @@ export function RegiaoDetailPage() {
         <Link to="/regioes" className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 mb-2">
           <ArrowLeft className="w-4 h-4" /> Regiões
         </Link>
-        <h1 className="page-title">{nomeRegiao}</h1>
-        <p className="text-sm text-gray-500 mt-0.5">{extintores.length} extintores · revise e verifique cada um.</p>
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div>
+            <h1 className="page-title">{nomeRegiao}</h1>
+            <p className="text-sm text-gray-500 mt-0.5">{extintores.length} extintores · revise e verifique cada um.</p>
+          </div>
+          <div className="flex gap-2">
+            <button onClick={() => baixarRelatorio("pdf")} disabled={baixando} className="btn-secondary btn-sm">
+              {baixando ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />} PDF
+            </button>
+            <button onClick={() => baixarRelatorio("csv")} disabled={baixando} className="btn-secondary btn-sm">
+              <Download className="w-3.5 h-3.5" /> CSV
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* filters + search */}
