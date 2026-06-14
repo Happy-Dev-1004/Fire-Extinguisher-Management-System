@@ -4,6 +4,7 @@ import { supabaseAdmin } from "../db-admin";
 import { logger } from "../logger";
 import { normalizar } from "../inspetores/normalizar";
 import { analisarLote, type LoteFotos } from "../analise/analisar";
+import { resolverNomeRegiao } from "../regioes/regioes";
 
 const router = Router();
 const log = logger.child({ rota: "webhook" });
@@ -178,11 +179,12 @@ async function processWebhook(body: any): Promise<void> {
      body?.message?.conversation != null ||
      body?.message?.extendedTextMessage != null);
 
-  const textBody: string | undefined = (
+  const rawTextBody: string | undefined = (
     body?.text?.message ??
     body?.message?.conversation ??
     body?.message?.extendedTextMessage?.text
-  )?.trim().toLowerCase();
+  )?.trim();
+  const textBody: string | undefined = rawTextBody?.toLowerCase();
 
   if (!phone || !(await isAuthorized(phone))) {
     log.warn({ phone: phone ?? "desconhecido" }, "número não autorizado — mensagem ignorada");
@@ -197,9 +199,23 @@ async function processWebhook(body: any): Promise<void> {
     return;
   }
 
-  // "unidade: Nome da Unidade" — sets the active unit context for this inspector
-  if (isText && textBody) {
-    const matchUnidade = textBody.match(/^unidade\s*[:\-]\s*(.+)/i);
+  // Region context. The inspector sends the region name BEFORE the photos —
+  // either as a bare region name ("Barry Itabuna") or "regiao: Barry Itabuna".
+  // We match it against the known regions (accent/case-insensitive) and store it
+  // as the active context for this inspector's session.
+  if (isText && rawTextBody) {
+    const semPrefixo = rawTextBody.replace(/^regi[aã]o\s*[:\-]\s*/i, "").trim();
+    const regiao = await resolverNomeRegiao(semPrefixo);
+    if (regiao) {
+      await supabaseAdmin
+        .from("inspetores")
+        .update({ regiao_contexto: regiao, unidade_contexto: regiao })
+        .eq("telefone_normalizado", normalizar(phone));
+      log.info({ phone, regiao }, "região de contexto definida pelo inspetor");
+      return;
+    }
+    // Legacy "unidade: X" still supported for free-text units.
+    const matchUnidade = rawTextBody.match(/^unidade\s*[:\-]\s*(.+)/i);
     if (matchUnidade) {
       const nomeUnidade = matchUnidade[1].trim();
       await supabaseAdmin
@@ -227,10 +243,11 @@ async function getUnidadeContexto(phone: string): Promise<string | null> {
   const normalizado = normalizar(phone);
   const { data } = await supabaseAdmin
     .from("inspetores")
-    .select("unidade_contexto")
+    .select("unidade_contexto, regiao_contexto")
     .eq("telefone_normalizado", normalizado)
     .maybeSingle();
-  return (data as any)?.unidade_contexto ?? null;
+  // Prefer the region context (the new model); fall back to legacy unidade.
+  return (data as any)?.regiao_contexto ?? (data as any)?.unidade_contexto ?? null;
 }
 
 async function handleImageWithCaption(
