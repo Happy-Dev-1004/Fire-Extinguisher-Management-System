@@ -362,21 +362,38 @@ async function handleImageWithoutCaption(
     return;
   }
 
-  const fotosAtualizadas = [...loteAberto.fotos, imageUrl];
+  // Atomic append via the append_foto_lote() RPC. The previous read-modify-write
+  // ([...loteAberto.fotos, imageUrl] then UPDATE) lost photos when an inspector
+  // sent several at once: two handlers read the same array and overwrote each
+  // other (4 sent, 2 stored). The RPC appends in a single locked statement, so
+  // concurrent photos can never clobber one another.
+  const { data: atualizado, error: rpcError } = await supabase.rpc("append_foto_lote", {
+    p_phone: phone,
+    p_foto:  imageUrl,
+  });
 
-  const { error: updateError } = await supabase
-    .from("lotes_fotos")
-    .update({ fotos: fotosAtualizadas })
-    .eq("id", loteAberto.id);
-
-  if (updateError) {
-    log.error({ phone, loteId: loteAberto.id, err: updateError.message }, "erro ao adicionar foto ao lote");
+  if (rpcError) {
+    // Fallback for before migration 0010 is applied (RPC not yet created):
+    // fetch the freshest array and append. Less safe under heavy concurrency,
+    // but keeps photos flowing until the atomic RPC exists.
+    log.warn({ phone, err: rpcError.message }, "rpc append_foto_lote indisponível — usando fallback read-modify-write");
+    const { data: fresco } = await buscarLoteAberto<{ id: string; fotos: string[] }>(phone, "id, fotos");
+    if (fresco) {
+      await supabase
+        .from("lotes_fotos")
+        .update({ fotos: [...(fresco.fotos ?? []), imageUrl] })
+        .eq("id", fresco.id);
+    }
+    resetBatchTimer(phone);
     return;
   }
 
+  const row = Array.isArray(atualizado) ? atualizado[0] : atualizado;
+  const qtd = row?.fotos?.length ?? (loteAberto.fotos.length + 1);
+
   log.info(
-    { phone, loteId: loteAberto.id, extintor: loteAberto.legenda, qtdFotos: fotosAtualizadas.length },
-    "lote atualizado — foto adicionada"
+    { phone, loteId: loteAberto.id, extintor: loteAberto.legenda, qtdFotos: qtd },
+    "lote atualizado — foto adicionada (atômico)"
   );
   resetBatchTimer(phone);
 }

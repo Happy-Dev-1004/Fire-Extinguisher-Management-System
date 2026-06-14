@@ -1,0 +1,1 @@
+DROP FUNCTION IF EXISTS append_foto_lote(TEXT, TEXT);
