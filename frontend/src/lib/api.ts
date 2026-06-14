@@ -223,11 +223,11 @@ export const fichaApi = {
       "GET", `/ficha/destinatarios?unidade=${encodeURIComponent(unidade)}`
     ),
 
-  enviar: (unidade: string, mes: string) =>
+  enviar: (unidade: string, mes: string, canal: "whatsapp" | "email" | "ambos" = "ambos") =>
     request<{
       mensagem: string;
       enviados: number;
       falhas: number;
       detalhes: ResultadoEnvioMulti[];
-    }>("POST", "/ficha/enviar", { unidade, mes }),
+    }>("POST", "/ficha/enviar", { unidade, mes, canal }),
 };

@@ -70,6 +70,9 @@ router.get("/destinatarios", async (req: Request, res: Response) => {
 const EnviarBodySchema = z.object({
   unidade: z.string().min(1, "Unidade é obrigatória."),
   mes:     z.string().min(1, "Mês é obrigatório. Formato: Mês/AAAA (ex: Maio/2026)."),
+  // Which channel(s) to send through. Defaults to "ambos" (both) so existing
+  // callers keep their current behaviour.
+  canal:   z.enum(["whatsapp", "email", "ambos"]).default("ambos"),
 });
 
 router.post("/enviar", async (req: Request, res: Response) => {
@@ -77,8 +80,8 @@ router.post("/enviar", async (req: Request, res: Response) => {
   if (!parsed.success) {
     return res.status(400).json({ erro: parsed.error.flatten().fieldErrors });
   }
-  const { unidade, mes } = parsed.data;
-  const log = logger.child({ rota: "/ficha/enviar", unidade, mes });
+  const { unidade, mes, canal } = parsed.data;
+  const log = logger.child({ rota: "/ficha/enviar", unidade, mes, canal });
 
   // Resolve recipients server-side — never trusts a client-provided list.
   const destinatarios = await resolverDestinatarios(unidade);
@@ -100,8 +103,13 @@ router.post("/enviar", async (req: Request, res: Response) => {
   // both — every available channel is always attempted, independently.
   const { pdfBuffer } = result;
 
-  const comTelefone = destinatarios.filter((d) => d.telefone_normalizado);
-  const comEmail    = destinatarios.filter((d) => d.email && d.email.trim());
+  // Honour the requested channel: only dispatch through the channels the
+  // caller asked for. "ambos" attempts both; "whatsapp"/"email" restrict to one.
+  const usarWhats = canal === "ambos" || canal === "whatsapp";
+  const usarEmail = canal === "ambos" || canal === "email";
+
+  const comTelefone = usarWhats ? destinatarios.filter((d) => d.telefone_normalizado)      : [];
+  const comEmail    = usarEmail ? destinatarios.filter((d) => d.email && d.email.trim())   : [];
 
   const [resWhats, resEmail] = await Promise.all([
     comTelefone.length ? enviarFichaWhatsApp({ unidade, mes, pdfBuffer, destinatarios: comTelefone }) : Promise.resolve([]),
@@ -117,10 +125,10 @@ router.post("/enviar", async (req: Request, res: Response) => {
     const e = emailById.get(d.id);
     return {
       destinatario: { id: d.id, nome: d.nome, telefone: d.telefone, email: d.email ?? null },
-      whatsapp: d.telefone_normalizado
+      whatsapp: (usarWhats && d.telefone_normalizado)
         ? { tentado: true, ok: w?.ok ?? false, motivo: w?.motivo }
         : { tentado: false, ok: false },
-      email: (d.email && d.email.trim())
+      email: (usarEmail && d.email && d.email.trim())
         ? { tentado: true, ok: e?.ok ?? false, motivo: e?.motivo }
         : { tentado: false, ok: false },
     };

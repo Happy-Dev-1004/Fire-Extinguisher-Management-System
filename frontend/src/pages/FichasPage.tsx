@@ -1,4 +1,4 @@
-import { useState, useEffect, type FormEvent } from "react";
+import { useState, useEffect } from "react";
 import { fichaApi, extintoresApi, relatorioApi } from "../lib/api";
 import type { DestinatarioResolvido, ResultadoEnvioMulti } from "../lib/types";
 import { Modal } from "../components/Modal";
@@ -74,11 +74,10 @@ export function FichasPage() {
     }
   }
 
-  async function confirmarEnvio(e: FormEvent) {
-    e.preventDefault();
+  async function confirmarEnvio(canal: "whatsapp" | "email" | "ambos") {
     setEnviando(true);
     try {
-      const r = await fichaApi.enviar(unidadeSelecionada, mes);
+      const r = await fichaApi.enviar(unidadeSelecionada, mes, canal);
       setResultado({ enviados: r.enviados, falhas: r.falhas, detalhes: r.detalhes });
       toast(
         r.falhas === 0
@@ -252,7 +251,7 @@ export function FichasPage() {
             </button>
           </div>
         ) : (
-          <form onSubmit={confirmarEnvio} className="space-y-4">
+          <div className="space-y-4">
             <div>
               <label className="label">Mês de referência</label>
               <input
@@ -294,32 +293,46 @@ export function FichasPage() {
               )}
             </div>
 
-            <div className="flex gap-3 pt-1">
+            {/* Channel picker — choose how to send the ficha */}
+            <div className="pt-1">
+              <p className="section-title mb-2">Como deseja enviar?</p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <button
+                  type="button"
+                  onClick={() => confirmarEnvio("whatsapp")}
+                  disabled={enviando || preview.length === 0 || carregandoPreview}
+                  className="btn-secondary"
+                >
+                  <MessageCircle className="w-4 h-4" /> WhatsApp
+                </button>
+                <button
+                  type="button"
+                  onClick={() => confirmarEnvio("email")}
+                  disabled={enviando || preview.length === 0 || carregandoPreview}
+                  className="btn-secondary"
+                >
+                  <Mail className="w-4 h-4" /> E-mail
+                </button>
+                <button
+                  type="button"
+                  onClick={() => confirmarEnvio("ambos")}
+                  disabled={enviando || preview.length === 0 || carregandoPreview}
+                  className="btn-primary"
+                >
+                  {enviando ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                  Ambos
+                </button>
+              </div>
               <button
                 type="button"
                 onClick={() => setModalEnvio(false)}
                 disabled={enviando}
-                className="btn-secondary flex-1"
+                className="btn-secondary w-full mt-2"
               >
                 Cancelar
               </button>
-              <button
-                type="submit"
-                disabled={enviando || preview.length === 0 || carregandoPreview}
-                className="btn-primary flex-1"
-              >
-                {enviando ? (
-                  <span className="flex items-center gap-2">
-                    <Loader2 className="w-4 h-4 animate-spin" /> Enviando…
-                  </span>
-                ) : (
-                  <span className="flex items-center gap-2">
-                    <Send className="w-4 h-4" /> Confirmar envio
-                  </span>
-                )}
-              </button>
             </div>
-          </form>
+          </div>
         )}
       </Modal>
     </div>
