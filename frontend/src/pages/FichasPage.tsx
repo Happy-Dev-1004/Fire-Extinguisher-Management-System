@@ -110,7 +110,7 @@ export function FichasPage() {
       <div>
         <h1 className="page-title">Fichas de Inspeção</h1>
         <p className="text-sm text-gray-500 mt-0.5">
-          Gere e envie as fichas mensais por unidade via WhatsApp.
+          Gere e envie as fichas mensais por unidade via WhatsApp ou e-mail.
         </p>
       </div>
 
@@ -122,7 +122,7 @@ export function FichasPage() {
         <div>
           <p className="text-sm font-semibold text-gray-900">Mês atual: {mesAtual()}</p>
           <p className="text-xs text-gray-400">
-            Use os botões abaixo para baixar o PDF ou enviar por WhatsApp para cada unidade.
+            Use os botões abaixo para baixar o PDF ou enviar (WhatsApp / e-mail) para cada unidade.
           </p>
         </div>
       </div>
@@ -193,7 +193,7 @@ export function FichasPage() {
                   className="btn-primary btn-sm"
                 >
                   <Send className="w-3.5 h-3.5" />
-                  Enviar via WhatsApp
+                  Enviar
                 </button>
               </div>
             </div>
