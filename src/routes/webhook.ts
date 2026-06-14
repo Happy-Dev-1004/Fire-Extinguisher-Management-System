@@ -111,7 +111,7 @@ router.post("/", (req: Request, res: Response) => {
     {
       phone: phone ?? "desconhecido",
       tipo: body?.type ?? "?",
-      temImagem: !!(body?.image ?? body?.message?.imageMessage),
+      temImagem: !!(body?.image ?? body?.message?.imageMessage ?? body?.document ?? body?.message?.documentMessage),
       temTexto: !!(body?.text ?? body?.message?.conversation ?? body?.message?.extendedTextMessage),
     },
     "webhook recebido"
@@ -131,18 +131,45 @@ async function processWebhook(body: any): Promise<void> {
 
   const isReceivedCallback = body?.type === "ReceivedCallback";
 
+  // Inspectors often send photos as FILE attachments (WhatsApp "document"),
+  // not inline photos. Z-API then delivers a `document`/documentMessage with a
+  // mimetype like "image/jpeg" instead of an imageMessage. Treat any document
+  // whose mimetype is an image (jpg/jpeg/png/webp) exactly like a photo, so
+  // both sending styles work.
+  const docMime: string | undefined =
+    body?.document?.mimeType ??
+    body?.document?.mimetype ??
+    body?.message?.documentMessage?.mimetype;
+  const docUrl: string | undefined =
+    body?.document?.documentUrl ??
+    body?.document?.url ??
+    body?.message?.documentMessage?.url;
+  const isImageDocument: boolean =
+    isReceivedCallback &&
+    !!docUrl &&
+    (/(image\/(jpe?g|png|webp))/i.test(docMime ?? "") ||
+     // some payloads omit mimetype but include a .jpg/.png filename/url
+     /\.(jpe?g|png|webp)(\?|$)/i.test(
+       (body?.document?.fileName ?? body?.message?.documentMessage?.fileName ?? docUrl) as string
+     ));
+
   const isImage: boolean =
     isReceivedCallback &&
-    (body?.image != null || body?.message?.imageMessage != null);
+    (body?.image != null || body?.message?.imageMessage != null || isImageDocument);
 
   const imageUrl: string | undefined =
     body?.image?.imageUrl ??
     body?.image?.url ??
-    body?.message?.imageMessage?.url;
+    body?.message?.imageMessage?.url ??
+    (isImageDocument ? docUrl : undefined);
 
   const rawCaption: string | undefined =
     body?.image?.caption ??
-    body?.message?.imageMessage?.caption;
+    body?.message?.imageMessage?.caption ??
+    body?.document?.caption ??
+    body?.message?.documentMessage?.caption ??
+    body?.document?.fileName ??
+    body?.message?.documentMessage?.fileName;
   const caption: string | undefined = rawCaption?.trim() || undefined;
 
   const isText: boolean =
