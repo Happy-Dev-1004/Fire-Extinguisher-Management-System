@@ -3,7 +3,7 @@ import express from "express";
 import cors from "cors";
 import extintoresRouter    from "./routes/extintores";
 import inspecoesRouter     from "./routes/inspecoes";
-import webhookRouter       from "./routes/webhook";
+import webhookRouter, { varrerLotesAbandonados } from "./routes/webhook";
 import fichaRouter         from "./routes/ficha";
 import setupRouter         from "./routes/setup";
 import meRouter            from "./routes/me";
@@ -137,4 +137,16 @@ app.listen(Number(PORT), "0.0.0.0", () => {
   auditarSegredos().catch((err) =>
     logger.warn({ err: err.message }, "falha na auditoria de segredos na inicialização")
   );
+
+  // Recover any batch left 'aberto' by a previous restart, then keep sweeping.
+  // The in-memory auto-close timer doesn't survive redeploys; this guarantees
+  // orphaned photo batches are always closed and analysed.
+  varrerLotesAbandonados().catch((err) =>
+    logger.warn({ err: err.message }, "falha na varredura inicial de lotes abandonados")
+  );
+  setInterval(() => {
+    varrerLotesAbandonados().catch((err) =>
+      logger.warn({ err: err.message }, "falha na varredura periódica de lotes abandonados")
+    );
+  }, 30_000);
 });

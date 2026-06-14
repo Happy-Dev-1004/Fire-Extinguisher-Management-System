@@ -354,4 +354,42 @@ async function handleImageWithoutCaption(
   resetBatchTimer(phone);
 }
 
+// Recovers batches left 'aberto' when the in-memory auto-close timer was lost
+// (e.g. a redeploy restarted the server mid-batch). Closes any batch idle longer
+// than BATCH_TIMEOUT_MS and triggers its analysis. Safe to run repeatedly:
+// each batch is flipped 'aberto' -> 'pronto' before analysis, and analisarLote
+// only acts on 'pronto', so concurrent sweeps can't double-process.
+export async function varrerLotesAbandonados(): Promise<void> {
+  const limite = new Date(Date.now() - BATCH_TIMEOUT_MS).toISOString();
+
+  const { data: lotes, error } = await supabase
+    .from("lotes_fotos")
+    .select("id, phone, legenda, fotos, status, unidade_contexto, mes_referencia, data_inspecao")
+    .eq("status", "aberto")
+    .lt("started_at", limite);
+
+  if (error) {
+    log.error({ err: error.message }, "varredura: falha ao buscar lotes abandonados");
+    return;
+  }
+  if (!lotes || lotes.length === 0) return;
+
+  log.info({ qtd: lotes.length }, "varredura: lotes abandonados encontrados — fechando e analisando");
+
+  for (const lote of lotes) {
+    const { error: lockErr } = await supabase
+      .from("lotes_fotos")
+      .update({ status: "pronto" })
+      .eq("id", lote.id)
+      .eq("status", "aberto");
+
+    if (lockErr) {
+      log.error({ loteId: lote.id, err: lockErr.message }, "varredura: falha ao fechar lote");
+      continue;
+    }
+    log.info({ loteId: lote.id, extintor: lote.legenda }, "varredura: lote fechado — disparando análise");
+    triggerAnalise({ ...lote, status: "pronto" });
+  }
+}
+
 export default router;
