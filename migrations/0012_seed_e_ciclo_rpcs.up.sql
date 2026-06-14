@@ -18,8 +18,9 @@ RETURNS INTEGER
 LANGUAGE plpgsql
 AS $$
 DECLARE
-  r        RECORD;
+  r         RECORD;
   inseridos INTEGER := 0;
+  este_lote INTEGER;
 BEGIN
   FOR r IN SELECT nome, total_extintores FROM regioes LOOP
     INSERT INTO extintores (
@@ -34,7 +35,10 @@ BEGIN
       SELECT 1 FROM extintores e
        WHERE e.regiao = r.nome AND e.numero_int = gs
     );
-    GET DIAGNOSTICS inseridos = inseridos + ROW_COUNT;
+    -- GET DIAGNOSTICS only assigns a raw value (no expressions), so accumulate
+    -- via a temp variable.
+    GET DIAGNOSTICS este_lote = ROW_COUNT;
+    inseridos := inseridos + este_lote;
   END LOOP;
   RETURN inseridos;
 END;
