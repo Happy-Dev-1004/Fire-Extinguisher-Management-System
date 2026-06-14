@@ -13,6 +13,7 @@ import inspetoresRouter     from "./routes/inspetores";
 import destinatariosRouter  from "./routes/destinatarios";
 import buscaRouter          from "./routes/busca";
 import relatorioRouter      from "./routes/relatorio";
+import manutencaoRouter      from "./routes/manutencao";
 import { requireAuth, requireAdmin, requireOwner } from "./auth/middleware";
 import { logger } from "./logger";
 import { supabaseAdmin } from "./db-admin";
@@ -128,6 +129,9 @@ app.use("/destinatarios",   requireAuth, requireAdmin, destinatariosRouter);
 // Search + reports: owner + member (read-only inspection data)
 app.use("/busca",           requireAuth, requireAdmin, buscaRouter);
 app.use("/relatorio",       requireAuth, requireAdmin, relatorioRouter);
+
+// Maintenance: owner only — on-demand batch sweep, etc.
+app.use("/manutencao",      requireAuth, requireOwner, manutencaoRouter);
 
 // Bind to 0.0.0.0 so the platform's proxy (Railway/Render) can reach the
 // container — binding to localhost/IPv6-only causes a 502 at the edge.
