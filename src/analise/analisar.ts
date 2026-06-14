@@ -4,7 +4,7 @@ import { supabaseAdmin } from "../db-admin";
 import { logger } from "../logger";
 import { RespostaIASchema, type RespostaIA } from "./schema";
 import { SYSTEM_PROMPT, buildUserMessage } from "./prompt";
-import { salvarResultado } from "../persistencia/salvar";
+import { salvarPorRegiao } from "../persistencia/salvarPorRegiao";
 import { notificarInspetorPorLote } from "../notificacao/notificar";
 import { normalizar } from "../inspetores/normalizar";
 import { getSecret } from "../segredos/getSecret";
@@ -186,45 +186,48 @@ export async function analisarLote(lote: LoteFotos): Promise<RespostaIA | null> 
     "IA respondeu"
   );
 
-  // Unit resolution order:
-  //   1. unit the AI read from the photo (rare — usually not visible)
-  //   2. context captured on the batch when it opened
-  //   3. the inspector's CURRENT registered unit (looked up by phone)
-  // Step 3 guarantees the unit is never empty for a registered inspector, even
-  // if the batch opened before their unit was set in the dashboard.
-  let unidade = (resultado.unidade ?? lote.unidade_contexto ?? "").trim();
-  if (!unidade) {
-    unidade = (await getUnidadeInspetor(lote.phone)) ?? "";
-    if (unidade) log.info({ unidade }, "unidade resolvida a partir do cadastro do inspetor");
+  // Region resolution order:
+  //   1. region context captured on the batch when it opened
+  //   2. the inspector's CURRENT registered region (looked up by phone)
+  // The region is what the inspector announced before sending photos.
+  let regiaoContexto = (lote.unidade_contexto ?? "").trim() || null;
+  if (!regiaoContexto) {
+    regiaoContexto = (await getUnidadeInspetor(lote.phone)) ?? null;
+    if (regiaoContexto) log.info({ regiao: regiaoContexto }, "região resolvida a partir do cadastro do inspetor");
   }
+
+  // The number the inspector typed as the caption identifies WHICH extinguisher
+  // slot to fill (region + number). Fall back to the AI-read number.
+  const numeroLegenda = extrairNumeroTag(lote.legenda);
+
   try {
-    const inspecaoId = await salvarResultado({
+    const r = await salvarPorRegiao({
       resultado,
       loteId: lote.id,
       fotos: lote.fotos,
-      unidadeContexto: unidade,
-      mesReferencia: lote.mes_referencia ?? resolverMesAtual(),
-      dataInspecao: lote.data_inspecao ?? resolverDataHoje(),
+      regiaoContexto,
+      numeroLegenda,
     });
 
-    log.info(
-      { extintor: resultado.numero_extintor, unidade, inspecaoId },
-      "registro salvo"
-    );
+    if (r.tipo === "aplicado") {
+      log.info({ regiao: r.regiao, numero: r.numero, slotId: r.slotId }, "inspeção aplicada ao slot");
+    } else {
+      log.warn({ motivo: r.motivo }, "inspeção parqueada para atribuição manual (pendente)");
+    }
 
     await notificarInspetorPorLote({
       loteId: lote.id,
       phone: lote.phone,
       resultado,
-      unidade,
+      unidade: regiaoContexto ?? "",
     });
 
     await supabase
       .from("lotes_fotos")
-      .update({ status: "processado" })
+      .update({ status: r.tipo === "aplicado" ? "processado" : "pendente_atribuicao" })
       .eq("id", lote.id);
 
-    log.info({ loteId: lote.id }, "lote marcado como processado");
+    log.info({ loteId: lote.id, tipo: r.tipo }, "lote finalizado");
   } catch (err: any) {
     log.error({ err: err.message }, "falha ao persistir resultado — lote marcado como erro_persistencia");
     await supabase

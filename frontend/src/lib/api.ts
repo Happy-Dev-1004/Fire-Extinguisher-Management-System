@@ -19,6 +19,9 @@ import type {
   ResultadoEnvioMulti,
   FiltrosBusca,
   PaginaBusca,
+  RegiaoProgresso,
+  CicloAtivo,
+  ExtintorRegiao,
 } from "./types";
 
 const BASE = import.meta.env.VITE_API_BASE as string ?? "/api";
@@ -213,6 +216,15 @@ export const relatorioApi = {
       {},
       `extintor_${unidade.replace(/\s+/g, "_")}_${numero}.pdf`
     ),
+
+  regiao: (regiao: string, formato: "pdf" | "csv" = "pdf") => {
+    const ts = new Date().toISOString().slice(0, 10);
+    return downloadBlob(
+      "/relatorio/regiao",
+      { regiao, formato },
+      `regiao_${regiao.replace(/\s+/g, "_")}_${ts}.${formato}`
+    );
+  },
 };
 
 // ── /ficha ────────────────────────────────────────────────────────────────────
@@ -230,4 +242,31 @@ export const fichaApi = {
       falhas: number;
       detalhes: ResultadoEnvioMulti[];
     }>("POST", "/ficha/enviar", { unidade, mes, canal }),
+};
+
+// ── /regioes ──────────────────────────────────────────────────────────────────
+
+export const regioesApi = {
+  listar: () =>
+    request<{ regioes: RegiaoProgresso[]; ciclo: CicloAtivo | null }>("GET", "/regioes"),
+
+  extintores: (regiao: string) =>
+    request<{ regiao: string; extintores: ExtintorRegiao[] }>(
+      "GET", `/regioes/${encodeURIComponent(regiao)}/extintores`
+    ),
+
+  obter: (id: string) =>
+    request<ExtintorRegiao>("GET", `/regioes/extintor/${id}`),
+
+  editar: (id: string, campos: Partial<ExtintorRegiao>) =>
+    request<ExtintorRegiao>("PUT", `/regioes/extintor/${id}`, campos),
+
+  verificar: (id: string, verificado = true) =>
+    request<ExtintorRegiao>("POST", `/regioes/extintor/${id}/verificar`, { verificado }),
+
+  novoMes: (mes_referencia: string) =>
+    request<{ ciclo_id: string; mes_referencia: string }>("POST", "/regioes/novo-mes", { mes_referencia }),
+
+  seed: () =>
+    request<{ inseridos: number }>("POST", "/regioes/seed"),
 };
