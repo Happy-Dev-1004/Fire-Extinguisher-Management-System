@@ -11,6 +11,8 @@ import { InspetoresPage } from "./pages/InspetoresPage";
 import { DestinatariosPage } from "./pages/DestinatariosPage";
 import { FichasPage } from "./pages/FichasPage";
 import { BuscaPage } from "./pages/BuscaPage";
+import { RegioesPage } from "./pages/RegioesPage";
+import { RegiaoDetailPage } from "./pages/RegiaoDetailPage";
 import { RequireAuth } from "./components/RequireAuth";
 import { RequireOwner } from "./components/RequireOwner";
 
@@ -26,6 +28,8 @@ export function App() {
             <Route element={<Shell />}>
               <Route index element={<Navigate to="/dashboard" replace />} />
               <Route path="/dashboard" element={<DashboardPage />} />
+              <Route path="/regioes" element={<RegioesPage />} />
+              <Route path="/regioes/:regiao" element={<RegiaoDetailPage />} />
               <Route path="/extintores" element={<ExtintoresPage />} />
               <Route path="/extintores/:id" element={<ExtintorDetailPage />} />
               <Route path="/inspetores" element={<InspetoresPage />} />

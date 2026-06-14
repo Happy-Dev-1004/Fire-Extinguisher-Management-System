@@ -25,6 +25,54 @@ export interface Convite {
 
 export type Situacao = "descartado" | "vencido" | "proximo" | "em_dia" | "indeterminado";
 
+// ── Regional inventory ────────────────────────────────────────────────────────
+export type StatusInspecao = "nao_inspecionado" | "aguardando_verificacao" | "verificado";
+
+export interface RegiaoProgresso {
+  nome:                   string;
+  total_esperado:         number;
+  total_cadastrado:       number;
+  nao_inspecionado:       number;
+  aguardando_verificacao: number;
+  verificado:             number;
+  inspecionados:          number;
+  pct_inspecionado:       number;
+  pct_verificado:         number;
+}
+
+export interface CicloAtivo {
+  id:             string;
+  mes_referencia: string;
+  iniciado_em:    string;
+}
+
+export interface ExtintorRegiao {
+  id:                 string;
+  numero:             string;
+  numero_int:         number | null;
+  regiao:             string;
+  setor:              string;
+  tipo_carga:         string;
+  capacidade:         string | null;
+  vencimento_carga:   string | null;
+  vencimento_teste:   string | null;
+  inspetor:           string | null;
+  lacre:              string | null;
+  manometro:          string | null;
+  sinalizacao_parede: string | null;
+  sinalizacao_piso:   string | null;
+  suporte:            string | null;
+  mangueira:          string | null;
+  quadro_instrucao:   string | null;
+  status_geral:       string | null;
+  observacoes:        string | null;
+  fotos:              string[];
+  status_inspecao:    StatusInspecao;
+  verificado_em:      string | null;
+  inspecionado_em:    string | null;
+  situacao:           Situacao;
+}
+
 export interface UltimaInspecaoResumo {
   status_geral:       string | null;
   data_inspecao:      string;
