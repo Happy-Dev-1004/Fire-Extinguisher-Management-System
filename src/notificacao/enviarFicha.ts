@@ -46,10 +46,14 @@ export async function enviarFichaWhatsApp(input: EnviarFichaInput): Promise<Resu
     }));
   }
 
-  const base64Pdf = input.pdfBuffer.toString("base64");
+  // Z-API's send-document endpoint requires the document as a data-URI
+  // (data:<mime>;base64,<payload>), NOT a bare base64 string. Sending raw
+  // base64 fails with "Base64/Url could not be read". The path extension must
+  // match the file type too (.../send-document/pdf).
+  const base64Pdf = `data:application/pdf;base64,${input.pdfBuffer.toString("base64")}`;
   const caption   = `Ficha de inspeção de extintores — ${input.unidade} — ${input.mes}`;
   const fileName  = `ficha_${input.unidade.replace(/\s+/g, "_")}_${input.mes.replace("/", "-")}.pdf`;
-  const url       = `https://api.z-api.io/instances/${config.instanceId}/token/${config.token}/send-document/base64`;
+  const url       = `https://api.z-api.io/instances/${config.instanceId}/token/${config.token}/send-document/pdf`;
 
   log.info(
     { unidade: input.unidade, mes: input.mes, qtdDestinatarios: input.destinatarios.length },
