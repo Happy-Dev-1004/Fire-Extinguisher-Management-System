@@ -273,9 +273,9 @@ ${blocos}
   </div>
   <div class="footer-part">
     <div class="footer-part-title">PARTICIPANTES</div>
-    ${nomes.map((nome) => `
+    ${nomes.map(() => `
     <div class="participante">
-      <span class="participante-nome">Nome.: ${escHtml(nome)}</span>
+      <span class="participante-nome">Nome.:</span>
       <span class="participante-ass">Ass:</span>
     </div>`).join("")}
   </div>

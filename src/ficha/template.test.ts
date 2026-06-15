@@ -75,11 +75,15 @@ describe("renderHtml — conteúdo", () => {
     expect(html).toContain("FÁBRICA ITABUNA - JUNHO/2026");
   });
 
-  it("inclui os três inspetores no rodapé", () => {
+  it("rodapé PARTICIPANTES tem linhas em branco (sem nomes), só os rótulos", () => {
     const html = renderHtml(makeDados(1));
-    expect(html).toContain("RODRIGO LIMA SANTOS");
-    expect(html).toContain("JOÃO VICTOR A. DOS SANTOS");
-    expect(html).toContain("GABRIEL REIS P. DOS SANTOS");
+    // The PARTICIPANTES structure stays (label, Nome.:, Ass:) but NO names are printed.
+    expect(html).toContain("PARTICIPANTES");
+    expect(html).toContain("Nome.:");
+    expect(html).toContain("Ass:");
+    expect(html).not.toContain("RODRIGO LIMA SANTOS");
+    expect(html).not.toContain("JOÃO VICTOR A. DOS SANTOS");
+    expect(html).not.toContain("GABRIEL REIS P. DOS SANTOS");
   });
 
   it("exibe o número e setor de cada extintor", () => {
