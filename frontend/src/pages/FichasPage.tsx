@@ -1,11 +1,11 @@
 import { useState, useEffect } from "react";
-import { fichaApi, extintoresApi, relatorioApi } from "../lib/api";
+import { fichaApi, relatorioApi, regioesApi } from "../lib/api";
 import type { DestinatarioResolvido, ResultadoEnvioMulti } from "../lib/types";
 import { Modal } from "../components/Modal";
 import { toast } from "../components/Toast";
 import {
   FileText, Send, Download, Loader2, CheckCircle2,
-  AlertTriangle, MapPin, CalendarDays, MessageCircle, Mail,
+  AlertTriangle, MapPin, CalendarDays, MessageCircle, Mail, Eye, X,
 } from "lucide-react";
 
 const MESES = [
@@ -33,28 +33,48 @@ export function FichasPage() {
     enviados: number; falhas: number; detalhes: ResultadoEnvioMulti[];
   } | null>(null);
 
-  // Download state
+  // Download / preview state
   const [baixando, setBaixando]   = useState<string | null>(null); // unidade being downloaded
+  const [previewando, setPreviewando] = useState<string | null>(null);
+  const [previewUrl, setPreviewUrl]   = useState<string | null>(null);
+  const [previewUnidade, setPreviewUnidade] = useState("");
 
   useEffect(() => {
     void carregarUnidades();
   }, []);
 
+  useEffect(() => () => { if (previewUrl) URL.revokeObjectURL(previewUrl); }, [previewUrl]);
+
   async function carregarUnidades() {
     setCarregando(true);
     try {
-      const { extintores: lista } = await extintoresApi.listar();
-      // Ignore extinguishers with no unit assigned — they can't produce a
-      // valid ficha (the backend requires a non-empty unidade).
-      const unicas = [...new Set(
-        lista.map((e) => e.unidade?.trim()).filter((u): u is string => !!u)
-      )].sort((a, b) => a.localeCompare(b, "pt-BR"));
-      setUnidades(unicas);
+      // Regions are the units. Use the regions endpoint directly (cheaper than
+      // loading every extinguisher just to extract the names).
+      const { regioes } = await regioesApi.listar();
+      setUnidades(regioes.map((r) => r.nome));
     } catch {
-      toast("Erro ao carregar unidades.", "erro");
+      toast("Erro ao carregar regiões.", "erro");
     } finally {
       setCarregando(false);
     }
+  }
+
+  async function abrirPreview(unidade: string) {
+    setPreviewando(unidade);
+    try {
+      const url = await relatorioApi.regiaoPreview(unidade);
+      setPreviewUrl(url);
+      setPreviewUnidade(unidade);
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Erro ao gerar pré-visualização.", "erro");
+    } finally {
+      setPreviewando(null);
+    }
+  }
+
+  function fecharPreview() {
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    setPreviewUrl(null);
   }
 
   async function abrirEnvio(unidade: string) {
@@ -95,7 +115,9 @@ export function FichasPage() {
   async function baixarPDF(unidade: string) {
     setBaixando(unidade);
     try {
-      await relatorioApi.ficha(unidade, mesAtual());
+      // Use the regional ficha-format report (same as preview), not the legacy
+      // unit+month ficha, so download and preview always match.
+      await relatorioApi.regiao(unidade, "pdf");
       toast("PDF baixado com sucesso.");
     } catch (err: unknown) {
       toast(err instanceof Error ? err.message : "Erro ao baixar PDF.", "erro");
@@ -172,6 +194,21 @@ export function FichasPage() {
               </div>
 
               <div className="flex gap-2 shrink-0">
+                {/* Preview report (sample ficha format) */}
+                <button
+                  onClick={() => abrirPreview(unidade)}
+                  disabled={previewando === unidade}
+                  className="btn-secondary btn-sm"
+                  title="Pré-visualizar relatório"
+                >
+                  {previewando === unidade ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Eye className="w-3.5 h-3.5" />
+                  )}
+                  Pré-visualizar
+                </button>
+
                 {/* Download PDF */}
                 <button
                   onClick={() => baixarPDF(unidade)}
@@ -335,6 +372,29 @@ export function FichasPage() {
           </div>
         )}
       </Modal>
+
+      {/* Report preview overlay (sample ficha format) */}
+      {previewUrl && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex flex-col p-3 sm:p-6 animate-fade-in" onClick={fecharPreview}>
+          <div className="flex items-center justify-between mb-2 text-white">
+            <p className="text-sm font-medium">Pré-visualização — {previewUnidade}</p>
+            <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
+              <button onClick={() => baixarPDF(previewUnidade)} className="btn-secondary btn-sm">
+                <Download className="w-3.5 h-3.5" /> Baixar PDF
+              </button>
+              <button onClick={fecharPreview} className="btn-secondary btn-sm">
+                <X className="w-3.5 h-3.5" /> Fechar
+              </button>
+            </div>
+          </div>
+          <iframe
+            title="Pré-visualização do relatório"
+            src={previewUrl}
+            className="flex-1 w-full rounded-lg bg-white"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
     </div>
   );
 }
