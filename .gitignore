@@ -3,3 +3,7 @@ dist/
 .env
 fichas/
 *.tmp.*
+
+ficha_preview_*.pdf
+test_foto*.jpg
+APPLY_THIS_SQL.sql
