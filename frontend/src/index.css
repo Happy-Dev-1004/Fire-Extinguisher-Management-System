@@ -124,4 +124,9 @@
   .divider {
     @apply border-t border-gray-100 my-4;
   }
+
+  /* ── Inline code ─────────────────────────────────────────────────────── */
+  .code {
+    @apply font-mono text-[0.85em] bg-gray-100 text-gray-800 rounded px-1.5 py-0.5;
+  }
 }
