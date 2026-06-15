@@ -75,7 +75,7 @@ export function RegioesPage() {
     <div className="space-y-6 animate-fade-in">
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="page-title">Regiões</h1>
+          <h1 className="page-title">Extintores</h1>
           <p className="text-sm text-gray-500 mt-0.5">
             Inventário de extintores por região e progresso da inspeção mensal.
           </p>

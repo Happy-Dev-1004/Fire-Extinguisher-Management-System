@@ -97,7 +97,15 @@ router.get("/extintor/:id", async (req: Request, res: Response) => {
   const { data, error } = await supabase.from("extintores").select("*").eq("id", req.params.id).maybeSingle();
   if (error) return res.status(500).json({ erro: error.message });
   if (!data) return res.status(404).json({ erro: "Extintor não encontrado." });
-  return res.json(data);
+  const e = data as any;
+  const situacao = calcularSituacao({
+    status_ativo: e.status_ativo ?? true,
+    vencimento_carga: e.vencimento_carga,
+    vencimento_teste: e.vencimento_teste,
+    numero: e.numero,
+    unidade: e.regiao,
+  });
+  return res.json({ ...e, situacao });
 });
 
 // ── PUT /regioes/extintor/:id — manual edit ───────────────────────────────────

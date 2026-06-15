@@ -3,7 +3,6 @@ import { AuthProvider } from "./hooks/useAuth";
 import { LoginPage } from "./pages/LoginPage";
 import { Shell } from "./components/Shell";
 import { DashboardPage } from "./pages/DashboardPage";
-import { ExtintoresPage } from "./pages/ExtintoresPage";
 import { ExtintorDetailPage } from "./pages/ExtintorDetailPage";
 import { ConfiguracoesPage } from "./pages/ConfiguracoesPage";
 import { EquipePage } from "./pages/EquipePage";
@@ -28,9 +27,9 @@ export function App() {
             <Route element={<Shell />}>
               <Route index element={<Navigate to="/dashboard" replace />} />
               <Route path="/dashboard" element={<DashboardPage />} />
-              <Route path="/regioes" element={<RegioesPage />} />
+              {/* Extintores = the regional inventory: region cards → region detail → extinguisher detail */}
+              <Route path="/extintores" element={<RegioesPage />} />
               <Route path="/regioes/:regiao" element={<RegiaoDetailPage />} />
-              <Route path="/extintores" element={<ExtintoresPage />} />
               <Route path="/extintores/:id" element={<ExtintorDetailPage />} />
               <Route path="/inspetores" element={<InspetoresPage />} />
               <Route path="/destinatarios" element={<DestinatariosPage />} />
