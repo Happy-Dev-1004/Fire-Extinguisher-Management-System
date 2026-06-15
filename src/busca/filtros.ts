@@ -10,9 +10,10 @@ export const PAGE_SIZE = 50;
 // ── Query-param schema ────────────────────────────────────────────────────────
 
 export const FiltrosSchema = z.object({
+  regiao:           z.string().optional(),         // exact region match
   unidade:          z.string().optional(),
   setor:            z.string().optional(),
-  numero:           z.string().optional(),         // partial match
+  numero:           z.string().optional(),         // exact match
   tipo_carga:       z.string().optional(),
   situacao:         z.enum(["em_dia","proximo","vencido","descartado","indeterminado"]).optional(),
   status_geral:     z.string().optional(),          // "Conforme" | "Reprovado" | etc.
@@ -88,9 +89,13 @@ export async function executarBusca(filtros: Filtros): Promise<PaginaBusca> {
     .order("numero_int", { ascending: true, nullsFirst: false })
     .order("numero");
 
+  // regiao is the canonical grouping; in the seeded data unidade == regiao, so
+  // matching either column on the region name keeps legacy + regional rows.
+  if (filtros.regiao)     q = q.eq("regiao", filtros.regiao);
   if (filtros.unidade)    q = q.eq("unidade", filtros.unidade);
   if (filtros.setor)      q = q.ilike("setor", `%${filtros.setor}%`);
-  if (filtros.numero)     q = q.ilike("numero", `%${filtros.numero}%`);
+  // Number is an EXACT match — "1" must not also return 10, 11, 100… (ilike %1%).
+  if (filtros.numero)     q = q.eq("numero", filtros.numero.trim());
   if (filtros.tipo_carga) q = q.ilike("tipo_carga", `%${filtros.tipo_carga}%`);
 
   const { data: extintores, error: errExt } = await q;

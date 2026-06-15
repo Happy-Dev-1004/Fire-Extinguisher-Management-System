@@ -237,6 +237,7 @@ export interface PaginaBusca {
 }
 
 export interface FiltrosBusca {
+  regiao?: string;
   unidade?: string;
   setor?: string;
   numero?: string;

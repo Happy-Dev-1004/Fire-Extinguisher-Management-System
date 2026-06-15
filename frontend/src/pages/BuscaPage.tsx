@@ -222,16 +222,19 @@ export function BuscaPage() {
               />
             </div>
 
-            {/* Unidade */}
+            {/* Região */}
             <div>
-              <label className="form-label">Unidade</label>
-              <input
-                type="text"
+              <label className="form-label">Região</label>
+              <select
                 className="input"
-                placeholder="Nome exato da unidade"
-                value={draft.unidade ?? ""}
-                onChange={e => setDraft(d => ({ ...d, unidade: e.target.value || undefined }))}
-              />
+                value={draft.regiao ?? ""}
+                onChange={e => setDraft(d => ({ ...d, regiao: e.target.value || undefined }))}
+              >
+                <option value="">Todas as regiões</option>
+                {regioes.map((r) => (
+                  <option key={r.nome} value={r.nome}>{r.nome} ({r.total_esperado})</option>
+                ))}
+              </select>
             </div>
 
             {/* Setor */}

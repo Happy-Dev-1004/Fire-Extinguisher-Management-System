@@ -62,6 +62,7 @@ const emptyToUndef = <T extends z.ZodTypeAny>(s: T) =>
   z.preprocess((v) => (v === "" || v === null ? undefined : v), s.optional());
 
 const GenericoBodySchema = z.object({
+  regiao:             emptyToUndef(z.string()),
   unidade:            emptyToUndef(z.string()),
   setor:              emptyToUndef(z.string()),
   numero:             emptyToUndef(z.string()),
