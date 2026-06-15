@@ -94,6 +94,17 @@ app.use(express.json({ limit: "10mb" }));
 // ── Public routes (no auth) ───────────────────────────────────────────────────
 app.get("/health", (_req, res) => res.json({ status: "ok" }));
 
+// Reports the git commit currently running. Railway injects RAILWAY_GIT_COMMIT_SHA
+// at build time; this lets us confirm at a glance whether the latest push actually
+// deployed (vs. a stale build) — invaluable for diagnosing deploy lag.
+app.get("/version", (_req, res) =>
+  res.json({
+    commit: process.env.RAILWAY_GIT_COMMIT_SHA ?? process.env.GIT_COMMIT_SHA ?? "unknown",
+    branch: process.env.RAILWAY_GIT_BRANCH ?? "unknown",
+    deployed_at: process.env.RAILWAY_DEPLOYMENT_ID ?? "unknown",
+  })
+);
+
 // One-time owner bootstrap — public but self-closes after first owner is created.
 app.use("/setup", setupRouter);
 
