@@ -20,10 +20,14 @@ router.get("/", async (req: Request, res: Response) => {
   const { unidade, situacao: filtroSituacao } = req.query as Record<string, string | undefined>;
 
   // Fetch all extinguishers
+  // Sort by numero_int (the numeric per-region number) so 2 comes before 10,
+  // not the text order "1, 10, 100, 11". nullsFirst:false keeps any legacy rows
+  // without numero_int at the end. numero (text) is the tiebreaker.
   let q = supabase
     .from("extintores")
     .select("*")
     .order("unidade")
+    .order("numero_int", { ascending: true, nullsFirst: false })
     .order("numero");
 
   if (unidade) q = q.eq("unidade", unidade);

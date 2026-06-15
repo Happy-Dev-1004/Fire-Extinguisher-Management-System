@@ -85,6 +85,7 @@ export async function executarBusca(filtros: Filtros): Promise<PaginaBusca> {
     .from("extintores")
     .select("*")
     .order("unidade")
+    .order("numero_int", { ascending: true, nullsFirst: false })
     .order("numero");
 
   if (filtros.unidade)    q = q.eq("unidade", filtros.unidade);
