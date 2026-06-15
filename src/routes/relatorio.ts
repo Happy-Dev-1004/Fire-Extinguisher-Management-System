@@ -13,6 +13,7 @@ import { renderHtml, type DadosFicha, type ExtintorFicha, type ItemInspecao } fr
 import { supabaseAdmin } from "../db-admin";
 import { executarBusca, type ResultadoBusca } from "../busca/filtros";
 import { renderPdfFromHtml as renderPdf } from "../pdf/browser";
+import { gerarFichaRegiao } from "../ficha/gerarRegiao";
 
 const router = Router();
 const log    = logger.child({ rota: "/relatorio" });
@@ -221,6 +222,7 @@ router.post("/regiao", async (req: Request, res: Response) => {
   const ts = new Date().toISOString().slice(0, 10);
   rlog.info({ total: rows.length }, "relatório de região gerado");
 
+  // CSV stays a flat table (CSV can't carry the ficha layout).
   if (formato === "csv") {
     const csv = buildRegiaoCsv(regiao, rows);
     return res
@@ -229,12 +231,16 @@ router.post("/regiao", async (req: Request, res: Response) => {
       .send(csv);
   }
 
-  const html = buildRegiaoPdfHtml(regiao, rows, ts);
-  const pdf  = await renderPdf(html);
+  // PDF uses the OFFICIAL ficha format (same as the sample), via gerarFichaRegiao.
+  const ficha = await gerarFichaRegiao(regiao);
+  if (!ficha.ok) {
+    rlog.warn({ motivo: ficha.motivo }, "ficha de região não gerada");
+    return res.status(404).json({ erro: ficha.motivo });
+  }
   return res
     .header("Content-Type", "application/pdf")
     .header("Content-Disposition", `attachment; filename="regiao_${regiao.replace(/\s+/g, "_")}_${ts}.pdf"`)
-    .send(pdf);
+    .send(ficha.pdfBuffer);
 });
 
 export default router;
@@ -256,39 +262,6 @@ function buildRegiaoCsv(regiao: string, rows: any[]): string {
     ].map(csvEscape).join(","));
   }
   return lines.join("\n");
-}
-
-function buildRegiaoPdfHtml(regiao: string, rows: any[], ts: string): string {
-  const verificados = rows.filter((r) => r.status_inspecao === "verificado").length;
-  const aguardando  = rows.filter((r) => r.status_inspecao === "aguardando_verificacao").length;
-  const naoInsp     = rows.filter((r) => r.status_inspecao === "nao_inspecionado").length;
-
-  const corStatus = (s: string) =>
-    s === "verificado" ? "#16a34a" : s === "aguardando_verificacao" ? "#d97706" : "#9ca3af";
-
-  const tableRows = rows.map((r) => `<tr>
-      <td>${escHtml(r.numero)}</td>
-      <td>${escHtml(r.setor ?? "—")}</td>
-      <td>${escHtml(r.tipo_carga ?? "—")}</td>
-      <td>${escHtml(r.vencimento_carga ?? "—")}</td>
-      <td>${escHtml(r.vencimento_teste ?? "—")}</td>
-      <td>${escHtml(r.status_geral ?? "—")}</td>
-      <td>${escHtml(r.inspetor ?? "—")}</td>
-      <td><span style="color:${corStatus(r.status_inspecao)};font-weight:600">${escHtml(STATUS_INSPECAO_PT[r.status_inspecao] ?? r.status_inspecao)}</span></td>
-    </tr>`).join("\n");
-
-  return `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><style>
-  body{font-family:Arial,sans-serif;font-size:11px;margin:0;color:#111}
-  h1{font-size:15px;margin-bottom:2px} .sub{color:#555;font-size:10px;margin-bottom:14px}
-  table{width:100%;border-collapse:collapse} th{background:#1e40af;color:#fff;text-align:left;padding:5px 6px;font-size:10px}
-  td{padding:4px 6px;border-bottom:1px solid #e5e7eb} tr:nth-child(even) td{background:#f9fafb}
-  </style></head><body>
-  <h1>Relatório por Região — ${escHtml(regiao)}</h1>
-  <p class="sub">Gerado em ${ts} &nbsp;|&nbsp; ${rows.length} extintores &nbsp;|&nbsp; ${verificados} verificados, ${aguardando} aguardando, ${naoInsp} não inspecionados</p>
-  <table><thead><tr>
-    <th>Nº</th><th>Setor</th><th>Tipo</th><th>Venc. Carga</th><th>Venc. Teste</th><th>Status Geral</th><th>Inspetor</th><th>Verificação</th>
-  </tr></thead><tbody>${tableRows}</tbody></table>
-  </body></html>`;
 }
 
 // ── CSV builder ───────────────────────────────────────────────────────────────

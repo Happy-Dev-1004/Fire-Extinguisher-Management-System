@@ -1,11 +1,11 @@
 import { useState, useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
-import { regioesApi, relatorioApi } from "../lib/api";
+import { regioesApi } from "../lib/api";
 import type { ExtintorRegiao, StatusInspecao } from "../lib/types";
 import { toast } from "../components/Toast";
 import { Modal } from "../components/Modal";
 import {
-  ArrowLeft, Loader2, ShieldCheck, Clock, Circle, Pencil, Check, Search, X, Download, Eye,
+  ArrowLeft, Loader2, ShieldCheck, Clock, Circle, Pencil, Check, Search, X,
 } from "lucide-react";
 
 const STATUS_META: Record<StatusInspecao, { label: string; cls: string; Icon: typeof Circle }> = {
@@ -51,41 +51,6 @@ export function RegiaoDetailPage() {
   const [editando, setEditando] = useState<ExtintorRegiao | null>(null);
   const [form, setForm]         = useState<Partial<ExtintorRegiao>>({});
   const [salvando, setSalvando] = useState(false);
-  const [baixando, setBaixando] = useState(false);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [previewCarregando, setPreviewCarregando] = useState(false);
-
-  async function baixarRelatorio(formato: "pdf" | "csv") {
-    setBaixando(true);
-    try {
-      await relatorioApi.regiao(nomeRegiao, formato);
-      toast("Relatório baixado.", "sucesso");
-    } catch (e) {
-      toast(e instanceof Error ? e.message : "Erro ao baixar relatório.", "erro");
-    } finally {
-      setBaixando(false);
-    }
-  }
-
-  async function abrirPreview() {
-    setPreviewCarregando(true);
-    try {
-      const url = await relatorioApi.regiaoPreview(nomeRegiao);
-      setPreviewUrl(url);
-    } catch (e) {
-      toast(e instanceof Error ? e.message : "Erro ao gerar pré-visualização.", "erro");
-    } finally {
-      setPreviewCarregando(false);
-    }
-  }
-
-  function fecharPreview() {
-    if (previewUrl) URL.revokeObjectURL(previewUrl);
-    setPreviewUrl(null);
-  }
-
-  // Revoke the blob URL on unmount to avoid leaking memory.
-  useEffect(() => () => { if (previewUrl) URL.revokeObjectURL(previewUrl); }, [previewUrl]);
 
   useEffect(() => { void carregar(); }, [regiao]);
 
@@ -145,23 +110,8 @@ export function RegiaoDetailPage() {
         <Link to="/regioes" className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 mb-2">
           <ArrowLeft className="w-4 h-4" /> Regiões
         </Link>
-        <div className="flex items-start justify-between gap-4 flex-wrap">
-          <div>
-            <h1 className="page-title">{nomeRegiao}</h1>
-            <p className="text-sm text-gray-500 mt-0.5">{extintores.length} extintores · revise e verifique cada um.</p>
-          </div>
-          <div className="flex gap-2">
-            <button onClick={abrirPreview} disabled={previewCarregando} className="btn-primary btn-sm">
-              {previewCarregando ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Eye className="w-3.5 h-3.5" />} Pré-visualizar
-            </button>
-            <button onClick={() => baixarRelatorio("pdf")} disabled={baixando} className="btn-secondary btn-sm">
-              {baixando ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />} PDF
-            </button>
-            <button onClick={() => baixarRelatorio("csv")} disabled={baixando} className="btn-secondary btn-sm">
-              <Download className="w-3.5 h-3.5" /> CSV
-            </button>
-          </div>
-        </div>
+        <h1 className="page-title">{nomeRegiao}</h1>
+        <p className="text-sm text-gray-500 mt-0.5">{extintores.length} extintores · revise e verifique cada um.</p>
       </div>
 
       {/* filters + search */}
@@ -234,29 +184,6 @@ export function RegiaoDetailPage() {
           </button>
         </div>
       </Modal>
-
-      {/* PDF preview overlay */}
-      {previewUrl && (
-        <div className="fixed inset-0 z-50 bg-black/60 flex flex-col p-3 sm:p-6 animate-fade-in" onClick={fecharPreview}>
-          <div className="flex items-center justify-between mb-2 text-white">
-            <p className="text-sm font-medium">Pré-visualização — {nomeRegiao}</p>
-            <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
-              <button onClick={() => baixarRelatorio("pdf")} className="btn-secondary btn-sm">
-                <Download className="w-3.5 h-3.5" /> Baixar PDF
-              </button>
-              <button onClick={fecharPreview} className="btn-secondary btn-sm">
-                <X className="w-3.5 h-3.5" /> Fechar
-              </button>
-            </div>
-          </div>
-          <iframe
-            title="Pré-visualização do relatório"
-            src={previewUrl}
-            className="flex-1 w-full rounded-lg bg-white"
-            onClick={(e) => e.stopPropagation()}
-          />
-        </div>
-      )}
     </div>
   );
 }

@@ -1,11 +1,11 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  Search, Filter, Download, FileText, Table2,
+  Search, Filter, Download, FileText, Table2, Eye, MapPin,
   ChevronLeft, ChevronRight, AlertCircle, X, Loader2,
 } from "lucide-react";
-import { buscaApi, relatorioApi } from "../lib/api";
-import type { FiltrosBusca, PaginaBusca, ResultadoBusca, Situacao } from "../lib/types";
+import { buscaApi, relatorioApi, regioesApi } from "../lib/api";
+import type { FiltrosBusca, PaginaBusca, ResultadoBusca, Situacao, RegiaoProgresso } from "../lib/types";
 import { toast } from "../components/Toast";
 
 // ── Situação metadata ─────────────────────────────────────────────────────────
@@ -52,6 +52,52 @@ export function BuscaPage() {
   const [downloading, setDownloading] = useState<"pdf" | "csv" | null>(null);
 
   const abortRef = useRef<AbortController | null>(null);
+
+  // ── Region report (official ficha format) ─────────────────────────────────
+  const [regioes, setRegioes]             = useState<RegiaoProgresso[]>([]);
+  const [regiaoSel, setRegiaoSel]         = useState("");
+  const [regBaixando, setRegBaixando]     = useState<"pdf" | "csv" | null>(null);
+  const [regPreviewing, setRegPreviewing] = useState(false);
+  const [regPreviewUrl, setRegPreviewUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    regioesApi.listar()
+      .then((r) => { setRegioes(r.regioes); if (r.regioes[0]) setRegiaoSel(r.regioes[0].nome); })
+      .catch(() => {/* regions optional on this page */});
+  }, []);
+
+  useEffect(() => () => { if (regPreviewUrl) URL.revokeObjectURL(regPreviewUrl); }, [regPreviewUrl]);
+
+  async function previewRegiao() {
+    if (!regiaoSel) return;
+    setRegPreviewing(true);
+    try {
+      const url = await relatorioApi.regiaoPreview(regiaoSel);
+      setRegPreviewUrl(url);
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Erro ao gerar pré-visualização.", "erro");
+    } finally {
+      setRegPreviewing(false);
+    }
+  }
+
+  async function baixarRegiao(formato: "pdf" | "csv") {
+    if (!regiaoSel) return;
+    setRegBaixando(formato);
+    try {
+      await relatorioApi.regiao(regiaoSel, formato);
+      toast("Relatório baixado.", "sucesso");
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Erro ao baixar relatório.", "erro");
+    } finally {
+      setRegBaixando(null);
+    }
+  }
+
+  function fecharRegPreview() {
+    if (regPreviewUrl) URL.revokeObjectURL(regPreviewUrl);
+    setRegPreviewUrl(null);
+  }
 
   // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -127,6 +173,37 @@ export function BuscaPage() {
             </span>
           )}
         </button>
+      </div>
+
+      {/* ── Official region report (ficha format) ───────────────────────────── */}
+      <div className="card p-5">
+        <div className="flex items-center gap-2 mb-1">
+          <MapPin className="w-4 h-4 text-brand-600" />
+          <h2 className="text-sm font-semibold text-gray-900">Relatório por Região (formato oficial)</h2>
+        </div>
+        <p className="text-xs text-gray-500 mb-4">
+          Gera a ficha oficial de inspeção (mesmo formato do modelo) com todos os extintores da região.
+        </p>
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="flex-1 min-w-[180px]">
+            <label className="label">Região</label>
+            <select className="input" value={regiaoSel} onChange={(e) => setRegiaoSel(e.target.value)}>
+              {regioes.length === 0 && <option value="">— nenhuma região —</option>}
+              {regioes.map((r) => (
+                <option key={r.nome} value={r.nome}>{r.nome} ({r.total_esperado})</option>
+              ))}
+            </select>
+          </div>
+          <button onClick={previewRegiao} disabled={!regiaoSel || regPreviewing} className="btn-primary">
+            {regPreviewing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Eye className="w-4 h-4" />} Pré-visualizar
+          </button>
+          <button onClick={() => baixarRegiao("pdf")} disabled={!regiaoSel || regBaixando === "pdf"} className="btn-secondary">
+            {regBaixando === "pdf" ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />} PDF
+          </button>
+          <button onClick={() => baixarRegiao("csv")} disabled={!regiaoSel || regBaixando === "csv"} className="btn-secondary">
+            {regBaixando === "csv" ? <Loader2 className="w-4 h-4 animate-spin" /> : <Table2 className="w-4 h-4" />} CSV
+          </button>
+        </div>
       </div>
 
       {/* Filter panel */}
@@ -434,6 +511,29 @@ export function BuscaPage() {
           <Search className="w-12 h-12 text-gray-200 mx-auto" />
           <p className="font-medium text-gray-500">Configure os filtros e clique em Buscar</p>
           <p className="text-sm">Todos os filtros são opcionais — deixe em branco para listar tudo.</p>
+        </div>
+      )}
+
+      {/* Region report PDF preview overlay */}
+      {regPreviewUrl && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex flex-col p-3 sm:p-6 animate-fade-in" onClick={fecharRegPreview}>
+          <div className="flex items-center justify-between mb-2 text-white">
+            <p className="text-sm font-medium">Pré-visualização — {regiaoSel}</p>
+            <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
+              <button onClick={() => baixarRegiao("pdf")} className="btn-secondary btn-sm">
+                <Download className="w-3.5 h-3.5" /> Baixar PDF
+              </button>
+              <button onClick={fecharRegPreview} className="btn-secondary btn-sm">
+                <X className="w-3.5 h-3.5" /> Fechar
+              </button>
+            </div>
+          </div>
+          <iframe
+            title="Pré-visualização do relatório"
+            src={regPreviewUrl}
+            className="flex-1 w-full rounded-lg bg-white"
+            onClick={(e) => e.stopPropagation()}
+          />
         </div>
       )}
     </div>
