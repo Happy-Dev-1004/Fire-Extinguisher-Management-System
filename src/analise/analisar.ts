@@ -50,14 +50,6 @@ function limparFences(raw: string): string {
   return raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/, "").trim();
 }
 
-const MESES_PT = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
-function resolverMesAtual(): string {
-  const d = new Date();
-  return `${MESES_PT[d.getMonth()]}/${d.getFullYear()}`;
-}
-function resolverDataHoje(): string {
-  return new Date().toISOString().slice(0, 10);
-}
 
 // Extracts an extinguisher tag from a photo caption typed by the inspector.
 // Accepts pure numbers ("57", "01") and common tag formats ("A-12", "R 3", "12B").

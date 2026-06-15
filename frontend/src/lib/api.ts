@@ -192,6 +192,27 @@ async function downloadBlob(path: string, body: unknown, filename: string): Prom
   URL.revokeObjectURL(url);
 }
 
+// Fetches a report and returns an object URL for INLINE preview (iframe/new
+// tab) instead of forcing a download. Caller is responsible for revoking the
+// URL when done (URL.revokeObjectURL) to free memory.
+async function previewBlob(path: string, body: unknown): Promise<string> {
+  const token = _getToken ? await _getToken() : null;
+  const res = await fetch(`${BASE}${path}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const json = await res.json().catch(() => ({}));
+    throw new Error(json.erro ?? json.error ?? `Erro HTTP ${res.status}`);
+  }
+  const blob = await res.blob();
+  return URL.createObjectURL(blob);
+}
+
 export const relatorioApi = {
   ficha: (unidade: string, mes_referencia: string) =>
     downloadBlob(
@@ -225,6 +246,10 @@ export const relatorioApi = {
       `regiao_${regiao.replace(/\s+/g, "_")}_${ts}.${formato}`
     );
   },
+
+  // Returns a blob URL of the regional PDF for inline preview (no download).
+  regiaoPreview: (regiao: string) =>
+    previewBlob("/relatorio/regiao", { regiao, formato: "pdf" }),
 };
 
 // ── /ficha ────────────────────────────────────────────────────────────────────
