@@ -139,6 +139,7 @@ export interface Inspetor {
   telefone_normalizado: string;
   unidade: string;            // fixed unit this inspector covers
   ativo: boolean;
+  em_sessao?: boolean;        // currently in an open WhatsApp work session
   created_at: string;
   updated_at: string;
 }

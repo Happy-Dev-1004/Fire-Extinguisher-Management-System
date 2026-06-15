@@ -76,7 +76,15 @@ const INSPETOR_ROW = {
   updated_at: "2026-01-01T00:00:00Z",
 };
 
-// What the route returns to the client (unidade_contexto mapped → unidade).
+// GET also selects the session columns; the route collapses them into em_sessao.
+const INSPETOR_ROW_GET = {
+  ...INSPETOR_ROW,
+  em_sessao: false,
+  sessao_atividade_em: null,
+};
+
+// What POST/PUT return (unidade_contexto mapped → unidade). These endpoints
+// don't select the session columns.
 const INSPETOR_RESPOSTA = {
   id: "ins-uuid-1",
   nome: "Rodrigo Lima",
@@ -87,6 +95,9 @@ const INSPETOR_RESPOSTA = {
   created_at: "2026-01-01T00:00:00Z",
   updated_at: "2026-01-01T00:00:00Z",
 };
+
+// What GET returns — adds the computed em_sessao flag.
+const INSPETOR_RESPOSTA_GET = { ...INSPETOR_RESPOSTA, em_sessao: false };
 
 function makeReq(
   overrides: Partial<Request> & { admin?: AdminRecord } = {}
@@ -153,24 +164,24 @@ describe("normalizar (phone normalization)", () => {
 describe("GET /inspetores", () => {
   it("owner recebe lista de inspetores", async () => {
     const { orderFn } = buildChain();
-    orderFn.mockResolvedValueOnce({ data: [INSPETOR_ROW], error: null });
+    orderFn.mockResolvedValueOnce({ data: [INSPETOR_ROW_GET], error: null });
 
     const handler = getHandler("get", "/");
     const { res, json } = makeRes();
     await handler(makeReq({ admin: OWNER }), res);
 
-    expect(json).toHaveBeenCalledWith({ inspetores: [INSPETOR_RESPOSTA] });
+    expect(json).toHaveBeenCalledWith({ inspetores: [INSPETOR_RESPOSTA_GET] });
   });
 
   it("membro também recebe lista (requireAdmin permite owner e member)", async () => {
     const { orderFn } = buildChain();
-    orderFn.mockResolvedValueOnce({ data: [INSPETOR_ROW], error: null });
+    orderFn.mockResolvedValueOnce({ data: [INSPETOR_ROW_GET], error: null });
 
     const handler = getHandler("get", "/");
     const { res, json } = makeRes();
     await handler(makeReq({ admin: MEMBER }), res);
 
-    expect(json).toHaveBeenCalledWith({ inspetores: [INSPETOR_RESPOSTA] });
+    expect(json).toHaveBeenCalledWith({ inspetores: [INSPETOR_RESPOSTA_GET] });
   });
 
   it("retorna lista vazia quando não há inspetores", async () => {

@@ -98,6 +98,63 @@ export async function isAuthorized(phone: string): Promise<boolean> {
   return data !== null;
 }
 
+// ── Work-session gate (token saving) ──────────────────────────────────────────
+// A registered inspector's photos are only analysed while a session is OPEN.
+// "Iniciar" opens it; "Encerrar" closes it; photos sent outside a session are
+// ignored (no OpenAI call). A 3h inactivity backstop closes forgotten sessions.
+const SESSAO_BACKSTOP_MS = 3 * 60 * 60 * 1000; // 3 hours
+
+// Returns true if the inspector currently has an OPEN session. Applies the
+// inactivity backstop: if the last activity is older than 3h, the session is
+// auto-closed here and treated as closed.
+async function emSessao(phone: string): Promise<boolean> {
+  let normalizado: string;
+  try { normalizado = normalizar(phone); } catch { return false; }
+
+  const { data } = await supabaseAdmin
+    .from("inspetores")
+    .select("em_sessao, sessao_atividade_em")
+    .eq("telefone_normalizado", normalizado)
+    .eq("ativo", true)
+    .maybeSingle();
+
+  if (!data || !(data as any).em_sessao) return false;
+
+  const ultima = (data as any).sessao_atividade_em ? new Date((data as any).sessao_atividade_em).getTime() : 0;
+  if (ultima && Date.now() - ultima > SESSAO_BACKSTOP_MS) {
+    await definirSessao(phone, false);
+    log.info({ phone }, "sessão encerrada automaticamente por inatividade (backstop 3h)");
+    return false;
+  }
+  return true;
+}
+
+// Opens or closes the inspector's session and stamps the activity time.
+async function definirSessao(phone: string, aberta: boolean): Promise<void> {
+  let normalizado: string;
+  try { normalizado = normalizar(phone); } catch { return; }
+  const agora = new Date().toISOString();
+  await supabaseAdmin
+    .from("inspetores")
+    .update({
+      em_sessao: aberta,
+      ...(aberta ? { sessao_iniciada_em: agora } : {}),
+      sessao_atividade_em: agora,
+    })
+    .eq("telefone_normalizado", normalizado);
+}
+
+// Bumps the activity timestamp (called on each processed message) so the
+// backstop only fires after real inactivity.
+async function tocarSessao(phone: string): Promise<void> {
+  let normalizado: string;
+  try { normalizado = normalizar(phone); } catch { return; }
+  await supabaseAdmin
+    .from("inspetores")
+    .update({ sessao_atividade_em: new Date().toISOString() })
+    .eq("telefone_normalizado", normalizado);
+}
+
 router.post("/", (req: Request, res: Response) => {
   // Always respond 200 immediately so Z-API stops retrying
   res.status(200).json({ received: true });
@@ -193,8 +250,30 @@ async function processWebhook(body: any): Promise<void> {
 
   log.info({ phone }, "inspetor autorizado");
 
+  // ── Session commands (token gate) ──────────────────────────────────────────
+  // "Iniciar" OPENS a work session → photos start being processed.
+  // "Encerrar" CLOSES it → photos are ignored until the next "Iniciar".
+  const INICIADORES = ["iniciar", "início", "inicio", "começar", "comecar", "iniciar tarefa", "iniciar inspeção", "iniciar inspecao", "start"];
+  const ENCERRADORES = ["encerrar", "encerrar tarefa", "finalizar sessão", "finalizar sessao", "encerrar inspeção", "encerrar inspecao", "parar"];
+
+  if (isText && textBody && INICIADORES.includes(textBody)) {
+    await definirSessao(phone, true);
+    log.info({ phone }, "sessão de trabalho ABERTA pelo inspetor (Iniciar)");
+    return;
+  }
+  if (isText && textBody && ENCERRADORES.includes(textBody)) {
+    // Close any open photo batch first, then close the session.
+    await handleFinalizarLote(phone);
+    await definirSessao(phone, false);
+    log.info({ phone }, "sessão de trabalho ENCERRADA pelo inspetor (Encerrar)");
+    return;
+  }
+
+  // "Fim" closes the CURRENT extinguisher batch (triggers analysis) but keeps
+  // the session open — the inspector continues to the next extinguisher.
   const FINALIZADORES = ["fim", "ok", "pronto", "finalizar", "concluir", "done"];
   if (isText && textBody && FINALIZADORES.includes(textBody)) {
+    await tocarSessao(phone);
     await handleFinalizarLote(phone);
     return;
   }
@@ -231,6 +310,15 @@ async function processWebhook(body: any): Promise<void> {
     log.info({ phone, textBody }, "mensagem não é imagem nem comando — ignorada");
     return;
   }
+
+  // ── Token gate ─────────────────────────────────────────────────────────────
+  // Only process photos while the inspector has an OPEN session. Outside a
+  // session the photo is ignored silently — NO OpenAI call, no token cost.
+  if (!(await emSessao(phone))) {
+    log.info({ phone }, "foto recebida fora de sessão — ignorada (sem custo de IA). Envie 'Iniciar' para começar.");
+    return;
+  }
+  await tocarSessao(phone);
 
   if (caption) {
     await handleImageWithCaption(phone, caption, imageUrl);

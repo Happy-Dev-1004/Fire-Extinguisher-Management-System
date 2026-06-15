@@ -35,7 +35,7 @@ const InspetorBodySchema = z.object({
 router.get("/", async (_req: Request, res: Response) => {
   const { data, error } = await supabaseAdmin
     .from("inspetores")
-    .select("id, nome, telefone, telefone_normalizado, unidade_contexto, ativo, created_at, updated_at")
+    .select("id, nome, telefone, telefone_normalizado, unidade_contexto, ativo, em_sessao, sessao_atividade_em, created_at, updated_at")
     .order("nome");
 
   if (error) {
@@ -43,11 +43,16 @@ router.get("/", async (_req: Request, res: Response) => {
     return res.status(500).json({ erro: "Erro ao buscar inspetores." });
   }
 
-  // Expose unidade_contexto to the client under the friendlier name "unidade".
-  const inspetores = (data ?? []).map(({ unidade_contexto, ...rest }: any) => ({
-    ...rest,
-    unidade: unidade_contexto ?? "",
-  }));
+  // Expose unidade_contexto as "unidade", and compute whether the session is
+  // genuinely open (apply the same 3h inactivity backstop used by the webhook,
+  // read-only here — we don't persist the auto-close from a GET).
+  const BACKSTOP_MS = 3 * 60 * 60 * 1000;
+  const agora = Date.now();
+  const inspetores = (data ?? []).map(({ unidade_contexto, sessao_atividade_em, em_sessao, ...rest }: any) => {
+    const ultima = sessao_atividade_em ? new Date(sessao_atividade_em).getTime() : 0;
+    const sessaoViva = !!em_sessao && (!ultima || agora - ultima <= BACKSTOP_MS);
+    return { ...rest, unidade: unidade_contexto ?? "", em_sessao: sessaoViva };
+  });
 
   return res.json({ inspetores });
 });

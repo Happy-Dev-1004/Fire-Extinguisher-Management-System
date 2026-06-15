@@ -187,6 +187,11 @@ export function InspetoresPage() {
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-sm font-semibold text-gray-900">{i.nome}</span>
                       <span className="badge-green"><CheckCircle2 className="w-3 h-3" /> Autorizado</span>
+                      {i.em_sessao && (
+                        <span className="badge-brand" title="Sessão de trabalho aberta — fotos estão sendo processadas">
+                          <span className="w-1.5 h-1.5 rounded-full bg-brand-600 animate-pulse" /> Em sessão
+                        </span>
+                      )}
                     </div>
                     <p className="text-xs text-gray-400 mt-0.5 font-mono">{i.telefone}</p>
                     <p className="text-xs text-gray-500 mt-0.5">

@@ -58,11 +58,19 @@ function GuiaInspetores() {
       <p className="text-sm text-gray-600 leading-relaxed">
         Os inspetores enviam as fotos dos extintores diretamente pelo <strong>WhatsApp</strong>.
         O sistema lê as fotos com inteligência artificial e registra cada extintor automaticamente.
-        Siga os 4 passos abaixo.
+        Siga os passos abaixo.
       </p>
 
-      {/* Step 1 */}
-      <PassoCard n={1} Icon={MapPin} titulo="Informe a região (uma vez, no início)">
+      {/* Step 0 — start session */}
+      <PassoCard n={1} Icon={MessageSquare} titulo="Inicie a sessão de trabalho">
+        <p>Antes de tudo, envie a mensagem para <strong>ativar a sua sessão</strong>:</p>
+        <CodeBlock>Iniciar</CodeBlock>
+        <p className="mt-2">A partir daí, suas fotos passam a ser analisadas. <strong>Enquanto a sessão não estiver iniciada, as fotos são ignoradas</strong> (isso evita gastar recursos com fotos que não são de extintores).</p>
+        <Nota>A sessão continua aberta por <strong>vários extintores e regiões</strong> — você só inicia uma vez. Ela fecha quando você enviar <code className="code">Encerrar</code> (ou sozinha após 3 horas sem nenhuma mensagem).</Nota>
+      </PassoCard>
+
+      {/* Step 1 — region */}
+      <PassoCard n={2} Icon={MapPin} titulo="Informe a região">
         <p>Antes de fotografar, envie o <strong>nome da região</strong> onde você está:</p>
         <CodeBlock>Barry Itabuna</CodeBlock>
         <p className="mt-2">Regiões válidas (digite exatamente assim):</p>
@@ -72,8 +80,8 @@ function GuiaInspetores() {
         <Nota>Você só precisa enviar a região <strong>uma vez</strong>. Todos os extintores seguintes ficam nessa região, até você trocar.</Nota>
       </PassoCard>
 
-      {/* Step 2 */}
-      <PassoCard n={2} Icon={Camera} titulo="Fotografe cada extintor (4 a 6 fotos)">
+      {/* Step 3 */}
+      <PassoCard n={3} Icon={Camera} titulo="Fotografe cada extintor (4 a 6 fotos)">
         <p>
           Para <strong>cada extintor</strong>, envie de <strong>4 a 6 fotos</strong>. Na{" "}
           <strong>primeira foto</strong>, escreva como <strong>legenda</strong> o{" "}
@@ -92,30 +100,35 @@ function GuiaInspetores() {
         </Nota>
       </PassoCard>
 
-      {/* Step 3 */}
-      <PassoCard n={3} Icon={MessageSquare} titulo="Vá para o próximo extintor">
-        <p>
-          Para o próximo extintor, basta enviar a <strong>primeira foto com o novo número na legenda</strong>{" "}
-          (ex.: <code className="code">59</code>). Isso fecha o anterior automaticamente e começa o novo.
-        </p>
+      {/* Step 4 */}
+      <PassoCard n={4} Icon={CheckCircle2} titulo="Conclua cada extintor com 'Fim'">
+        <p>Ao terminar as fotos de <strong>um extintor</strong>, envie:</p>
+        <CodeBlock>Fim</CodeBlock>
+        <p className="mt-2">Isso fecha aquele extintor e a IA analisa as fotos. <strong>A sessão continua aberta</strong> — siga para o próximo extintor (basta enviar a 1ª foto com o novo número, ou trocar de região).</p>
+        <Nota>Se esquecer o <code className="code">Fim</code>, o lote fecha sozinho após <strong>30 segundos</strong> sem novas fotos.</Nota>
       </PassoCard>
 
-      {/* Step 4 */}
-      <PassoCard n={4} Icon={CheckCircle2} titulo="Finalize ao terminar">
-        <p>Quando terminar o <strong>último extintor</strong>, envie a mensagem:</p>
-        <CodeBlock>fim</CodeBlock>
-        <Nota>Se esquecer de enviar <code className="code">fim</code>, o sistema fecha o lote sozinho após <strong>30 segundos</strong> sem novas fotos.</Nota>
+      {/* Step 5 — end session */}
+      <PassoCard n={5} Icon={MessageSquare} titulo="Encerre a sessão ao final do trabalho">
+        <p>Quando terminar <strong>todo o trabalho</strong> (todos os extintores, em todas as regiões), envie:</p>
+        <CodeBlock>Encerrar</CodeBlock>
+        <p className="mt-2">Isso fecha a sessão. A partir daí, fotos enviadas <strong>não são mais processadas</strong> até você enviar <code className="code">Iniciar</code> novamente.</p>
       </PassoCard>
 
       {/* Example */}
       <div className="card p-5">
         <p className="section-title mb-3">Exemplo completo de uma sessão</p>
         <div className="rounded-lg bg-gray-900 text-gray-100 text-sm font-mono p-4 space-y-1.5 leading-relaxed">
-          <div><span className="text-emerald-400">Barry Itabuna</span>          <span className="text-gray-500"># informa a região</span></div>
+          <div><span className="text-sky-400">Iniciar</span>               <span className="text-gray-500"># abre a sessão</span></div>
+          <div><span className="text-emerald-400">Barry Itabuna</span>         <span className="text-gray-500"># informa a região</span></div>
           <div>[4 fotos]  <span className="text-gray-500"># 1ª foto com legenda "58"</span></div>
+          <div><span className="text-amber-400">Fim</span>                   <span className="text-gray-500"># conclui o extintor 58</span></div>
           <div>[4 fotos]  <span className="text-gray-500"># 1ª foto com legenda "59"</span></div>
-          <div>[5 fotos]  <span className="text-gray-500"># 1ª foto com legenda "60"</span></div>
-          <div><span className="text-amber-400">fim</span>                    <span className="text-gray-500"># finaliza</span></div>
+          <div><span className="text-amber-400">Fim</span>                   <span className="text-gray-500"># conclui o extintor 59</span></div>
+          <div><span className="text-emerald-400">Ilhéus</span>                <span className="text-gray-500"># troca de região</span></div>
+          <div>[5 fotos]  <span className="text-gray-500"># 1ª foto com legenda "12"</span></div>
+          <div><span className="text-amber-400">Fim</span>                   <span className="text-gray-500"># conclui o extintor 12</span></div>
+          <div><span className="text-rose-400">Encerrar</span>              <span className="text-gray-500"># fecha a sessão (fim do trabalho)</span></div>
         </div>
       </div>
 
@@ -125,6 +138,8 @@ function GuiaInspetores() {
           <AlertTriangle className="w-3.5 h-3.5" /> Regras importantes
         </p>
         <ul className="space-y-2 text-sm text-gray-700">
+          <Regra>Sempre envie <code className="code">Iniciar</code> <strong>antes</strong> de mandar fotos — fora da sessão, as fotos são ignoradas.</Regra>
+          <Regra><code className="code">Fim</code> conclui <strong>um extintor</strong> (a sessão continua). <code className="code">Encerrar</code> fecha a <strong>sessão inteira</strong> no fim do trabalho.</Regra>
           <Regra>Envie as fotos pelo <strong>chat direto</strong> — não em grupo. Envie como <strong>foto</strong> normal (de preferência não como "documento/arquivo").</Regra>
           <Regra>O <strong>número na legenda</strong> deve ser o número da <strong>etiqueta amarela</strong> do extintor.</Regra>
           <Regra>Só números <strong>cadastrados</strong> na região funcionam (ex.: Barry Itabuna vai de 1 a 276).</Regra>
