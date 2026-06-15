@@ -6,7 +6,10 @@
 // If the caption number is out of range / non-numeric, or the region is unknown,
 // the result is parked in inspecoes_pendentes for manual assignment — never lost.
 
-import { supabase } from "../db";
+// Use the service-role client throughout: the regional model's new tables
+// (inspecoes_pendentes) and the cycle tables have RLS enabled, and this is a
+// trusted server-side flow (the webhook already authorised the inspector).
+import { supabaseAdmin as supabase } from "../db-admin";
 import { logger } from "../logger";
 import { resolverNomeRegiao, totalDaRegiao } from "../regioes/regioes";
 import type { RespostaIA } from "../analise/schema";

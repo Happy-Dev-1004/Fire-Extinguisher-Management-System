@@ -62,8 +62,8 @@ router.get("/", async (_req: Request, res: Response) => {
     };
   });
 
-  // Active cycle info
-  const { data: ciclo } = await supabase
+  // Active cycle info (ciclos has RLS — read via service role).
+  const { data: ciclo } = await supabaseAdmin
     .from("ciclos").select("id, mes_referencia, iniciado_em").eq("status", "ativo").maybeSingle();
 
   return res.json({ regioes: resultado, ciclo: ciclo ?? null });
@@ -184,7 +184,9 @@ router.post("/novo-mes", async (req: Request, res: Response) => {
   const parsed = NovoMesSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ erro: "mes_referencia é obrigatório (ex: Julho/2026)." });
 
-  const { data, error } = await supabase.rpc("iniciar_novo_ciclo", {
+  // Use the service-role client: ciclos/extintores writes must bypass RLS.
+  // This endpoint is already owner-guarded above, so it's a trusted admin op.
+  const { data, error } = await supabaseAdmin.rpc("iniciar_novo_ciclo", {
     p_mes: parsed.data.mes_referencia,
     p_by:  req.admin.id,
   });
@@ -198,14 +200,14 @@ router.post("/seed", async (req: Request, res: Response) => {
   if (req.admin?.role !== "owner") {
     return res.status(403).json({ erro: "Apenas o proprietário pode semear o inventário." });
   }
-  const { data, error } = await supabase.rpc("seed_extintores");
+  const { data, error } = await supabaseAdmin.rpc("seed_extintores");
   if (error) return res.status(500).json({ erro: error.message });
 
   // Ensure an active cycle exists after the first seed.
-  const { data: ciclo } = await supabase.from("ciclos").select("id").eq("status", "ativo").maybeSingle();
+  const { data: ciclo } = await supabaseAdmin.from("ciclos").select("id").eq("status", "ativo").maybeSingle();
   if (!ciclo) {
     const mes = mesAtual();
-    await supabase.from("ciclos").insert({ mes_referencia: mes, status: "ativo", iniciado_por: req.admin.id });
+    await supabaseAdmin.from("ciclos").insert({ mes_referencia: mes, status: "ativo", iniciado_por: req.admin.id });
   }
   log.info({ inseridos: data, by: req.admin.email }, "seed de extintores executado");
   return res.json({ inseridos: data });
@@ -213,7 +215,7 @@ router.post("/seed", async (req: Request, res: Response) => {
 
 // ── GET /regioes/pendentes — needing manual assignment ─────────────────────────
 router.get("/pendentes", async (_req: Request, res: Response) => {
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from("inspecoes_pendentes").select("*").eq("resolvido", false).order("created_at", { ascending: false });
   if (error) return res.status(500).json({ erro: error.message });
   return res.json({ pendentes: data ?? [] });
