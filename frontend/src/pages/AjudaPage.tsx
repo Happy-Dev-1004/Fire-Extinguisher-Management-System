@@ -83,9 +83,8 @@ function GuiaInspetores() {
       {/* Step 3 */}
       <PassoCard n={3} Icon={Camera} titulo="Fotografe cada extintor (4 a 6 fotos)">
         <p>
-          Para <strong>cada extintor</strong>, envie de <strong>4 a 6 fotos</strong>. Na{" "}
-          <strong>primeira foto</strong>, escreva como <strong>legenda</strong> o{" "}
-          <strong>número do extintor</strong> (o número da etiqueta amarela, ex.: <code className="code">58</code>).
+          Para <strong>cada extintor</strong>, selecione de <strong>4 a 6 fotos juntas</strong> na galeria e
+          envie como <strong>um único álbum</strong>.
         </p>
         <p className="mt-2">As fotos devem cobrir todas as informações:</p>
         <ul className="mt-1.5 space-y-1.5">
@@ -100,12 +99,12 @@ function GuiaInspetores() {
         </Nota>
       </PassoCard>
 
-      {/* Step 4 */}
-      <PassoCard n={4} Icon={CheckCircle2} titulo="Conclua cada extintor com 'Fim'">
-        <p>Ao terminar as fotos de <strong>um extintor</strong>, envie:</p>
-        <CodeBlock>Fim</CodeBlock>
-        <p className="mt-2">Isso fecha aquele extintor e a IA analisa as fotos. <strong>A sessão continua aberta</strong> — siga para o próximo extintor (basta enviar a 1ª foto com o novo número, ou trocar de região).</p>
-        <Nota>Se esquecer o <code className="code">Fim</code>, o lote fecha sozinho após <strong>30 segundos</strong> sem novas fotos.</Nota>
+      {/* Step 4 — number */}
+      <PassoCard n={4} Icon={CheckCircle2} titulo="Logo após o álbum, envie o NÚMERO do extintor">
+        <p>Depois de enviar o álbum, mande o <strong>número do extintor</strong> (o da etiqueta amarela) como uma mensagem de texto:</p>
+        <CodeBlock>18</CodeBlock>
+        <p className="mt-2">O número <strong>fecha aquele extintor</strong> e a IA analisa o álbum. <strong>A sessão continua aberta</strong> — siga para o próximo: novo álbum, depois o novo número.</p>
+        <Nota>Não é preciso enviar "Fim". O próprio número é o sinal de que o extintor terminou.</Nota>
       </PassoCard>
 
       {/* Step 5 — end session */}
@@ -121,13 +120,13 @@ function GuiaInspetores() {
         <div className="rounded-lg bg-gray-900 text-gray-100 text-sm font-mono p-4 space-y-1.5 leading-relaxed">
           <div><span className="text-sky-400">Iniciar</span>               <span className="text-gray-500"># abre a sessão</span></div>
           <div><span className="text-emerald-400">Barry Itabuna</span>         <span className="text-gray-500"># informa a região</span></div>
-          <div>[4 fotos]  <span className="text-gray-500"># 1ª foto com legenda "58"</span></div>
-          <div><span className="text-amber-400">Fim</span>                   <span className="text-gray-500"># conclui o extintor 58</span></div>
-          <div>[4 fotos]  <span className="text-gray-500"># 1ª foto com legenda "59"</span></div>
-          <div><span className="text-amber-400">Fim</span>                   <span className="text-gray-500"># conclui o extintor 59</span></div>
+          <div>[álbum de 4 fotos]  <span className="text-gray-500"># extintor 58</span></div>
+          <div><span className="text-amber-400">58</span>                    <span className="text-gray-500"># número → conclui o extintor 58</span></div>
+          <div>[álbum de 4 fotos]  <span className="text-gray-500"># extintor 59</span></div>
+          <div><span className="text-amber-400">59</span>                    <span className="text-gray-500"># número → conclui o extintor 59</span></div>
           <div><span className="text-emerald-400">Ilhéus</span>                <span className="text-gray-500"># troca de região</span></div>
-          <div>[5 fotos]  <span className="text-gray-500"># 1ª foto com legenda "12"</span></div>
-          <div><span className="text-amber-400">Fim</span>                   <span className="text-gray-500"># conclui o extintor 12</span></div>
+          <div>[álbum de 5 fotos]  <span className="text-gray-500"># extintor 12</span></div>
+          <div><span className="text-amber-400">12</span>                    <span className="text-gray-500"># número → conclui o extintor 12</span></div>
           <div><span className="text-rose-400">Encerrar</span>              <span className="text-gray-500"># fecha a sessão (fim do trabalho)</span></div>
         </div>
       </div>
@@ -139,12 +138,12 @@ function GuiaInspetores() {
         </p>
         <ul className="space-y-2 text-sm text-gray-700">
           <Regra>Sempre envie <code className="code">Iniciar</code> <strong>antes</strong> de mandar fotos — fora da sessão, as fotos são ignoradas.</Regra>
-          <Regra><code className="code">Fim</code> conclui <strong>um extintor</strong> (a sessão continua). <code className="code">Encerrar</code> fecha a <strong>sessão inteira</strong> no fim do trabalho.</Regra>
-          <Regra>Envie as fotos pelo <strong>chat direto</strong> — não em grupo. Envie como <strong>foto</strong> normal (de preferência não como "documento/arquivo").</Regra>
-          <Regra>O <strong>número na legenda</strong> deve ser o número da <strong>etiqueta amarela</strong> do extintor.</Regra>
+          <Regra>A ordem por extintor é: <strong>álbum de fotos → número</strong>. O número fecha o extintor; <strong>não use "Fim"</strong>.</Regra>
+          <Regra>Envie as fotos como <strong>um álbum</strong> (selecione todas juntas na galeria) pelo <strong>chat direto</strong> — não em grupo, não como "documento/arquivo".</Regra>
+          <Regra>O <strong>número</strong> deve ser o da <strong>etiqueta amarela</strong> do extintor.</Regra>
           <Regra>Só números <strong>cadastrados</strong> na região funcionam (ex.: Barry Itabuna vai de 1 a 276).</Regra>
           <Regra>Para <strong>trocar de região</strong>, envie o novo nome da região e continue.</Regra>
-          <Regra>Seu número de WhatsApp precisa estar <strong>cadastrado como inspetor</strong> no painel — senão as mensagens são ignoradas.</Regra>
+          <Regra>No final de tudo, envie <code className="code">Encerrar</code>. Seu número precisa estar <strong>cadastrado como inspetor</strong>.</Regra>
         </ul>
       </div>
     </div>

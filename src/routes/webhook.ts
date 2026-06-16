@@ -3,7 +3,7 @@ import { supabase } from "../db";
 import { supabaseAdmin } from "../db-admin";
 import { logger } from "../logger";
 import { normalizar } from "../inspetores/normalizar";
-import { analisarLote, type LoteFotos } from "../analise/analisar";
+import { analisarLote, extrairNumeroTag, type LoteFotos } from "../analise/analisar";
 import { resolverNomeRegiao } from "../regioes/regioes";
 
 const router = Router();
@@ -13,32 +13,11 @@ const log = logger.child({ rota: "webhook" });
 // are processed one at a time, never in parallel.
 const filas = new Map<string, Promise<void>>();
 
-// Auto-close timer: after BATCH_TIMEOUT_MS of inactivity the batch closes automatically
-const BATCH_TIMEOUT_MS = 30_000;
-const timers = new Map<string, ReturnType<typeof setTimeout>>();
-
-function resetBatchTimer(phone: string): void {
-  const existing = timers.get(phone);
-  if (existing) clearTimeout(existing);
-  const t = setTimeout(() => {
-    timers.delete(phone);
-    enqueueForPhone(phone, () => autoFecharLote(phone));
-  }, BATCH_TIMEOUT_MS);
-  timers.set(phone, t);
-}
-
-async function autoFecharLote(phone: string): Promise<void> {
-  const { data: lote, error } = await buscarLoteAberto<any>(
-    phone,
-    "id, legenda, fotos, phone, unidade_contexto"
-  );
-
-  if (error || !lote) return;
-
-  await supabase.from("lotes_fotos").update({ status: "pronto" }).eq("id", lote.id);
-  log.info({ phone, loteId: lote.id, extintor: lote.legenda, qtdFotos: lote.fotos.length }, "lote finalizado por timeout automático");
-  triggerAnalise({ ...lote, status: "pronto" });
-}
+// Batches no longer auto-close on a short inactivity timer — that splits albums
+// when photos arrive slowly. They close ONLY when the inspector sends the number
+// (rotularEFecharLote) or "Encerrar". The sweep below is just a long safety net
+// for batches left open across a server restart / forgotten number.
+const BATCH_ABANDONO_MS = 20 * 60 * 1000; // 20 min — well beyond any real album
 
 function enqueueForPhone(phone: string, task: () => Promise<void>): void {
   const anterior = filas.get(phone) ?? Promise.resolve();
@@ -304,6 +283,20 @@ async function processWebhook(body: any): Promise<void> {
       log.info({ phone, unidade: nomeUnidade }, "unidade de contexto definida pelo inspetor");
       return;
     }
+
+    // ── Album number ─────────────────────────────────────────────────────────
+    // Album workflow: the inspector sends the photos of one extinguisher (an
+    // album, all uncaptioned), then sends the NUMBER as its own text message
+    // ("18"). That number LABELS and CLOSES the open batch → triggers analysis.
+    // This is the boundary between extinguishers — no "Fim" needed.
+    const numeroTag = extrairNumeroTag(rawTextBody);
+    if (numeroTag && (await emSessao(phone))) {
+      await tocarSessao(phone);
+      const fechado = await rotularEFecharLote(phone, numeroTag);
+      if (fechado) log.info({ phone, numero: numeroTag }, "número recebido — lote rotulado e fechado para análise");
+      else         log.warn({ phone, numero: numeroTag }, "número recebido mas nenhum lote aberto — ignorado");
+      return;
+    }
   }
 
   if (!isImage || !imageUrl) {
@@ -320,10 +313,14 @@ async function processWebhook(body: any): Promise<void> {
   }
   await tocarSessao(phone);
 
+  // Album model: photos arrive uncaptioned and ACCUMULATE in the current open
+  // batch until the inspector sends the number. No inactivity timer is used —
+  // batches close on a number text or on "Encerrar", never on a timeout, so a
+  // slow album is never split. A legacy captioned photo still opens a fresh batch.
   if (caption) {
     await handleImageWithCaption(phone, caption, imageUrl);
   } else {
-    await handleImageWithoutCaption(phone, imageUrl);
+    await handleImageSemLegenda(phone, imageUrl);
   }
 }
 
@@ -388,7 +385,6 @@ async function handleImageWithCaption(
     { phone, loteId: novoLote.id, extintor: caption, qtdFotos: 1 },
     "lote aberto — primeira foto recebida com legenda"
   );
-  resetBatchTimer(phone);
 }
 
 async function handleFinalizarLote(phone: string): Promise<void> {
@@ -427,7 +423,11 @@ function triggerAnalise(lote: LoteFotos): void {
   );
 }
 
-async function handleImageWithoutCaption(
+// An uncaptioned photo (the album case). It ACCUMULATES into the current open
+// batch. If no batch is open yet, it opens one named "Extintor" — which stays
+// open (no timer) until the inspector sends the extinguisher number, which
+// labels and closes it. So an album of N photos all land in the same batch.
+async function handleImageSemLegenda(
   phone: string,
   imageUrl: string
 ): Promise<void> {
@@ -443,7 +443,7 @@ async function handleImageWithoutCaption(
   }
 
   if (!loteAberto) {
-    // No open batch — auto-open one with a placeholder name
+    // First photo of an extinguisher with no open batch — open one (no timer).
     const unidade_contexto = await getUnidadeContexto(phone);
     const { data: novoLote, error: insertError } = await supabase
       .from("lotes_fotos")
@@ -462,25 +462,17 @@ async function handleImageWithoutCaption(
       log.error({ phone, err: insertError.message }, "erro ao criar lote automático");
       return;
     }
-    log.info({ phone, loteId: novoLote.id, qtdFotos: 1 }, "lote automático aberto — foto sem legenda");
-    resetBatchTimer(phone);
+    log.info({ phone, loteId: novoLote.id, qtdFotos: 1 }, "lote aberto — primeira foto do álbum (aguardando número)");
     return;
   }
 
-  // Atomic append via the append_foto_lote() RPC. The previous read-modify-write
-  // ([...loteAberto.fotos, imageUrl] then UPDATE) lost photos when an inspector
-  // sent several at once: two handlers read the same array and overwrote each
-  // other (4 sent, 2 stored). The RPC appends in a single locked statement, so
-  // concurrent photos can never clobber one another.
+  // Atomic append via append_foto_lote() — concurrent album photos can't clobber.
   const { data: atualizado, error: rpcError } = await supabase.rpc("append_foto_lote", {
     p_phone: phone,
     p_foto:  imageUrl,
   });
 
   if (rpcError) {
-    // Fallback for before migration 0010 is applied (RPC not yet created):
-    // fetch the freshest array and append. Less safe under heavy concurrency,
-    // but keeps photos flowing until the atomic RPC exists.
     log.warn({ phone, err: rpcError.message }, "rpc append_foto_lote indisponível — usando fallback read-modify-write");
     const { data: fresco } = await buscarLoteAberto<{ id: string; fotos: string[] }>(phone, "id, fotos");
     if (fresco) {
@@ -489,27 +481,48 @@ async function handleImageWithoutCaption(
         .update({ fotos: [...(fresco.fotos ?? []), imageUrl] })
         .eq("id", fresco.id);
     }
-    resetBatchTimer(phone);
     return;
   }
 
   const row = Array.isArray(atualizado) ? atualizado[0] : atualizado;
   const qtd = row?.fotos?.length ?? (loteAberto.fotos.length + 1);
-
   log.info(
     { phone, loteId: loteAberto.id, extintor: loteAberto.legenda, qtdFotos: qtd },
-    "lote atualizado — foto adicionada (atômico)"
+    "foto do álbum adicionada ao lote (atômico)"
   );
-  resetBatchTimer(phone);
 }
 
-// Recovers batches left 'aberto' when the in-memory auto-close timer was lost
-// (e.g. a redeploy restarted the server mid-batch). Closes any batch idle longer
-// than BATCH_TIMEOUT_MS and triggers its analysis. Safe to run repeatedly:
-// each batch is flipped 'aberto' -> 'pronto' before analysis, and analisarLote
-// only acts on 'pronto', so concurrent sweeps can't double-process.
+// Labels the current open batch with the given number and closes it, triggering
+// analysis. This is how an album is finalised: photos accumulate, then the number
+// text closes the batch with that number. Returns false if no batch was open.
+async function rotularEFecharLote(phone: string, numero: string): Promise<boolean> {
+  const { data: lote } = await buscarLoteAberto<any>(
+    phone,
+    "id, legenda, fotos, phone, unidade_contexto"
+  );
+  if (!lote) return false;
+
+  await supabase
+    .from("lotes_fotos")
+    .update({ status: "pronto", legenda: numero })
+    .eq("id", lote.id);
+
+  log.info(
+    { phone, loteId: lote.id, numero, qtdFotos: lote.fotos.length },
+    "lote rotulado com número e finalizado"
+  );
+  triggerAnalise({ ...lote, legenda: numero, status: "pronto" });
+  return true;
+}
+
+// Safety net: recovers batches left 'aberto' far too long (forgotten number, or
+// a redeploy mid-batch). Closes any batch older than BATCH_ABANDONO_MS (20 min)
+// and analyses it with whatever number it has. Safe to run repeatedly: each
+// batch is flipped 'aberto' -> 'pronto' before analysis, and analisarLote only
+// acts on 'pronto', so concurrent sweeps can't double-process. The long window
+// ensures it never closes a batch that's still receiving an album's photos.
 export async function varrerLotesAbandonados(): Promise<void> {
-  const limite = new Date(Date.now() - BATCH_TIMEOUT_MS).toISOString();
+  const limite = new Date(Date.now() - BATCH_ABANDONO_MS).toISOString();
 
   // Select ALL open batches, then filter by age in JS. Filtering by
   // started_at in the query (.lt) silently drops rows where started_at is
