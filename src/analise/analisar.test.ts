@@ -15,12 +15,12 @@ vi.mock("../db", () => ({
 }));
 
 // db-admin throws at import without SUPABASE env vars; mock it. The inspector
-// unit lookup (getUnidadeInspetor) chains .select().eq().eq().maybeSingle().
+// unit lookup (getUnidadeInspetor) chains .select().in().eq().limit().
 vi.mock("../db-admin", () => {
-  const maybeSingle = vi.fn().mockResolvedValue({ data: null, error: null });
-  const eq2 = vi.fn().mockReturnValue({ maybeSingle });
-  const eq1 = vi.fn().mockReturnValue({ eq: eq2 });
-  const select = vi.fn().mockReturnValue({ eq: eq1 });
+  const limit = vi.fn().mockResolvedValue({ data: [], error: null });
+  const eq = vi.fn().mockReturnValue({ limit, eq: vi.fn().mockReturnValue({ limit }) });
+  const inFn = vi.fn().mockReturnValue({ eq, limit });
+  const select = vi.fn().mockReturnValue({ in: inFn, eq });
   return { supabaseAdmin: { from: vi.fn().mockReturnValue({ select }) } };
 });
 

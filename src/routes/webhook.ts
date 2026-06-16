@@ -2,7 +2,7 @@ import { Router, Request, Response } from "express";
 import { supabase } from "../db";
 import { supabaseAdmin } from "../db-admin";
 import { logger } from "../logger";
-import { normalizar } from "../inspetores/normalizar";
+import { normalizar, variantesTelefone } from "../inspetores/normalizar";
 import { analisarLote, extrairNumeroTag, type LoteFotos } from "../analise/analisar";
 import { resolverNomeRegiao } from "../regioes/regioes";
 
@@ -55,26 +55,24 @@ async function buscarLoteAberto<T = any>(
 }
 
 export async function isAuthorized(phone: string): Promise<boolean> {
-  let normalizado: string;
-  try {
-    normalizado = normalizar(phone);
-  } catch {
-    return false;
-  }
+  const variantes = variantesTelefone(phone);
+  if (variantes.length === 0) return false;
 
+  // Match ANY phone variant (with/without the 9th digit) so an inspector is
+  // recognised regardless of how WhatsApp/Z-API formatted their number.
   const { data, error } = await supabaseAdmin
     .from("inspetores")
     .select("id")
-    .eq("telefone_normalizado", normalizado)
+    .in("telefone_normalizado", variantes)
     .eq("ativo", true)
-    .maybeSingle();
+    .limit(1);
 
   if (error) {
     log.error({ err: error.message }, "erro ao verificar autorização no banco");
     return false;
   }
 
-  return data !== null;
+  return (data?.length ?? 0) > 0;
 }
 
 // ── Work-session gate (token saving) ──────────────────────────────────────────
@@ -87,19 +85,20 @@ const SESSAO_BACKSTOP_MS = 3 * 60 * 60 * 1000; // 3 hours
 // inactivity backstop: if the last activity is older than 3h, the session is
 // auto-closed here and treated as closed.
 async function emSessao(phone: string): Promise<boolean> {
-  let normalizado: string;
-  try { normalizado = normalizar(phone); } catch { return false; }
+  const variantes = variantesTelefone(phone);
+  if (variantes.length === 0) return false;
 
   const { data } = await supabaseAdmin
     .from("inspetores")
     .select("em_sessao, sessao_atividade_em")
-    .eq("telefone_normalizado", normalizado)
+    .in("telefone_normalizado", variantes)
     .eq("ativo", true)
-    .maybeSingle();
+    .limit(1);
 
-  if (!data || !(data as any).em_sessao) return false;
+  const row = data?.[0] as any;
+  if (!row || !row.em_sessao) return false;
 
-  const ultima = (data as any).sessao_atividade_em ? new Date((data as any).sessao_atividade_em).getTime() : 0;
+  const ultima = row.sessao_atividade_em ? new Date(row.sessao_atividade_em).getTime() : 0;
   if (ultima && Date.now() - ultima > SESSAO_BACKSTOP_MS) {
     await definirSessao(phone, false);
     log.info({ phone }, "sessão encerrada automaticamente por inatividade (backstop 3h)");
@@ -110,8 +109,8 @@ async function emSessao(phone: string): Promise<boolean> {
 
 // Opens or closes the inspector's session and stamps the activity time.
 async function definirSessao(phone: string, aberta: boolean): Promise<void> {
-  let normalizado: string;
-  try { normalizado = normalizar(phone); } catch { return; }
+  const variantes = variantesTelefone(phone);
+  if (variantes.length === 0) return;
   const agora = new Date().toISOString();
   await supabaseAdmin
     .from("inspetores")
@@ -120,18 +119,18 @@ async function definirSessao(phone: string, aberta: boolean): Promise<void> {
       ...(aberta ? { sessao_iniciada_em: agora } : {}),
       sessao_atividade_em: agora,
     })
-    .eq("telefone_normalizado", normalizado);
+    .in("telefone_normalizado", variantes);
 }
 
 // Bumps the activity timestamp (called on each processed message) so the
 // backstop only fires after real inactivity.
 async function tocarSessao(phone: string): Promise<void> {
-  let normalizado: string;
-  try { normalizado = normalizar(phone); } catch { return; }
+  const variantes = variantesTelefone(phone);
+  if (variantes.length === 0) return;
   await supabaseAdmin
     .from("inspetores")
     .update({ sessao_atividade_em: new Date().toISOString() })
-    .eq("telefone_normalizado", normalizado);
+    .in("telefone_normalizado", variantes);
 }
 
 router.post("/", (req: Request, res: Response) => {
@@ -268,7 +267,7 @@ async function processWebhook(body: any): Promise<void> {
       await supabaseAdmin
         .from("inspetores")
         .update({ regiao_contexto: regiao, unidade_contexto: regiao })
-        .eq("telefone_normalizado", normalizar(phone));
+        .in("telefone_normalizado", variantesTelefone(phone));
       log.info({ phone, regiao }, "região de contexto definida pelo inspetor");
       return;
     }
@@ -279,7 +278,7 @@ async function processWebhook(body: any): Promise<void> {
       await supabaseAdmin
         .from("inspetores")
         .update({ unidade_contexto: nomeUnidade })
-        .eq("telefone_normalizado", normalizar(phone));
+        .in("telefone_normalizado", variantesTelefone(phone));
       log.info({ phone, unidade: nomeUnidade }, "unidade de contexto definida pelo inspetor");
       return;
     }
@@ -325,14 +324,16 @@ async function processWebhook(body: any): Promise<void> {
 }
 
 async function getUnidadeContexto(phone: string): Promise<string | null> {
-  const normalizado = normalizar(phone);
+  const variantes = variantesTelefone(phone);
+  if (variantes.length === 0) return null;
   const { data } = await supabaseAdmin
     .from("inspetores")
     .select("unidade_contexto, regiao_contexto")
-    .eq("telefone_normalizado", normalizado)
-    .maybeSingle();
+    .in("telefone_normalizado", variantes)
+    .limit(1);
+  const row = data?.[0] as any;
   // Prefer the region context (the new model); fall back to legacy unidade.
-  return (data as any)?.regiao_contexto ?? (data as any)?.unidade_contexto ?? null;
+  return row?.regiao_contexto ?? row?.unidade_contexto ?? null;
 }
 
 async function handleImageWithCaption(

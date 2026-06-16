@@ -35,24 +35,27 @@ function buildChain() {
   const maybySingleFn = vi.fn().mockResolvedValue({ data: null,  error: null });
   const singleFn      = vi.fn().mockResolvedValue({ data: null,  error: null });
   const orderFn       = vi.fn().mockResolvedValue({ data: [],    error: null });
+  const limitFn       = vi.fn().mockResolvedValue({ data: [],    error: null });
   const neqFn         = vi.fn();
   const eqFn          = vi.fn();
+  const inFn          = vi.fn();
   const selectFn      = vi.fn();
   const insertFn      = vi.fn();
   const updateFn      = vi.fn();
 
-  neqFn.mockReturnValue({ eq: eqFn, neq: neqFn, maybeSingle: maybySingleFn });
+  neqFn.mockReturnValue({ eq: eqFn, neq: neqFn, in: inFn, maybeSingle: maybySingleFn, limit: limitFn });
   eqFn.mockReturnValue({
-    eq: eqFn, neq: neqFn, maybeSingle: maybySingleFn, single: singleFn, order: orderFn,
+    eq: eqFn, neq: neqFn, in: inFn, maybeSingle: maybySingleFn, single: singleFn, order: orderFn, limit: limitFn,
   });
-  selectFn.mockReturnValue({ eq: eqFn, order: orderFn });
+  inFn.mockReturnValue({ eq: eqFn, neq: neqFn, in: inFn, maybeSingle: maybySingleFn, limit: limitFn, order: orderFn });
+  selectFn.mockReturnValue({ eq: eqFn, in: inFn, order: orderFn, limit: limitFn });
   insertFn.mockReturnValue({
     select: vi.fn().mockReturnValue({ single: singleFn }),
   });
-  updateFn.mockReturnValue({ eq: eqFn });
+  updateFn.mockReturnValue({ eq: eqFn, in: inFn });
   adminFromFn.mockReturnValue({ select: selectFn, insert: insertFn, update: updateFn });
 
-  return { maybySingleFn, singleFn, orderFn, eqFn, neqFn, selectFn, insertFn, updateFn };
+  return { maybySingleFn, singleFn, orderFn, limitFn, eqFn, neqFn, inFn, selectFn, insertFn, updateFn };
 }
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
@@ -387,43 +390,51 @@ describe("DELETE /inspetores/:id", () => {
 
 describe("isAuthorized (webhook)", () => {
   it("autoriza número que existe e está ativo", async () => {
-    const { maybySingleFn, eqFn } = buildChain();
-    maybySingleFn.mockResolvedValueOnce({ data: { id: "ins-uuid-1" }, error: null });
+    const { limitFn, inFn } = buildChain();
+    limitFn.mockResolvedValueOnce({ data: [{ id: "ins-uuid-1" }], error: null });
 
     const result = await isAuthorized("11912345678");
     expect(result).toBe(true);
-    expect(eqFn).toHaveBeenCalledWith("telefone_normalizado", "11912345678");
+    // Matches against phone variants (with/without 9th digit).
+    expect(inFn).toHaveBeenCalledWith("telefone_normalizado", expect.arrayContaining(["11912345678"]));
   });
 
   it("autoriza número com código de país +55 (normaliza para o mesmo valor)", async () => {
-    const { maybySingleFn, eqFn } = buildChain();
-    maybySingleFn.mockResolvedValueOnce({ data: { id: "ins-uuid-1" }, error: null });
+    const { limitFn, inFn } = buildChain();
+    limitFn.mockResolvedValueOnce({ data: [{ id: "ins-uuid-1" }], error: null });
 
     const result = await isAuthorized("+5511912345678");
     expect(result).toBe(true);
-    expect(eqFn).toHaveBeenCalledWith("telefone_normalizado", "11912345678");
+    expect(inFn).toHaveBeenCalledWith("telefone_normalizado", expect.arrayContaining(["11912345678"]));
   });
 
   it("autoriza número formatado com parênteses e hífen", async () => {
-    const { maybySingleFn, eqFn } = buildChain();
-    maybySingleFn.mockResolvedValueOnce({ data: { id: "ins-uuid-1" }, error: null });
+    const { limitFn } = buildChain();
+    limitFn.mockResolvedValueOnce({ data: [{ id: "ins-uuid-1" }], error: null });
 
     const result = await isAuthorized("(11) 9 1234-5678");
     expect(result).toBe(true);
-    expect(eqFn).toHaveBeenCalledWith("telefone_normalizado", "11912345678");
   });
 
-  it("rejeita número que não está na tabela (maybySingle retorna null)", async () => {
-    const { maybySingleFn } = buildChain();
-    maybySingleFn.mockResolvedValueOnce({ data: null, error: null });
+  it("autoriza mesmo se o número chegar SEM o 9º dígito (variante)", async () => {
+    const { limitFn } = buildChain();
+    limitFn.mockResolvedValueOnce({ data: [{ id: "ins-uuid-1" }], error: null });
+    // Stored as 11-digit; arrives as 10-digit (no 9) — variants must match.
+    const result = await isAuthorized("551133334444");
+    expect(result).toBe(true);
+  });
+
+  it("rejeita número que não está na tabela (lista vazia)", async () => {
+    const { limitFn } = buildChain();
+    limitFn.mockResolvedValueOnce({ data: [], error: null });
 
     const result = await isAuthorized("11999999999");
     expect(result).toBe(false);
   });
 
-  it("rejeita número de inspetor inativo (query filtra ativo=true → retorna null)", async () => {
-    const { maybySingleFn, eqFn } = buildChain();
-    maybySingleFn.mockResolvedValueOnce({ data: null, error: null });
+  it("rejeita número de inspetor inativo (query filtra ativo=true → lista vazia)", async () => {
+    const { limitFn, eqFn } = buildChain();
+    limitFn.mockResolvedValueOnce({ data: [], error: null });
 
     const result = await isAuthorized("11900000000");
     expect(result).toBe(false);
@@ -431,16 +442,16 @@ describe("isAuthorized (webhook)", () => {
   });
 
   it("rejeita número com dígitos insuficientes (inválido) sem consultar o banco", async () => {
-    const { maybySingleFn } = buildChain();
+    const { limitFn } = buildChain();
 
     const result = await isAuthorized("123");
     expect(result).toBe(false);
-    expect(maybySingleFn).not.toHaveBeenCalled();
+    expect(limitFn).not.toHaveBeenCalled();
   });
 
   it("retorna false quando o banco retorna erro (falha segura)", async () => {
-    const { maybySingleFn } = buildChain();
-    maybySingleFn.mockResolvedValueOnce({ data: null, error: { message: "DB timeout" } });
+    const { limitFn } = buildChain();
+    limitFn.mockResolvedValueOnce({ data: null, error: { message: "DB timeout" } });
 
     const result = await isAuthorized("11912345678");
     expect(result).toBe(false);

@@ -6,7 +6,7 @@ import { RespostaIASchema, type RespostaIA } from "./schema";
 import { SYSTEM_PROMPT, buildUserMessage } from "./prompt";
 import { salvarPorRegiao } from "../persistencia/salvarPorRegiao";
 import { notificarInspetorPorLote } from "../notificacao/notificar";
-import { normalizar } from "../inspetores/normalizar";
+import { variantesTelefone } from "../inspetores/normalizar";
 import { getSecret } from "../segredos/getSecret";
 
 const MIN_FOTOS = 1;
@@ -14,19 +14,15 @@ const MIN_FOTOS = 1;
 // Looks up the registered unit for the inspector who sent this batch.
 // Returns null on any failure — callers treat that as "no unit found".
 async function getUnidadeInspetor(phone: string): Promise<string | null> {
-  let normalizado: string;
-  try {
-    normalizado = normalizar(phone);
-  } catch {
-    return null;
-  }
+  const variantes = variantesTelefone(phone);
+  if (variantes.length === 0) return null;
   const { data } = await supabaseAdmin
     .from("inspetores")
     .select("unidade_contexto")
-    .eq("telefone_normalizado", normalizado)
+    .in("telefone_normalizado", variantes)
     .eq("ativo", true)
-    .maybeSingle();
-  const u = (data as any)?.unidade_contexto?.trim();
+    .limit(1);
+  const u = (data?.[0] as any)?.unidade_contexto?.trim();
   return u || null;
 }
 
