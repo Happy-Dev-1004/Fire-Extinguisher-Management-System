@@ -291,6 +291,14 @@ export const regioesApi = {
   verificar: (id: string, verificado = true) =>
     request<ExtintorRegiao>("POST", `/regioes/extintor/${id}/verificar`, { verificado }),
 
+  // Manual photo upload — fotos are base64 (data-URI) strings, downscaled
+  // client-side before sending. Server stores them in Supabase Storage.
+  adicionarFotos: (id: string, fotos: string[]) =>
+    request<ExtintorRegiao>("POST", `/regioes/extintor/${id}/fotos`, { fotos }),
+
+  removerFoto: (id: string, url: string) =>
+    request<ExtintorRegiao>("DELETE", `/regioes/extintor/${id}/fotos`, { url }),
+
   novoMes: (mes_referencia: string) =>
     request<{ ciclo_id: string; mes_referencia: string }>("POST", "/regioes/novo-mes", { mes_referencia }),
 

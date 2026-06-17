@@ -89,7 +89,9 @@ app.use(
   })
 );
 
-app.use(express.json({ limit: "10mb" }));
+// 25mb: webhook payloads are small, but manual photo uploads send base64 images
+// (several at once). The frontend downscales before upload, but allow headroom.
+app.use(express.json({ limit: "25mb" }));
 
 // ── Public routes (no auth) ───────────────────────────────────────────────────
 app.get("/health", (_req, res) => res.json({ status: "ok" }));

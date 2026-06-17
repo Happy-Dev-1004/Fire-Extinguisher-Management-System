@@ -7,7 +7,31 @@ import { toast } from "../components/Toast";
 import {
   ArrowLeft, Flame, AlertTriangle, CheckCircle2, XCircle, Clock, HelpCircle,
   Camera, MapPin, ShieldCheck, Circle, Pencil, Check, Download, Loader2,
+  ImagePlus, Trash2,
 } from "lucide-react";
+
+// Downscales an image File to a JPEG data-URI client-side (max ~1280px, q0.8)
+// so manual-upload payloads stay small before hitting the API.
+function downscaleToBase64(file: File): Promise<string | null> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const max = 1280;
+      const scale = Math.min(1, max / Math.max(img.width, img.height));
+      const w = Math.round(img.width * scale), h = Math.round(img.height * scale);
+      const canvas = document.createElement("canvas");
+      canvas.width = w; canvas.height = h;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return resolve(null);
+      ctx.drawImage(img, 0, 0, w, h);
+      resolve(canvas.toDataURL("image/jpeg", 0.8));
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); resolve(null); };
+    img.src = url;
+  });
+}
 
 type Situacao = SituacaoType;
 
@@ -63,6 +87,37 @@ export function ExtintorDetailPage() {
   const [form, setForm]         = useState<Partial<ExtintorRegiao>>({});
   const [salvando, setSalvando] = useState(false);
   const [verificando, setVerificando] = useState(false);
+  const [enviandoFotos, setEnviandoFotos] = useState(false);
+  const [removendo, setRemovendo] = useState<string | null>(null);
+
+  async function adicionarFotos(files: FileList | null) {
+    if (!ext || !files || files.length === 0) return;
+    setEnviandoFotos(true);
+    try {
+      const base64s = await Promise.all(Array.from(files).slice(0, 10).map(downscaleToBase64));
+      const atualizado = await regioesApi.adicionarFotos(ext.id, base64s.filter(Boolean) as string[]);
+      setExt((x) => x ? { ...x, ...atualizado } : x);
+      toast("Fotos adicionadas.", "sucesso");
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Erro ao adicionar fotos.", "erro");
+    } finally {
+      setEnviandoFotos(false);
+    }
+  }
+
+  async function removerFoto(url: string) {
+    if (!ext) return;
+    setRemovendo(url);
+    try {
+      const atualizado = await regioesApi.removerFoto(ext.id, url);
+      setExt((x) => x ? { ...x, ...atualizado } : x);
+      toast("Foto removida.", "sucesso");
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Erro ao remover foto.", "erro");
+    } finally {
+      setRemovendo(null);
+    }
+  }
 
   useEffect(() => {
     if (!id) return;
@@ -218,27 +273,52 @@ export function ExtintorDetailPage() {
           </div>
           {ext.status_geral && <div className="mt-4 pt-4 border-t border-gray-100"><p className="section-title mb-1">Status geral</p><p className="text-sm text-gray-700">{ext.status_geral}</p></div>}
           {ext.observacoes && <div className="mt-4 pt-4 border-t border-gray-100"><p className="section-title mb-1">Observações</p><p className="text-sm text-gray-700 whitespace-pre-wrap">{ext.observacoes}</p></div>}
-          {ext.fotos?.length > 0 && (
-            <div className="mt-4 pt-4 border-t border-gray-100">
-              <p className="section-title mb-3"><Camera className="w-3.5 h-3.5 inline mr-1" />Fotos ({ext.fotos.length})</p>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                {ext.fotos.map((url, i) => (
-                  <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="relative aspect-square rounded-lg overflow-hidden bg-gray-100 hover:opacity-90">
-                    <img src={url} alt={`Foto ${i + 1}`} className="w-full h-full object-cover" />
-                    <div className="absolute bottom-1 right-1 bg-black/40 rounded text-white text-[10px] px-1">{i + 1}</div>
-                  </a>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
       ) : (
         <div className="card p-8 text-center border-dashed">
           <Circle className="w-9 h-9 text-gray-300 mx-auto mb-2" />
           <p className="text-sm text-gray-400">Este extintor ainda não foi inspecionado neste ciclo.</p>
-          <p className="text-xs text-gray-300 mt-1">Os valores aparecem após o inspetor enviar as fotos, ou edite manualmente.</p>
+          <p className="text-xs text-gray-300 mt-1">Os valores aparecem após o inspetor enviar as fotos, ou adicione manualmente abaixo.</p>
         </div>
       )}
+
+      {/* Photos card — always available, with manual upload + remove */}
+      <div className="card p-5">
+        <div className="flex items-center justify-between mb-3">
+          <p className="section-title flex items-center gap-1.5">
+            <Camera className="w-3.5 h-3.5" /> Fotos {ext.fotos?.length ? `(${ext.fotos.length})` : ""}
+          </p>
+          <label className={`btn-secondary btn-sm cursor-pointer ${enviandoFotos ? "opacity-60 pointer-events-none" : ""}`}>
+            {enviandoFotos ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ImagePlus className="w-3.5 h-3.5" />}
+            Adicionar fotos
+            <input type="file" accept="image/*" multiple className="hidden"
+              onChange={(e) => { void adicionarFotos(e.target.files); e.target.value = ""; }} />
+          </label>
+        </div>
+
+        {ext.fotos?.length ? (
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            {ext.fotos.map((url, i) => (
+              <div key={url + i} className="relative aspect-square rounded-lg overflow-hidden bg-gray-100 group">
+                <a href={url} target="_blank" rel="noopener noreferrer" className="block w-full h-full hover:opacity-90">
+                  <img src={url} alt={`Foto ${i + 1}`} className="w-full h-full object-cover" />
+                </a>
+                <div className="absolute bottom-1 right-1 bg-black/40 rounded text-white text-[10px] px-1">{i + 1}</div>
+                <button
+                  onClick={() => removerFoto(url)}
+                  disabled={removendo === url}
+                  title="Remover foto"
+                  className="absolute top-1 right-1 w-6 h-6 rounded-full bg-black/50 hover:bg-red-600 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                >
+                  {removendo === url ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
+                </button>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-gray-400 py-2">Nenhuma foto. Use "Adicionar fotos" para enviar manualmente.</p>
+        )}
+      </div>
 
       {/* Edit modal */}
       <Modal open={editando} titulo={`Editar extintor Nº ${ext.numero} — ${ext.regiao}`} onClose={() => { if (!salvando) setEditando(false); }} largura="max-w-lg">

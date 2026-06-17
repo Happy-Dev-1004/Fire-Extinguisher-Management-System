@@ -16,6 +16,7 @@ import { supabase } from "../db";
 import { supabaseAdmin } from "../db-admin";
 import { logger } from "../logger";
 import { calcularSituacao } from "../extintores/situacao";
+import { uploadFotoExtintor } from "../fotos/storage";
 
 const router = Router();
 const log = logger.child({ rota: "/regioes" });
@@ -171,6 +172,75 @@ router.post("/extintor/:id/verificar", async (req: Request, res: Response) => {
   if (error) return res.status(400).json({ erro: error.message });
   if (!data) return res.status(409).json({ erro: "Extintor não inspecionado ainda — não pode ser verificado." });
   log.info({ id: req.params.id, verificar, by: req.admin?.email }, "status de verificação alterado");
+  return res.json(data);
+});
+
+// ── POST /regioes/extintor/:id/fotos — manual photo upload ─────────────────────
+// Human safety net: add photos to an extinguisher from the dashboard (e.g. when
+// WhatsApp grouping missed one). Accepts base64 images, downscales + uploads to
+// Supabase Storage, and appends the URLs. Marks the slot inspecionado if it was
+// empty. Body: { fotos: string[] }  (each a data-URI or base64 string).
+const FotosUploadSchema = z.object({
+  fotos: z.array(z.string().min(1)).min(1).max(10),
+});
+
+router.post("/extintor/:id/fotos", async (req: Request, res: Response) => {
+  const parsed = FotosUploadSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ erro: "Envie de 1 a 10 imagens em base64." });
+  }
+  const id = String(req.params.id);
+
+  const { data: atual, error: errBusca } = await supabase
+    .from("extintores").select("id, fotos, status_inspecao").eq("id", id).maybeSingle();
+  if (errBusca) return res.status(500).json({ erro: errBusca.message });
+  if (!atual) return res.status(404).json({ erro: "Extintor não encontrado." });
+
+  // Upload each image; keep only the ones that succeed.
+  const novasUrls: string[] = [];
+  let i = 0;
+  for (const b64 of parsed.data.fotos) {
+    const suffix = `${Date.now()}_${i++}`;
+    const url = await uploadFotoExtintor(id, b64, suffix);
+    if (url) novasUrls.push(url);
+  }
+  if (novasUrls.length === 0) {
+    return res.status(502).json({ erro: "Falha ao enviar as imagens. Tente novamente." });
+  }
+
+  const fotos = [...(((atual as any).fotos as string[]) ?? []), ...novasUrls];
+  const updates: Record<string, unknown> = { fotos };
+  // A manually-added photo means the slot now has data → at least awaiting verif.
+  if ((atual as any).status_inspecao === "nao_inspecionado") {
+    updates.status_inspecao = "aguardando_verificacao";
+    updates.inspecionado_em = new Date().toISOString();
+  }
+
+  const { data, error } = await supabase
+    .from("extintores").update(updates).eq("id", id).select().maybeSingle();
+  if (error) return res.status(400).json({ erro: error.message });
+  log.info({ id, adicionadas: novasUrls.length, by: req.admin?.email }, "fotos adicionadas manualmente");
+  return res.json(data);
+});
+
+// ── DELETE /regioes/extintor/:id/fotos — remove one photo by URL ───────────────
+const FotoRemoveSchema = z.object({ url: z.string().min(1) });
+
+router.delete("/extintor/:id/fotos", async (req: Request, res: Response) => {
+  const parsed = FotoRemoveSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ erro: "Informe a 'url' da foto a remover." });
+  const id = String(req.params.id);
+
+  const { data: atual, error: errBusca } = await supabase
+    .from("extintores").select("id, fotos").eq("id", id).maybeSingle();
+  if (errBusca) return res.status(500).json({ erro: errBusca.message });
+  if (!atual) return res.status(404).json({ erro: "Extintor não encontrado." });
+
+  const fotos = (((atual as any).fotos as string[]) ?? []).filter((u) => u !== parsed.data.url);
+  const { data, error } = await supabase
+    .from("extintores").update({ fotos }).eq("id", id).select().maybeSingle();
+  if (error) return res.status(400).json({ erro: error.message });
+  log.info({ id, by: req.admin?.email }, "foto removida manualmente");
   return res.json(data);
 });
 

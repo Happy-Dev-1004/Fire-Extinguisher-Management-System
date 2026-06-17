@@ -13,10 +13,18 @@ const log = logger.child({ rota: "webhook" });
 // are processed one at a time, never in parallel.
 const filas = new Map<string, Promise<void>>();
 
-// Batches no longer auto-close on a short inactivity timer — that splits albums
-// when photos arrive slowly. They close ONLY when the inspector sends the number
-// (rotularEFecharLote) or "Encerrar". The sweep below is just a long safety net
-// for batches left open across a server restart / forgotten number.
+// Settle window: when the inspector sends the NUMBER, we don't finalise the
+// batch immediately — album photos arrive as independent webhook calls and the
+// number can land BEFORE the last photos. The number LABELS the batch and arms
+// a short debounce timer; each photo that arrives resets it. When photos stop
+// for BATCH_SETTLE_MS after the number, the batch finalises and is analysed.
+// This groups the whole album correctly regardless of arrival order.
+const BATCH_SETTLE_MS = 8_000;
+const settleTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+// Long safety net for batches left open across a server restart / forgotten
+// number (the in-memory settle timer doesn't survive a restart; the sweep
+// finalises labeled batches whose window elapsed, and abandons very old ones).
 const BATCH_ABANDONO_MS = 20 * 60 * 1000; // 20 min — well beyond any real album
 
 function enqueueForPhone(phone: string, task: () => Promise<void>): void {
@@ -25,6 +33,18 @@ function enqueueForPhone(phone: string, task: () => Promise<void>): void {
     log.error({ phone, err: err.message }, "erro na fila de processamento")
   );
   filas.set(phone, proxima);
+}
+
+// Arms (or re-arms) the settle timer for a phone. When it fires, the labeled
+// batch is finalised and analysed — but only if no new photo reset it first.
+function armarSettle(phone: string): void {
+  const existing = settleTimers.get(phone);
+  if (existing) clearTimeout(existing);
+  const t = setTimeout(() => {
+    settleTimers.delete(phone);
+    enqueueForPhone(phone, () => finalizarLoteRotulado(phone));
+  }, BATCH_SETTLE_MS);
+  settleTimers.set(phone, t);
 }
 
 // Fetches the most-recent open batch for a phone, tolerating duplicates.
@@ -291,9 +311,9 @@ async function processWebhook(body: any): Promise<void> {
     const numeroTag = extrairNumeroTag(rawTextBody);
     if (numeroTag && (await emSessao(phone))) {
       await tocarSessao(phone);
-      const fechado = await rotularEFecharLote(phone, numeroTag);
-      if (fechado) log.info({ phone, numero: numeroTag }, "número recebido — lote rotulado e fechado para análise");
-      else         log.warn({ phone, numero: numeroTag }, "número recebido mas nenhum lote aberto — ignorado");
+      const rotulado = await rotularEArmar(phone, numeroTag);
+      if (rotulado) log.info({ phone, numero: numeroTag }, "número recebido — lote rotulado (janela de assentamento)");
+      else          log.warn({ phone, numero: numeroTag }, "número recebido mas nenhum lote aberto — ignorado");
       return;
     }
   }
@@ -436,7 +456,8 @@ async function handleImageSemLegenda(
     id: string;
     legenda: string;
     fotos: string[];
-  }>(phone, "id, legenda, fotos");
+    rotulado_em: string | null;
+  }>(phone, "id, legenda, fotos, rotulado_em");
 
   if (fetchError) {
     log.error({ phone, err: fetchError.message }, "erro ao buscar lote aberto");
@@ -491,29 +512,51 @@ async function handleImageSemLegenda(
     { phone, loteId: loteAberto.id, extintor: loteAberto.legenda, qtdFotos: qtd },
     "foto do álbum adicionada ao lote (atômico)"
   );
+
+  // If this photo is a straggler arriving AFTER the number labeled the batch,
+  // re-arm the settle window so it (and any further stragglers) still get
+  // grouped before analysis fires.
+  if (loteAberto.rotulado_em) {
+    log.info({ phone, loteId: loteAberto.id }, "foto tardia em lote rotulado — reiniciando janela de assentamento");
+    armarSettle(phone);
+  }
 }
 
-// Labels the current open batch with the given number and closes it, triggering
-// analysis. This is how an album is finalised: photos accumulate, then the number
-// text closes the batch with that number. Returns false if no batch was open.
-async function rotularEFecharLote(phone: string, numero: string): Promise<boolean> {
-  const { data: lote } = await buscarLoteAberto<any>(
-    phone,
-    "id, legenda, fotos, phone, unidade_contexto"
-  );
+// Labels the current open batch with the number and ARMS the settle timer —
+// it does NOT finalise yet. Straggler album photos that arrive within the settle
+// window still join the batch (and re-arm the timer). Returns false if no open
+// batch. The actual finalisation happens in finalizarLoteRotulado().
+async function rotularEArmar(phone: string, numero: string): Promise<boolean> {
+  const { data: lote } = await buscarLoteAberto<any>(phone, "id, fotos");
   if (!lote) return false;
 
   await supabase
     .from("lotes_fotos")
-    .update({ status: "pronto", legenda: numero })
+    .update({ legenda: numero, numero, rotulado_em: new Date().toISOString() })
     .eq("id", lote.id);
 
-  log.info(
-    { phone, loteId: lote.id, numero, qtdFotos: lote.fotos.length },
-    "lote rotulado com número e finalizado"
-  );
-  triggerAnalise({ ...lote, legenda: numero, status: "pronto" });
+  log.info({ phone, loteId: lote.id, numero, qtdFotos: lote.fotos.length },
+    "lote rotulado com número — aguardando janela de assentamento");
+  armarSettle(phone);
   return true;
+}
+
+// Finalises the labeled (rotulado) open batch for a phone: flips it to 'pronto'
+// and triggers analysis. Called when the settle window elapses with no new
+// photos, or by the sweep as a restart backstop. No-op if there's no labeled
+// open batch (e.g. a stray photo re-opened it and a new number is coming).
+async function finalizarLoteRotulado(phone: string): Promise<void> {
+  const { data: lote } = await buscarLoteAberto<any>(
+    phone,
+    "id, legenda, numero, fotos, phone, unidade_contexto, rotulado_em"
+  );
+  if (!lote || !lote.rotulado_em) return; // not labeled → nothing to finalise
+
+  const numero = lote.numero ?? lote.legenda;
+  await supabase.from("lotes_fotos").update({ status: "pronto", legenda: numero }).eq("id", lote.id);
+  log.info({ phone, loteId: lote.id, numero, qtdFotos: lote.fotos.length },
+    "janela de assentamento concluída — lote finalizado para análise");
+  triggerAnalise({ ...lote, legenda: numero, status: "pronto" });
 }
 
 // Safety net: recovers batches left 'aberto' far too long (forgotten number, or
@@ -535,7 +578,7 @@ export async function varrerLotesAbandonados(): Promise<void> {
   // absent, so we must not request them or the query errors out entirely.
   const { data: lotes, error } = await supabase
     .from("lotes_fotos")
-    .select("id, phone, legenda, fotos, status, started_at, created_at, unidade_contexto")
+    .select("id, phone, legenda, numero, fotos, status, started_at, created_at, unidade_contexto, rotulado_em")
     .eq("status", "aberto");
 
   if (error) {
@@ -543,21 +586,25 @@ export async function varrerLotesAbandonados(): Promise<void> {
     return;
   }
 
-  const abandonados = (lotes ?? []).filter((l: any) => {
+  const settleLimite = new Date(Date.now() - BATCH_SETTLE_MS).toISOString();
+
+  const paraFechar = (lotes ?? []).filter((l: any) => {
+    // (a) Labeled batch whose settle window elapsed (e.g. timer lost to a
+    //     restart): finalise it. (b) Any batch abandoned far too long.
+    if (l.rotulado_em && new Date(l.rotulado_em).toISOString() < settleLimite) return true;
     const ts = l.started_at ?? l.created_at;
-    if (!ts) return true; // no timestamp at all → treat as abandoned
+    if (!ts) return true;
     return new Date(ts).toISOString() < limite;
   });
 
-  if (abandonados.length === 0) return;
-  const lotesParaFechar = abandonados;
+  if (paraFechar.length === 0) return;
+  log.info({ qtd: paraFechar.length }, "varredura: lotes para finalizar (assentados ou abandonados)");
 
-  log.info({ qtd: lotesParaFechar.length }, "varredura: lotes abandonados encontrados — fechando e analisando");
-
-  for (const lote of lotesParaFechar) {
+  for (const lote of paraFechar) {
+    const numero = lote.numero ?? lote.legenda;
     const { error: lockErr } = await supabase
       .from("lotes_fotos")
-      .update({ status: "pronto" })
+      .update({ status: "pronto", legenda: numero })
       .eq("id", lote.id)
       .eq("status", "aberto");
 
@@ -565,8 +612,8 @@ export async function varrerLotesAbandonados(): Promise<void> {
       log.error({ loteId: lote.id, err: lockErr.message }, "varredura: falha ao fechar lote");
       continue;
     }
-    log.info({ loteId: lote.id, extintor: lote.legenda }, "varredura: lote fechado — disparando análise");
-    triggerAnalise({ ...lote, status: "pronto" });
+    log.info({ loteId: lote.id, extintor: numero }, "varredura: lote fechado — disparando análise");
+    triggerAnalise({ ...lote, legenda: numero, status: "pronto" });
   }
 }
 
