@@ -11,6 +11,7 @@ import { supabaseAdmin } from "../db-admin";
 import { logger } from "../logger";
 import { renderHtml, type ExtintorFicha, type ItemInspecao, type DadosFicha } from "./template";
 import { renderPdfFromHtml } from "../pdf/browser";
+import { thumbnailsDeUrls } from "./thumbnails";
 
 export type GerarFichaRegiaoResult =
   | { ok: true;  pdfBuffer: Buffer }
@@ -80,6 +81,18 @@ export async function gerarFichaRegiao(
       naoInspecionado: !inspecionado,
     };
   });
+
+  // Downscale + inline every photo as a small base64 JPEG, so Chromium loads
+  // tiny local images instead of downloading hundreds of full-size remote files.
+  // This keeps ALL photos while preventing the out-of-memory crash on big regions.
+  if (!opts.semFotos) {
+    const todasUrls = extintores.flatMap((x) => x.fotos);
+    const thumbs = await thumbnailsDeUrls(todasUrls);
+    for (const x of extintores) {
+      x.fotos = x.fotos.map((u) => thumbs.get(u)).filter((v): v is string => !!v);
+    }
+    log.info({ urls: todasUrls.length, thumbs: thumbs.size }, "fotos redimensionadas para o relatório");
+  }
 
   // Active cycle month for the header.
   const { data: ciclo } = await supabase

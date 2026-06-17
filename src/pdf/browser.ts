@@ -43,7 +43,9 @@ export async function renderPdfFromHtml(html: string): Promise<Buffer> {
   const browser = await launchBrowser();
   try {
     const page = await browser.newPage();
-    await page.setContent(html, { waitUntil: "networkidle" });
+    // Photos are inlined as base64 data-URIs (no network), and logos are local,
+    // so "load" is enough — "networkidle" would needlessly wait/timeout.
+    await page.setContent(html, { waitUntil: "load" });
     const pdf = await page.pdf({
       format: "A4",
       printBackground: true,
