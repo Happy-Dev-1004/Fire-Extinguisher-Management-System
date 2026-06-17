@@ -248,8 +248,10 @@ export const relatorioApi = {
   },
 
   // Returns a blob URL of the regional PDF for inline preview (no download).
+  // preview:true → light PDF without embedded photos, so it renders fast and
+  // doesn't time out the browser on large regions.
   regiaoPreview: (regiao: string) =>
-    previewBlob("/relatorio/regiao", { regiao, formato: "pdf" }),
+    previewBlob("/relatorio/regiao", { regiao, formato: "pdf", preview: true }),
 };
 
 // ── /ficha ────────────────────────────────────────────────────────────────────

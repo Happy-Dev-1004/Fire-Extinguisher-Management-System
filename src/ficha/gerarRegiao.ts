@@ -46,8 +46,16 @@ function montarItensVazios(): ItemInspecao[] {
   ].map((nome) => ({ nome, status: "" as const, observacao: "" }));
 }
 
-export async function gerarFichaRegiao(regiao: string): Promise<GerarFichaRegiaoResult> {
-  const log = logger.child({ regiao, tipo: "ficha-regiao" });
+// semFotos=true produces a LIGHT report: same layout, checklist and sectors, but
+// WITHOUT embedding the (full-size, remote) photos. The full report embeds every
+// photo, which for a 300-extinguisher region means Playwright downloading 100s of
+// multi-MB images → 25-30s and a 15-20 MB PDF, which times out a browser preview.
+// The preview uses semFotos for speed; download/send still embed the photos.
+export async function gerarFichaRegiao(
+  regiao: string,
+  opts: { semFotos?: boolean } = {}
+): Promise<GerarFichaRegiaoResult> {
+  const log = logger.child({ regiao, tipo: "ficha-regiao", semFotos: !!opts.semFotos });
 
   const { data: extintoresDb, error } = await supabase
     .from("extintores")
@@ -68,7 +76,7 @@ export async function gerarFichaRegiao(regiao: string): Promise<GerarFichaRegiao
       setor:           e.setor || regiao,
       tipo_carga:      e.tipo_carga ?? "",
       itens:           inspecionado ? montarItens(e) : montarItensVazios(),
-      fotos:           Array.isArray(e.fotos) ? e.fotos : [],
+      fotos:           opts.semFotos ? [] : (Array.isArray(e.fotos) ? e.fotos : []),
       naoInspecionado: !inspecionado,
     };
   });

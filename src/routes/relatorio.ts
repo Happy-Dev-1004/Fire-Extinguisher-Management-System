@@ -202,6 +202,9 @@ router.post("/extintor/:id", async (req: Request, res: Response) => {
 const RegiaoBodySchema = z.object({
   regiao:  z.string().min(1),
   formato: z.enum(["pdf", "csv"]).default("pdf"),
+  // preview=true → light/fast PDF without embedded photos (avoids the 25-30s
+  // render + 15-20 MB blob that times out the browser preview).
+  preview: z.boolean().optional(),
 });
 
 router.post("/regiao", async (req: Request, res: Response) => {
@@ -209,8 +212,8 @@ router.post("/regiao", async (req: Request, res: Response) => {
   if (!parse.success) {
     return res.status(400).json({ erro: "Dados inválidos.", detalhes: parse.error.flatten().fieldErrors });
   }
-  const { regiao, formato } = parse.data;
-  const rlog = log.child({ regiao, formato, tipo: "regiao" });
+  const { regiao, formato, preview } = parse.data;
+  const rlog = log.child({ regiao, formato, preview: !!preview, tipo: "regiao" });
 
   const { data: extintores, error } = await supabase
     .from("extintores")
@@ -233,7 +236,8 @@ router.post("/regiao", async (req: Request, res: Response) => {
   }
 
   // PDF uses the OFFICIAL ficha format (same as the sample), via gerarFichaRegiao.
-  const ficha = await gerarFichaRegiao(regiao);
+  // preview → omit photos so it renders fast and small.
+  const ficha = await gerarFichaRegiao(regiao, { semFotos: !!preview });
   if (!ficha.ok) {
     rlog.warn({ motivo: ficha.motivo }, "ficha de região não gerada");
     return res.status(404).json({ erro: ficha.motivo });
