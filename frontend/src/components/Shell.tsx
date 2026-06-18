@@ -135,9 +135,12 @@ export function Shell() {
   );
 
   return (
-    <div className="min-h-screen flex bg-gray-50">
-      {/* Desktop sidebar */}
-      <aside className="hidden lg:flex lg:flex-col lg:w-60 lg:shrink-0 bg-white border-r border-gray-200">
+    // h-screen + overflow-hidden pins the whole app to the viewport so the page
+    // itself never scrolls; the sidebar and top bar stay fixed and only <main>
+    // scrolls internally.
+    <div className="h-screen overflow-hidden flex bg-gray-50">
+      {/* Desktop sidebar — fixed full height, never scrolls with content */}
+      <aside className="hidden lg:flex lg:flex-col lg:w-60 lg:shrink-0 bg-white border-r border-gray-200 h-screen">
         <SidebarContent />
       </aside>
 
@@ -161,8 +164,8 @@ export function Shell() {
         <SidebarContent mobile />
       </aside>
 
-      {/* Main area */}
-      <div className="flex-1 flex flex-col min-w-0">
+      {/* Main area — fills the fixed-height row; only <main> scrolls */}
+      <div className="flex-1 flex flex-col min-w-0 h-screen">
         {/* Top bar — always visible, more prominent on desktop too */}
         <header className="flex items-center h-16 px-4 sm:px-6 bg-white border-b border-gray-200 shrink-0 sticky top-0 z-10">
           {/* Mobile menu button */}
@@ -196,9 +199,11 @@ export function Shell() {
           </div>
         </header>
 
-        {/* Page content */}
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto animate-fade-in">
-          <Outlet />
+        {/* Page content — the ONLY scrollable region */}
+        <main className="flex-1 overflow-y-auto">
+          <div className="p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto animate-fade-in">
+            <Outlet />
+          </div>
         </main>
       </div>
 
