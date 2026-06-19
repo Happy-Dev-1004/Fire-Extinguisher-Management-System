@@ -262,6 +262,7 @@ async function processWebhook(body: any): Promise<void> {
   if (telNorm) {
     const consumido = await processarRdo(rdoDeps, {
       telefone_normalizado: telNorm,
+      telefone_envio: phone,   // raw phone (with country code) for Z-API replies
       messageId,
       texto: rawTextBody ?? null,
       imageUrl: isImage ? (imageUrl ?? null) : null,
