@@ -1,0 +1,2 @@
+ALTER TABLE centrais             ENABLE ROW LEVEL SECURITY;
+ALTER TABLE dispositivos_alarme  ENABLE ROW LEVEL SECURITY;

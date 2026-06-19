@@ -33,7 +33,7 @@ function mockDb(existing: Set<string>) {
           error: null,
         }),
       }),
-      upsert: (rows: any[]) => {
+      insert: (rows: any[]) => {
         upserted.push(...rows);
         for (const r of rows) existing.add(r.seed_key); // simulate persistence
         return Promise.resolve({ error: null });

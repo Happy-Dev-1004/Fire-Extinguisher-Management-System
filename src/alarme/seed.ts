@@ -71,7 +71,11 @@ export async function seedDispositivosAlarme(): Promise<SeedResultado> {
 
   const novos = desejados.filter((d) => !jaExistentes.has(d.seed_key));
 
-  // Upsert on seed_key — idempotent. Insert in chunks to stay within payload limits.
+  // Plain INSERT of only the brand-new rows — idempotent because `novos` already
+  // excludes every seed_key that exists. (We can't upsert on seed_key: its unique
+  // index is PARTIAL — WHERE seed_key IS NOT NULL — which PostgREST cannot use as
+  // an onConflict target. The pre-filter above gives the same idempotency.)
+  // Insert in chunks to stay within payload limits.
   const porTipo: Record<string, number> = {};
   if (novos.length > 0) {
     const CHUNK = 500;
@@ -79,7 +83,7 @@ export async function seedDispositivosAlarme(): Promise<SeedResultado> {
       const lote = novos.slice(i, i + CHUNK);
       const { error } = await supabaseAdmin
         .from("dispositivos_alarme")
-        .upsert(lote, { onConflict: "seed_key", ignoreDuplicates: true });
+        .insert(lote);
       if (error) throw new Error(`Erro ao inserir dispositivos: ${error.message}`);
     }
     for (const n of novos) porTipo[n.tipo_dispositivo] = (porTipo[n.tipo_dispositivo] ?? 0) + 1;
