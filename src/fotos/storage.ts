@@ -45,3 +45,40 @@ export async function uploadFotoExtintor(
     return null;
   }
 }
+
+// Fetches a photo from a URL (e.g. a Z-API WhatsApp image), downscales it, and
+// uploads to Supabase Storage under <prefixo>/<suffix>.jpg. Returns the public
+// URL, or null on failure. Used by the RDO flow to persist the day's photos.
+export async function uploadFotoUrl(
+  prefixo: string,
+  imageUrl: string,
+  suffix: string
+): Promise<string | null> {
+  try {
+    const res = await fetch(imageUrl, { signal: AbortSignal.timeout(15_000) });
+    if (!res.ok) {
+      log.warn({ imageUrl, status: res.status }, "falha ao baixar foto do url");
+      return null;
+    }
+    const input = Buffer.from(await res.arrayBuffer());
+    const jpeg = await sharp(input)
+      .rotate()
+      .resize({ width: MAX_WIDTH, withoutEnlargement: true })
+      .jpeg({ quality: JPEG_QUALITY, mozjpeg: true })
+      .toBuffer();
+
+    const path = `${prefixo}/${suffix}.jpg`;
+    const { error } = await supabaseAdmin.storage
+      .from(BUCKET)
+      .upload(path, jpeg, { contentType: "image/jpeg", upsert: true });
+    if (error) {
+      log.error({ prefixo, err: error.message }, "falha ao subir foto (url) para o storage");
+      return null;
+    }
+    const { data } = supabaseAdmin.storage.from(BUCKET).getPublicUrl(path);
+    return data.publicUrl;
+  } catch (err: any) {
+    log.error({ prefixo, err: err.message }, "erro ao processar/subir foto (url)");
+    return null;
+  }
+}

@@ -1,0 +1,2 @@
+DROP TABLE IF EXISTS rdo_sessoes;
+DROP TABLE IF EXISTS rdos;

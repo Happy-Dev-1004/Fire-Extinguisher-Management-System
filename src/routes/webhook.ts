@@ -5,6 +5,8 @@ import { logger } from "../logger";
 import { normalizar, variantesTelefone } from "../inspetores/normalizar";
 import { analisarLote, extrairNumeroTag, type LoteFotos } from "../analise/analisar";
 import { resolverNomeRegiao } from "../regioes/regioes";
+import { processarRdo } from "../rdo/maquina";
+import { rdoDeps } from "../rdo/deps";
 
 const router = Router();
 const log = logger.child({ rota: "webhook" });
@@ -247,6 +249,25 @@ async function processWebhook(body: any): Promise<void> {
   }
 
   log.info({ phone }, "inspetor autorizado");
+
+  // ── RDO (Relatório Diário de Obra) guided flow ─────────────────────────────
+  // If the supervisor has an active RDO session OR sends the "RDO" trigger, the
+  // RDO engine handles this message (asks the next question / stores the answer
+  // / collects photos). It returns true when it consumed the message, so we stop
+  // before the extinguisher logic. Sessions are keyed by normalized phone, so
+  // the extinguisher flow and RDO never collide.
+  const messageId: string | null =
+    body?.messageId ?? body?.message?.messageId ?? body?.id ?? null;
+  const telNorm = (() => { try { return normalizar(phone); } catch { return null; } })();
+  if (telNorm) {
+    const consumido = await processarRdo(rdoDeps, {
+      telefone_normalizado: telNorm,
+      messageId,
+      texto: rawTextBody ?? null,
+      imageUrl: isImage ? (imageUrl ?? null) : null,
+    });
+    if (consumido) return;
+  }
 
   // ── Session commands (token gate) ──────────────────────────────────────────
   // "Iniciar" OPENS a work session → photos start being processed.
