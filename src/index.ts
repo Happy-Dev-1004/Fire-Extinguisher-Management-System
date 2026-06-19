@@ -15,6 +15,7 @@ import buscaRouter          from "./routes/busca";
 import relatorioRouter      from "./routes/relatorio";
 import manutencaoRouter      from "./routes/manutencao";
 import regioesRouter         from "./routes/regioes";
+import alarmeRouter          from "./routes/alarme";
 import { requireAuth, requireAdmin, requireOwner } from "./auth/middleware";
 import { logger } from "./logger";
 import { supabaseAdmin } from "./db-admin";
@@ -150,6 +151,9 @@ app.use("/manutencao",      requireAuth, requireOwner, manutencaoRouter);
 // Regional inventory: owner + member (view, edit, verify). Owner-only actions
 // (novo-mes, seed) are guarded inside the router by role checks.
 app.use("/regioes",         requireAuth, requireAdmin, regioesRouter);
+
+// PHASE 2 — fire-alarm registry: owner + member (seed is owner-guarded inside).
+app.use("/alarme",          requireAuth, requireAdmin, alarmeRouter);
 
 // Bind to 0.0.0.0 so the platform's proxy (Railway/Render) can reach the
 // container — binding to localhost/IPv6-only causes a 502 at the edge.
