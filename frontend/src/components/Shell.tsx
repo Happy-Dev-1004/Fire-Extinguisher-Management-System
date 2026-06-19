@@ -4,7 +4,7 @@ import { useAuth } from "../hooks/useAuth";
 import { ToastContainer } from "./Toast";
 import {
   LayoutDashboard, Flame, HardHat, Send, Settings, Users,
-  LogOut, Menu, X, ChevronRight, Shield, FileText, Search, HelpCircle,
+  LogOut, Menu, X, ChevronRight, Shield, FileText, Search, HelpCircle, Camera,
 } from "lucide-react";
 
 interface NavItem {
@@ -19,6 +19,7 @@ const NAV_ITEMS: NavItem[] = [
   { to: "/extintores",    label: "Extintores",     Icon: Flame },
   { to: "/fichas",        label: "Fichas",         Icon: FileText },
   { to: "/busca",         label: "Busca / Relatórios", Icon: Search },
+  { to: "/alarme/fotos",  label: "Fotos — Alarme", Icon: Camera },
   { to: "/inspetores",    label: "Inspetores",     Icon: HardHat },
   { to: "/destinatarios", label: "Destinatários",  Icon: Send },
   { to: "/ajuda",         label: "Ajuda",          Icon: HelpCircle },

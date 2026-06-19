@@ -305,3 +305,75 @@ export const regioesApi = {
   seed: () =>
     request<{ inseridos: number }>("POST", "/regioes/seed"),
 };
+
+// ── /alarme (Phase 2 — fire-alarm device photographic record) ──────────────────
+
+export interface DispositivoAlarme {
+  id: string;
+  central_id: string;
+  laco: number | null;
+  endereco: string | null;
+  tipo_dispositivo: string;
+  setor: string | null;
+  status_instalacao: string;
+  data_instalacao: string | null;
+  fotos: string[];
+}
+
+export interface DispositivoInstalado extends Omit<DispositivoAlarme, "central_id"> {
+  central_id?: string;
+  qtd_fotos: number;
+  link_galeria: string;
+}
+
+export interface FotoPendente {
+  id: string;
+  identificador: string | null;
+  central_numero: number | null;
+  foto_url: string;
+  motivo: string | null;
+  resolvido: boolean;
+  dispositivo_id: string | null;
+  telefone_origem: string | null;
+  created_at: string;
+}
+
+export interface RelatorioArmazenamento {
+  dispositivos_com_foto: number;
+  total_fotos_dispositivos: number;
+  total_fotos_pendentes: number;
+  media_fotos_por_dispositivo: number;
+  bytes_estimados: number;
+  bytes_legivel: string;
+  dispositivos_acima_do_alvo: Array<{ id: string; setor: string | null; endereco: string | null; qtd_fotos: number }>;
+  alvo_fotos_por_dispositivo: number;
+  nota_arquivamento: string;
+}
+
+export const alarmeApi = {
+  dispositivo: (id: string) =>
+    request<DispositivoAlarme>("GET", `/alarme/dispositivos/${id}`),
+
+  instaladosEm: (data: string, central_numero?: number) => {
+    const qs = new URLSearchParams({ data });
+    if (central_numero) qs.set("central_numero", String(central_numero));
+    return request<{ data: string; total: number; dispositivos: DispositivoInstalado[] }>(
+      "GET", `/alarme/dispositivos-instalados?${qs.toString()}`
+    );
+  },
+
+  adicionarFotos: (id: string, fotos: string[]) =>
+    request<DispositivoAlarme>("POST", `/alarme/dispositivos/${id}/fotos`, { fotos }),
+
+  removerFoto: (id: string, url: string) =>
+    request<DispositivoAlarme>("DELETE", `/alarme/dispositivos/${id}/fotos`, { url }),
+
+  fotosPendentes: (resolvido = false) =>
+    request<{ pendentes: FotoPendente[] }>("GET", `/alarme/fotos-pendentes?resolvido=${resolvido}`),
+
+  atribuirPendente: (id: string, dispositivo_id: string) =>
+    request<{ ok: boolean }>("POST", `/alarme/fotos-pendentes/${id}/atribuir`, { dispositivo_id }),
+
+  armazenamento: () =>
+    request<RelatorioArmazenamento>("GET", "/alarme/armazenamento"),
+};

@@ -2,8 +2,8 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { Request, Response } from "express";
 import type { AdminRecord } from "../auth/types";
 
-const { adminFromFn } = vi.hoisted(() => ({ adminFromFn: vi.fn() }));
-vi.mock("../db-admin", () => ({ supabaseAdmin: { from: adminFromFn } }));
+const { adminFromFn, adminRpcFn } = vi.hoisted(() => ({ adminFromFn: vi.fn(), adminRpcFn: vi.fn() }));
+vi.mock("../db-admin", () => ({ supabaseAdmin: { from: adminFromFn, rpc: adminRpcFn } }));
 vi.mock("../db", () => ({ supabase: { from: vi.fn() } }));
 vi.mock("../logger", () => ({ logger: { child: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }) } }));
 // Stub the seed module so the route tests don't pull real data logic.
@@ -32,7 +32,7 @@ function mockRes() {
 
 const OWNER: AdminRecord = { id: "a1", email: "o@x.com", nome: "O", role: "owner", ativo: true, created_at: "" };
 
-beforeEach(() => adminFromFn.mockReset());
+beforeEach(() => { adminFromFn.mockReset(); adminRpcFn.mockReset(); });
 
 describe("POST /alarme/dispositivos — incremental data (null endereco/laco)", () => {
   it("creates a device with NO endereco and NO laco; cadastro_pendente=true", async () => {
@@ -123,6 +123,80 @@ describe("POST /alarme/seed — owner only", () => {
     const res = mockRes();
     await handler(req, res);
     expect(res.statusCode).toBe(403);
+  });
+});
+
+describe("GET /alarme/dispositivos-instalados — RDO photo-record link", () => {
+  it("returns devices installed on the date, each with gallery links", async () => {
+    const calls: Record<string, any> = {};
+    const chain: any = {
+      eq: vi.fn((k: string, v: any) => { calls[`eq:${k}`] = v; return chain; }),
+      order: vi.fn(() => chain),
+      then: (resolve: any) => resolve({
+        data: [
+          { id: "d1", central_id: "c3", laco: 1, endereco: "L1.05", tipo_dispositivo: "sirene",
+            setor: "Torrefação", status_instalacao: "instalado", data_instalacao: "2026-06-18",
+            fotos: ["https://s/1.jpg", "https://s/2.jpg"] },
+          { id: "d2", central_id: "c3", laco: 1, endereco: "L1.06", tipo_dispositivo: "acionador",
+            setor: "Torrefação", status_instalacao: "instalado", data_instalacao: "2026-06-18", fotos: [] },
+        ],
+        error: null,
+      }),
+    };
+    adminFromFn.mockImplementation((table: string) => {
+      if (table === "centrais") {
+        return { select: () => ({ eq: () => ({ maybeSingle: () => Promise.resolve({ data: { id: "c3" }, error: null }) }) }) };
+      }
+      if (table === "dispositivos_alarme") return { select: () => chain };
+      return {};
+    });
+
+    const handler = findHandler("get", "/dispositivos-instalados");
+    const req = { query: { data: "2026-06-18", central_numero: "3" } } as unknown as Request;
+    const res = mockRes();
+    await handler(req, res);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.total).toBe(2);
+    expect(calls["eq:data_instalacao"]).toBe("2026-06-18");
+    expect(calls["eq:central_id"]).toBe("c3");
+    expect(res.body.dispositivos[0].link_galeria).toBe("/alarme/dispositivos/d1");
+    expect(res.body.dispositivos[0].qtd_fotos).toBe(2);
+    expect(res.body.dispositivos[1].qtd_fotos).toBe(0);
+  });
+
+  it("rejects a missing/invalid date (zod 400)", async () => {
+    const handler = findHandler("get", "/dispositivos-instalados");
+    const req = { query: {} } as unknown as Request;
+    const res = mockRes();
+    await handler(req, res);
+    expect(res.statusCode).toBe(400);
+  });
+});
+
+describe("POST /alarme/fotos-pendentes/:id/atribuir — resolve orphan photo", () => {
+  it("appends the orphan photo to the chosen device and marks it resolved", async () => {
+    adminRpcFn.mockResolvedValue({ data: [{ fotos: ["u"] }], error: null });
+    const updateEq = vi.fn().mockResolvedValue({ data: null, error: null });
+    adminFromFn.mockImplementation((table: string) => {
+      if (table === "dispositivo_fotos_pendentes") {
+        return {
+          select: () => ({ eq: () => ({ maybeSingle: () => Promise.resolve({
+            data: { id: "p1", foto_url: "https://s/orphan.jpg", resolvido: false }, error: null }) }) }),
+          update: () => ({ eq: updateEq }),
+        };
+      }
+      return {};
+    });
+
+    const handler = findHandler("post", "/fotos-pendentes/:id/atribuir");
+    const req = { params: { id: "p1" }, body: { dispositivo_id: "d1" }, admin: OWNER } as unknown as Request;
+    const res = mockRes();
+    await handler(req, res);
+
+    expect(res.statusCode).toBe(200);
+    expect(adminRpcFn).toHaveBeenCalledWith("append_foto_dispositivo", { p_id: "d1", p_foto: "https://s/orphan.jpg" });
+    expect(updateEq).toHaveBeenCalled();
   });
 });
 

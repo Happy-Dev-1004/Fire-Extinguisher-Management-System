@@ -13,6 +13,7 @@ import { BuscaPage } from "./pages/BuscaPage";
 import { RegioesPage } from "./pages/RegioesPage";
 import { RegiaoDetailPage } from "./pages/RegiaoDetailPage";
 import { AjudaPage } from "./pages/AjudaPage";
+import { AlarmeFotosPage } from "./pages/AlarmeFotosPage";
 import { RequireAuth } from "./components/RequireAuth";
 import { RequireOwner } from "./components/RequireOwner";
 
@@ -36,6 +37,7 @@ export function App() {
               <Route path="/destinatarios" element={<DestinatariosPage />} />
               <Route path="/fichas" element={<FichasPage />} />
               <Route path="/busca" element={<BuscaPage />} />
+              <Route path="/alarme/fotos" element={<AlarmeFotosPage />} />
               <Route path="/ajuda" element={<AjudaPage />} />
 
               {/* Owner-only routes — backend also enforces 403 */}

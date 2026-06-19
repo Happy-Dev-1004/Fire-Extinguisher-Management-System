@@ -17,6 +17,8 @@ import { supabaseAdmin } from "../db-admin";
 import { logger } from "../logger";
 import { seedDispositivosAlarme } from "../alarme/seed";
 import { reconciliar, resumoTexto } from "../alarme/reconciliacao";
+import { uploadFotoBase64 } from "../fotos/storage";
+import { relatorioArmazenamento } from "../alarme/armazenamento";
 
 const router = Router();
 const log = logger.child({ rota: "/alarme" });
@@ -218,6 +220,161 @@ router.get("/reconciliacao", async (_req: Request, res: Response) => {
   }
   const rec = reconciliar(contagens);
   return res.json({ ...rec, resumo: resumoTexto(rec) });
+});
+
+// ── Devices installed on a given date (the RDO ↔ photo-record link) ───────────────
+// Returns every device whose data_instalacao == :data (optionally scoped to a
+// central), each with its photo gallery URLs and a dashboard link. This is what
+// an RDO references for "the devices installed on its day".
+const InstaladosSchema = z.object({
+  data:           z.string().date(),
+  central_numero: z.coerce.number().int().min(1).max(99).optional(),
+});
+
+router.get("/dispositivos-instalados", async (req: Request, res: Response) => {
+  const parsed = InstaladosSchema.safeParse(req.query);
+  if (!parsed.success) {
+    return res.status(400).json({ erro: "Parâmetros inválidos.", detalhes: parsed.error.flatten().fieldErrors });
+  }
+  const { data: dataISO, central_numero } = parsed.data;
+
+  let centralId: string | undefined;
+  if (central_numero) {
+    const { data: c } = await supabaseAdmin
+      .from("centrais").select("id").eq("numero", central_numero).maybeSingle();
+    if (!c) return res.json({ data: dataISO, total: 0, dispositivos: [] });
+    centralId = (c as any).id;
+  }
+
+  let q = supabaseAdmin
+    .from("dispositivos_alarme")
+    .select("id, central_id, laco, endereco, tipo_dispositivo, setor, status_instalacao, data_instalacao, fotos")
+    .eq("ativo", true)
+    .eq("data_instalacao", dataISO)
+    .order("setor");
+  if (centralId) q = q.eq("central_id", centralId);
+
+  const { data, error } = await q;
+  if (error) {
+    log.error({ err: error.message }, "erro ao listar dispositivos instalados na data");
+    return res.status(500).json({ erro: "Erro ao buscar dispositivos." });
+  }
+
+  const dispositivos = (data ?? []).map((d: any) => ({
+    ...d,
+    qtd_fotos: (d.fotos ?? []).length,
+    link_galeria: `/alarme/dispositivos/${d.id}`, // dashboard route to its gallery
+  }));
+  return res.json({ data: dataISO, total: dispositivos.length, dispositivos });
+});
+
+// ── Manual photo attach/remove for a device (dashboard safety net) ────────────────
+const FotosBodySchema = z.object({
+  fotos: z.array(z.string().min(1)).min(1, "Envie ao menos uma foto."), // base64/data-URI
+});
+
+router.post("/dispositivos/:id/fotos", async (req: Request, res: Response) => {
+  const parsed = FotosBodySchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ erro: "Dados inválidos.", detalhes: parsed.error.flatten().fieldErrors });
+  }
+  const { data: disp } = await supabaseAdmin
+    .from("dispositivos_alarme").select("id, fotos, status_instalacao, data_instalacao")
+    .eq("id", req.params.id).maybeSingle();
+  if (!disp) return res.status(404).json({ erro: "Dispositivo não encontrado." });
+
+  const urls: string[] = [];
+  for (let i = 0; i < parsed.data.fotos.length; i++) {
+    const url = await uploadFotoBase64(`dispositivos/${req.params.id}`, parsed.data.fotos[i], `manual-${i}`);
+    if (url) urls.push(url);
+  }
+  if (urls.length === 0) return res.status(502).json({ erro: "Falha ao processar as fotos." });
+
+  const hoje = new Date().toISOString().slice(0, 10);
+  const novas = [ ...(((disp as any).fotos as string[]) ?? []), ...urls ];
+  const { data, error } = await supabaseAdmin
+    .from("dispositivos_alarme")
+    .update({
+      fotos: novas,
+      status_instalacao: (disp as any).status_instalacao === "pendente" ? "instalado" : (disp as any).status_instalacao,
+      data_instalacao: (disp as any).data_instalacao ?? hoje,
+    })
+    .eq("id", req.params.id).select().single();
+  if (error) return res.status(400).json({ erro: error.message });
+  log.info({ id: req.params.id, adicionadas: urls.length, by: req.admin?.email }, "fotos adicionadas ao dispositivo");
+  return res.json(data);
+});
+
+const RemoverFotoSchema = z.object({ url: z.string().min(1) });
+
+router.delete("/dispositivos/:id/fotos", async (req: Request, res: Response) => {
+  const parsed = RemoverFotoSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ erro: "Informe a url da foto.", detalhes: parsed.error.flatten().fieldErrors });
+  }
+  const { data: disp } = await supabaseAdmin
+    .from("dispositivos_alarme").select("fotos").eq("id", req.params.id).maybeSingle();
+  if (!disp) return res.status(404).json({ erro: "Dispositivo não encontrado." });
+  const novas = (((disp as any).fotos as string[]) ?? []).filter((u) => u !== parsed.data.url);
+  const { data, error } = await supabaseAdmin
+    .from("dispositivos_alarme").update({ fotos: novas }).eq("id", req.params.id).select().single();
+  if (error) return res.status(400).json({ erro: error.message });
+  log.info({ id: req.params.id, by: req.admin?.email }, "foto removida do dispositivo");
+  return res.json(data);
+});
+
+// ── Orphan device photos awaiting review (never lost) ─────────────────────────────
+router.get("/fotos-pendentes", async (req: Request, res: Response) => {
+  const resolvido = req.query.resolvido === "true";
+  const { data, error } = await supabaseAdmin
+    .from("dispositivo_fotos_pendentes")
+    .select("*")
+    .eq("resolvido", resolvido)
+    .order("created_at", { ascending: false });
+  if (error) return res.status(500).json({ erro: error.message });
+  return res.json({ pendentes: data ?? [] });
+});
+
+// Assign an orphan photo to a device (resolves it): appends to the device's
+// gallery and marks the pending row resolved.
+const AtribuirSchema = z.object({ dispositivo_id: z.string().min(1) });
+
+router.post("/fotos-pendentes/:id/atribuir", async (req: Request, res: Response) => {
+  const parsed = AtribuirSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ erro: "Dados inválidos.", detalhes: parsed.error.flatten().fieldErrors });
+  }
+  const { data: pend } = await supabaseAdmin
+    .from("dispositivo_fotos_pendentes").select("*").eq("id", req.params.id).maybeSingle();
+  if (!pend) return res.status(404).json({ erro: "Foto pendente não encontrada." });
+  if ((pend as any).resolvido) return res.status(409).json({ erro: "Esta foto já foi resolvida." });
+
+  const { error: rpcErr } = await supabaseAdmin.rpc("append_foto_dispositivo", {
+    p_id: parsed.data.dispositivo_id,
+    p_foto: (pend as any).foto_url,
+  });
+  if (rpcErr) return res.status(400).json({ erro: rpcErr.message });
+
+  await supabaseAdmin
+    .from("dispositivo_fotos_pendentes")
+    .update({ resolvido: true, dispositivo_id: parsed.data.dispositivo_id })
+    .eq("id", req.params.id);
+  log.info({ pendenteId: req.params.id, dispositivoId: parsed.data.dispositivo_id, by: req.admin?.email },
+    "foto pendente atribuída a dispositivo");
+  return res.json({ ok: true });
+});
+
+// ── Storage usage report ──────────────────────────────────────────────────────────
+// ~500 devices × several photos each → awareness of storage growth. Reports
+// counts and estimated bytes (from the storage objects), plus an archive note.
+router.get("/armazenamento", async (_req: Request, res: Response) => {
+  try {
+    const relatorio = await relatorioArmazenamento();
+    return res.json(relatorio);
+  } catch (err: any) {
+    log.error({ err: err.message }, "erro ao gerar relatório de armazenamento");
+    return res.status(500).json({ erro: "Erro ao gerar relatório de armazenamento." });
+  }
 });
 
 export default router;

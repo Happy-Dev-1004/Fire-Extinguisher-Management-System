@@ -7,6 +7,8 @@ import { analisarLote, extrairNumeroTag, type LoteFotos } from "../analise/anali
 import { resolverNomeRegiao } from "../regioes/regioes";
 import { processarRdo } from "../rdo/maquina";
 import { rdoDeps } from "../rdo/deps";
+import { processarFotoDispositivo } from "../alarme/fotosDispositivo";
+import { fotosDispositivoDeps } from "../alarme/fotosDispositivoDeps";
 
 const router = Router();
 const log = logger.child({ rota: "webhook" });
@@ -263,6 +265,24 @@ async function processWebhook(body: any): Promise<void> {
     const consumido = await processarRdo(rdoDeps, {
       telefone_normalizado: telNorm,
       telefone_envio: phone,   // raw phone (with country code) for Z-API replies
+      messageId,
+      texto: rawTextBody ?? null,
+      imageUrl: isImage ? (imageUrl ?? null) : null,
+    });
+    if (consumido) return;
+  }
+
+  // ── Device photo record (Phase 2) ──────────────────────────────────────────
+  // After RDO, before extinguisher logic. If the supervisor is in device-photo
+  // mode (or sends the "dispositivo" trigger), this engine handles the message:
+  // it names a device, attaches photos to it (marking it installed), and parks
+  // unmatched photos for review — never losing one. Keyed by normalized phone,
+  // so it never collides with the extinguisher or RDO flows.
+  if (telNorm) {
+    const consumido = await processarFotoDispositivo(fotosDispositivoDeps, {
+      telefone_normalizado: telNorm,
+      telefone_envio: phone,
+      telefone_origem: phone,
       messageId,
       texto: rawTextBody ?? null,
       imageUrl: isImage ? (imageUrl ?? null) : null,
