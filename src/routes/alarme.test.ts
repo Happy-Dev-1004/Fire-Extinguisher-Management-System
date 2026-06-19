@@ -200,6 +200,87 @@ describe("POST /alarme/fotos-pendentes/:id/atribuir — resolve orphan photo", (
   });
 });
 
+describe("GET /alarme/busca — alarm device search", () => {
+  it("filters by central + status and returns rows with counts", async () => {
+    const calls: Record<string, any> = {};
+    const chain: any = {
+      eq: vi.fn((k: string, v: any) => { calls[`eq:${k}`] = v; return chain; }),
+      ilike: vi.fn((k: string, v: any) => { calls[`ilike:${k}`] = v; return chain; }),
+      order: vi.fn(() => chain),
+      then: (resolve: any) => resolve({
+        data: [
+          { id: "d1", laco: 1, endereco: "L1.05", tipo_dispositivo: "sirene", setor: "Torrefação",
+            status_instalacao: "testado", data_instalacao: "2026-06-18", cadastro_pendente: false,
+            fotos: ["u1"], centrais: { numero: 3, nome: "Fábrica" } },
+          { id: "d2", laco: 1, endereco: null, tipo_dispositivo: "sirene", setor: "Torrefação",
+            status_instalacao: "pendente", data_instalacao: null, cadastro_pendente: true,
+            fotos: [], centrais: { numero: 3, nome: "Fábrica" } },
+        ],
+        error: null,
+      }),
+    };
+    adminFromFn.mockImplementation((table: string) => {
+      if (table === "centrais") {
+        return { select: () => ({ eq: () => ({ maybeSingle: () => Promise.resolve({ data: { id: "c3" }, error: null }) }) }) };
+      }
+      if (table === "dispositivos_alarme") return { select: () => chain };
+      return {};
+    });
+
+    const handler = findHandler("get", "/busca");
+    const req = { query: { central_numero: "3", status_instalacao: "testado" } } as unknown as Request;
+    const res = mockRes();
+    await handler(req, res);
+
+    expect(res.statusCode).toBe(200);
+    expect(calls["eq:central_id"]).toBe("c3");
+    expect(calls["eq:status_instalacao"]).toBe("testado");
+    expect(res.body.total).toBe(2);
+    expect(res.body.contagens.testado).toBe(1);
+    expect(res.body.contagens.pendente).toBe(1);
+    expect(res.body.contagens.cadastro_pendente).toBe(1);
+    // labels + computed fields present
+    expect(res.body.resultados[0].tipo_label).toBe("Sirene");
+    expect(res.body.resultados[0].status_label).toBe("Testado");
+    expect(res.body.resultados[0].qtd_fotos).toBe(1);
+  });
+
+  it("rejects an invalid status filter (zod 400)", async () => {
+    const handler = findHandler("get", "/busca");
+    const req = { query: { status_instalacao: "explodido" } } as unknown as Request;
+    const res = mockRes();
+    await handler(req, res);
+    expect(res.statusCode).toBe(400);
+  });
+});
+
+describe("GET /alarme/progresso — install progress", () => {
+  it("aggregates counts per central and includes BOM gaps", async () => {
+    adminFromFn.mockImplementation((table: string) => {
+      if (table === "dispositivos_alarme") {
+        return { select: () => ({ eq: () => Promise.resolve({
+          data: [
+            { tipo_dispositivo: "sirene", status_instalacao: "instalado", laco: 1, centrais: { numero: 3, nome: "Fábrica" } },
+            { tipo_dispositivo: "sirene", status_instalacao: "testado",   laco: 1, centrais: { numero: 3, nome: "Fábrica" } },
+            { tipo_dispositivo: "acionador", status_instalacao: "pendente", laco: null, centrais: { numero: 1, nome: "Portaria" } },
+          ], error: null }) }) };
+      }
+      return {};
+    });
+
+    const handler = findHandler("get", "/progresso");
+    const res = mockRes();
+    await handler({} as Request, res);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.geral.total).toBe(3);
+    expect(res.body.geral.instalado).toBe(1);
+    expect(res.body.geral.testado).toBe(1);
+    expect(res.body.centrais.map((c: any) => c.central_numero)).toEqual([1, 3]);
+    expect(res.body.total_esperado).toBe(534);
+  });
+});
+
 describe("GET /alarme/reconciliacao", () => {
   it("counts active devices by type and returns the gap report", async () => {
     adminFromFn.mockImplementation((table: string) => {

@@ -169,15 +169,20 @@ export const buscaApi = {
 
 // ── /relatorio ────────────────────────────────────────────────────────────────
 
-async function downloadBlob(path: string, body: unknown, filename: string): Promise<void> {
+async function downloadBlob(
+  path: string,
+  body: unknown,
+  filename: string,
+  method: "GET" | "POST" = "POST"
+): Promise<void> {
   const token = _getToken ? await _getToken() : null;
   const res = await fetch(`${BASE}${path}`, {
-    method: "POST",
+    method,
     headers: {
       "Content-Type": "application/json",
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
-    body: JSON.stringify(body),
+    ...(method === "POST" ? { body: JSON.stringify(body) } : {}),
   });
   if (!res.ok) {
     const json = await res.json().catch(() => ({}));
@@ -376,4 +381,105 @@ export const alarmeApi = {
 
   armazenamento: () =>
     request<RelatorioArmazenamento>("GET", "/alarme/armazenamento"),
+
+  progresso: () =>
+    request<RelatorioProgresso>("GET", "/alarme/progresso"),
+
+  busca: (filtros: FiltrosAlarme) => {
+    const qs = new URLSearchParams();
+    for (const [k, v] of Object.entries(filtros)) {
+      if (v !== undefined && v !== null && v !== "") qs.set(k, String(v));
+    }
+    const q = qs.toString();
+    return request<PaginaBuscaAlarme>("GET", `/alarme/busca${q ? `?${q}` : ""}`);
+  },
+
+  buscaRelatorio: (filtros: Omit<FiltrosAlarme, "page">, formato: "pdf" | "csv" = "pdf") => {
+    const qs = new URLSearchParams({ formato });
+    for (const [k, v] of Object.entries(filtros)) {
+      if (v !== undefined && v !== null && v !== "") qs.set(k, String(v));
+    }
+    const ts = new Date().toISOString().slice(0, 10);
+    return downloadBlob(`/alarme/busca/relatorio?${qs.toString()}`, undefined, `dispositivos_${ts}.${formato}`, "GET");
+  },
+};
+
+export interface ContagemStatus {
+  pendente: number; instalado: number; enderecado: number; testado: number;
+  total: number; pct_instalado: number; pct_testado: number;
+}
+export interface GrupoLaco { laco: number | null; contagem: ContagemStatus; }
+export interface GrupoCentral {
+  central_numero: number | null; central_nome: string | null;
+  contagem: ContagemStatus; lacos: GrupoLaco[];
+}
+export interface LinhaReconciliacao {
+  tipo: string; label: string; cadastrados: number; esperado: number;
+  faltam: number; excedente: number; completo: boolean;
+}
+export interface RelatorioProgresso {
+  geral: ContagemStatus;
+  centrais: GrupoCentral[];
+  reconciliacao: {
+    linhas: LinhaReconciliacao[];
+    total_cadastrados: number; total_esperado: number; total_faltam: number; completo: boolean;
+  };
+  total_esperado: number;
+}
+
+export interface FiltrosAlarme {
+  central_numero?: number; laco?: number; tipo_dispositivo?: string;
+  setor?: string; status_instalacao?: string; cadastro_pendente?: string;
+  com_foto?: string; page?: number;
+}
+export interface DispositivoBusca {
+  id: string; central_numero: number | null; central_nome: string | null;
+  laco: number | null; endereco: string | null; tipo_dispositivo: string; tipo_label: string;
+  setor: string | null; status_instalacao: string; status_label: string;
+  data_instalacao: string | null; cadastro_pendente: boolean; qtd_fotos: number;
+}
+export interface PaginaBuscaAlarme {
+  resultados: DispositivoBusca[]; total: number; pagina: number; total_paginas: number;
+  contagens: { total: number; pendente: number; instalado: number; enderecado: number; testado: number; cadastro_pendente: number };
+}
+
+// ── RDO send + PDF ──────────────────────────────────────────────────────────
+
+export interface RdoRow {
+  id: string; data: string | null; responsavel: string | null; periodo: string | null;
+  central: string | null; frente_trabalho: string | null; status: string | null;
+  dispositivos_instalados: Record<string, number> | null; fotos_dia: string[] | null;
+  created_at: string;
+}
+
+export const rdosApi = {
+  listar: (filtros?: { status?: string; data?: string }) => {
+    const qs = new URLSearchParams();
+    if (filtros?.status) qs.set("status", filtros.status);
+    if (filtros?.data) qs.set("data", filtros.data);
+    const q = qs.toString();
+    return request<{ rdos: RdoRow[] }>("GET", `/rdos${q ? `?${q}` : ""}`);
+  },
+
+  destinatarios: () =>
+    request<{ unidade: string; destinatarios: DestinatarioResolvido[] }>("GET", "/rdos/destinatarios"),
+
+  pdfUrl: (id: string) => `${BASE}/rdos/${id}/pdf`,
+
+  baixarPdf: (id: string, data: string | null) =>
+    downloadBlob(`/rdos/${id}/pdf`, undefined, `rdo_${(data ?? "sem-data").replace(/\//g, "-")}.pdf`, "GET"),
+
+  enviar: (id: string, canal: "whatsapp" | "email" | "ambos") =>
+    request<{ mensagem: string; enviados: number; falhas: number; detalhes: unknown[] }>(
+      "POST", `/rdos/${id}/enviar`, { canal }
+    ),
+
+  relatorio: (filtros: { status?: string; mes?: string; data?: string }, formato: "pdf" | "csv" = "pdf") => {
+    const qs = new URLSearchParams({ formato });
+    for (const [k, v] of Object.entries(filtros)) {
+      if (v !== undefined && v !== null && v !== "") qs.set(k, String(v));
+    }
+    const ts = new Date().toISOString().slice(0, 10);
+    return downloadBlob(`/rdos/relatorio?${qs.toString()}`, undefined, `rdos_${ts}.${formato}`, "GET");
+  },
 };

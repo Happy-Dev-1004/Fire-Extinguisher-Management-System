@@ -102,7 +102,7 @@ function PorDataView() {
       const r = await alarmeApi.instaladosEm(data, centralNum);
       setResultado({ total: r.total, dispositivos: r.dispositivos });
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Erro ao buscar dispositivos.");
+      toast(err instanceof Error ? err.message : "Erro ao buscar dispositivos.", "erro");
       setResultado(null);
     } finally {
       setCarregando(false);
@@ -305,7 +305,7 @@ function ArmazenamentoView() {
   useEffect(() => {
     alarmeApi.armazenamento()
       .then(setRel)
-      .catch((err) => toast.error(err instanceof Error ? err.message : "Erro ao carregar relatório."))
+      .catch((err) => toast(err instanceof Error ? err.message : "Erro ao carregar relatório.", "erro"))
       .finally(() => setCarregando(false));
   }, []);
 

@@ -19,6 +19,9 @@ import { seedDispositivosAlarme } from "../alarme/seed";
 import { reconciliar, resumoTexto } from "../alarme/reconciliacao";
 import { uploadFotoBase64 } from "../fotos/storage";
 import { relatorioArmazenamento } from "../alarme/armazenamento";
+import { agregarProgresso, type DispositivoProgresso } from "../alarme/progresso";
+import { buscarDispositivos, FiltrosAlarmeSchema } from "../alarme/buscaAlarme";
+import { dispositivosParaCsv, dispositivosParaPdf } from "../alarme/relatorioAlarme";
 
 const router = Router();
 const log = logger.child({ rota: "/alarme" });
@@ -362,6 +365,83 @@ router.post("/fotos-pendentes/:id/atribuir", async (req: Request, res: Response)
   log.info({ pendenteId: req.params.id, dispositivoId: parsed.data.dispositivo_id, by: req.admin?.email },
     "foto pendente atribuída a dispositivo");
   return res.json({ ok: true });
+});
+
+// ── Device search (filter → results, paginated) ─────────────────────────────────────
+router.get("/busca", async (req: Request, res: Response) => {
+  const parsed = FiltrosAlarmeSchema.safeParse(req.query);
+  if (!parsed.success) {
+    return res.status(400).json({ erro: "Filtros inválidos.", detalhes: parsed.error.flatten().fieldErrors });
+  }
+  try {
+    const pagina = await buscarDispositivos(parsed.data);
+    return res.json(pagina);
+  } catch (err: any) {
+    log.error({ err: err.message }, "erro na busca de dispositivos");
+    return res.status(500).json({ erro: "Erro ao buscar dispositivos." });
+  }
+});
+
+// ── Device search → report (CSV or PDF) ─────────────────────────────────────────────
+router.get("/busca/relatorio", async (req: Request, res: Response) => {
+  const formato = (req.query.formato as string) === "csv" ? "csv" : "pdf";
+  const parsed = FiltrosAlarmeSchema.safeParse(req.query);
+  if (!parsed.success) {
+    return res.status(400).json({ erro: "Filtros inválidos.", detalhes: parsed.error.flatten().fieldErrors });
+  }
+  try {
+    const { resultados } = await buscarDispositivos(parsed.data, { todas: true });
+    const partes: string[] = [];
+    if (parsed.data.central_numero) partes.push(`Central ${parsed.data.central_numero}`);
+    if (parsed.data.tipo_dispositivo) partes.push(parsed.data.tipo_dispositivo);
+    if (parsed.data.status_instalacao) partes.push(parsed.data.status_instalacao);
+    if (parsed.data.setor) partes.push(`setor ${parsed.data.setor}`);
+    const subtitulo = partes.length ? `Filtros: ${partes.join(" · ")}` : "Todos os dispositivos ativos";
+    const ts = new Date().toISOString().slice(0, 10);
+
+    if (formato === "csv") {
+      const csv = dispositivosParaCsv(resultados);
+      res.setHeader("Content-Type", "text/csv; charset=utf-8");
+      res.setHeader("Content-Disposition", `attachment; filename="dispositivos_${ts}.csv"`);
+      return res.send(csv);
+    }
+    const pdf = await dispositivosParaPdf(resultados, subtitulo);
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="dispositivos_${ts}.pdf"`);
+    return res.send(pdf);
+  } catch (err: any) {
+    log.error({ err: err.message }, "erro ao gerar relatório de dispositivos");
+    return res.status(500).json({ erro: "Erro ao gerar relatório." });
+  }
+});
+
+// ── Install-progress dashboard data ────────────────────────────────────────────────
+// Per central + per loop status counts, overall progress, and BOM gaps. Null-safe:
+// devices with no central/laço fall into "sem" buckets and never break the math.
+router.get("/progresso", async (_req: Request, res: Response) => {
+  const { data, error } = await supabaseAdmin
+    .from("dispositivos_alarme")
+    .select("tipo_dispositivo, status_instalacao, laco, centrais!inner(numero, nome)")
+    .eq("ativo", true);
+  if (error) {
+    log.error({ err: error.message }, "erro ao agregar progresso");
+    return res.status(500).json({ erro: "Erro ao gerar progresso de instalação." });
+  }
+
+  const dispositivos: DispositivoProgresso[] = (data ?? []).map((d: any) => ({
+    central_numero: d.centrais?.numero ?? null,
+    central_nome: d.centrais?.nome ?? null,
+    laco: d.laco ?? null,
+    tipo_dispositivo: d.tipo_dispositivo,
+    status_instalacao: d.status_instalacao ?? null,
+  }));
+
+  const contagensPorTipo: Record<string, number> = {};
+  for (const d of dispositivos) {
+    contagensPorTipo[d.tipo_dispositivo] = (contagensPorTipo[d.tipo_dispositivo] ?? 0) + 1;
+  }
+
+  return res.json(agregarProgresso(dispositivos, contagensPorTipo));
 });
 
 // ── Storage usage report ──────────────────────────────────────────────────────────
