@@ -16,6 +16,7 @@ import relatorioRouter      from "./routes/relatorio";
 import manutencaoRouter      from "./routes/manutencao";
 import regioesRouter         from "./routes/regioes";
 import alarmeRouter          from "./routes/alarme";
+import rdosRouter            from "./routes/rdos";
 import { requireAuth, requireAdmin, requireOwner } from "./auth/middleware";
 import { logger } from "./logger";
 import { supabaseAdmin } from "./db-admin";
@@ -154,6 +155,9 @@ app.use("/regioes",         requireAuth, requireAdmin, regioesRouter);
 
 // PHASE 2 — fire-alarm registry: owner + member (seed is owner-guarded inside).
 app.use("/alarme",          requireAuth, requireAdmin, alarmeRouter);
+
+// RDO (Relatório Diário de Obra) read API: owner + member.
+app.use("/rdos",            requireAuth, requireAdmin, rdosRouter);
 
 // Bind to 0.0.0.0 so the platform's proxy (Railway/Render) can reach the
 // container — binding to localhost/IPv6-only causes a 502 at the edge.
