@@ -3,9 +3,9 @@ import { Link } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import {
   Flame, Bell, Wrench, ArrowRight, Lock, AlertTriangle, Loader2,
-  MapPin, Activity, Clock, FileText, ClipboardCheck,
+  MapPin, Activity,
 } from "lucide-react";
-import { regioesApi, alarmeApi, meApi, type RelatorioProgresso, type ItemAtividade } from "../lib/api";
+import { regioesApi, alarmeApi, type RelatorioProgresso } from "../lib/api";
 import type { RegiaoProgresso } from "../lib/types";
 import { GaugeDonut } from "../components/GaugeDonut";
 import { toast } from "../components/Toast";
@@ -24,17 +24,15 @@ export function DashboardPage() {
   const [regioes, setRegioes] = useState<RegiaoProgresso[] | null>(null);
   const [cicloMes, setCicloMes] = useState<string | null>(null);
   const [prog, setProg] = useState<RelatorioProgresso | null>(null);
-  const [atividade, setAtividade] = useState<ItemAtividade[]>([]);
   const [carregando, setCarregando] = useState(true);
 
   useEffect(() => {
-    Promise.allSettled([regioesApi.listar(), alarmeApi.progresso(), meApi.atividadeRecente()])
-      .then(([r1, r2, r3]) => {
+    Promise.allSettled([regioesApi.listar(), alarmeApi.progresso()])
+      .then(([r1, r2]) => {
         if (r1.status === "fulfilled") { setRegioes(r1.value.regioes); setCicloMes(r1.value.ciclo?.mes_referencia ?? null); }
         else toast("Não foi possível carregar o progresso da Fase 1.", "erro");
         if (r2.status === "fulfilled") setProg(r2.value);
         else toast("Não foi possível carregar o progresso da Fase 2.", "erro");
-        if (r3.status === "fulfilled") setAtividade(r3.value.itens);
       })
       .finally(() => setCarregando(false));
   }, []);
@@ -109,60 +107,7 @@ export function DashboardPage() {
             <BomGaps prog={prog} />
           </div>
 
-          {/* Recent activity across phases */}
-          <AtividadeRecente itens={atividade} />
         </>
-      )}
-    </div>
-  );
-}
-
-// ── Recent activity (RDOs + inspections) ───────────────────────────────────────
-function dataBR(iso: string | null): string {
-  if (!iso) return "—";
-  const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  return m ? `${m[3]}/${m[2]}/${m[1]}` : iso;
-}
-
-function AtividadeRecente({ itens }: { itens: ItemAtividade[] }) {
-  return (
-    <div className="card p-5">
-      <div className="flex items-center gap-2 mb-4">
-        <span className="w-7 h-7 rounded-lg bg-gray-100 text-gray-500 flex items-center justify-center"><Clock className="w-4 h-4" /></span>
-        <h2 className="text-sm font-bold text-gray-900">Atividade recente</h2>
-      </div>
-      {itens.length === 0 ? (
-        <p className="text-sm text-gray-500">Nenhuma atividade registrada ainda.</p>
-      ) : (
-        <ul className="divide-y divide-gray-100">
-          {itens.map((it) => {
-            const isRdo = it.tipo === "rdo";
-            const Icon = isRdo ? FileText : ClipboardCheck;
-            const cor = isRdo ? "bg-brand-50 text-brand-600" : "bg-orange-50 text-orange-600";
-            return (
-              <li key={`${it.tipo}-${it.id}`} className="py-2.5 flex items-center gap-3">
-                <span className={`w-8 h-8 rounded-lg ${cor} flex items-center justify-center shrink-0`}>
-                  <Icon className="w-4 h-4" />
-                </span>
-                <Link to={it.link} className="flex-1 min-w-0 group">
-                  <p className="text-sm font-medium text-gray-900 truncate group-hover:text-brand-600">{it.titulo}</p>
-                  <p className="text-xs text-gray-500 truncate">{it.descricao}</p>
-                </Link>
-                <div className="text-right shrink-0">
-                  <p className="text-xs text-gray-500">{dataBR(it.data)}</p>
-                  {it.status && (
-                    <span className={`badge ${
-                      it.status === "concluido" || it.status === "Conforme" ? "badge-green"
-                        : it.status === "cancelado" ? "badge-gray"
-                        : it.status === "Reprovado" ? "badge-red"
-                        : "badge-brand"
-                    } mt-0.5`}>{it.status}</span>
-                  )}
-                </div>
-              </li>
-            );
-          })}
-        </ul>
       )}
     </div>
   );

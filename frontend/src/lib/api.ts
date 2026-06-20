@@ -66,19 +66,8 @@ async function request<T>(
 
 // ── /me ──────────────────────────────────────────────────────────────────────
 
-export interface ItemAtividade {
-  tipo: "rdo" | "inspecao";
-  id: string;
-  data: string | null;
-  titulo: string;
-  descricao: string;
-  status?: string | null;
-  link: string;
-}
-
 export const meApi = {
   get: () => request<AdminProfile>("GET", "/me"),
-  atividadeRecente: () => request<{ itens: ItemAtividade[] }>("GET", "/me/atividade-recente"),
 };
 
 // ── /equipe ───────────────────────────────────────────────────────────────────
