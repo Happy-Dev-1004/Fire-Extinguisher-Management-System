@@ -8,13 +8,10 @@ import { ConfiguracoesPage } from "./pages/ConfiguracoesPage";
 import { EquipePage } from "./pages/EquipePage";
 import { InspetoresPage } from "./pages/InspetoresPage";
 import { DestinatariosPage } from "./pages/DestinatariosPage";
-import { FichasPage } from "./pages/FichasPage";
-import { BuscaPage } from "./pages/BuscaPage";
-import { RegioesPage } from "./pages/RegioesPage";
 import { RegiaoDetailPage } from "./pages/RegiaoDetailPage";
 import { AjudaPage } from "./pages/AjudaPage";
-import { AlarmeFotosPage } from "./pages/AlarmeFotosPage";
-import { AlarmeProgressoPage } from "./pages/AlarmeProgressoPage";
+import { ExtintoresHubPage } from "./pages/ExtintoresHubPage";
+import { AlarmeHubPage } from "./pages/AlarmeHubPage";
 import { RequireAuth } from "./components/RequireAuth";
 import { RequireOwner } from "./components/RequireOwner";
 
@@ -30,16 +27,19 @@ export function App() {
             <Route element={<Shell />}>
               <Route index element={<Navigate to="/dashboard" replace />} />
               <Route path="/dashboard" element={<DashboardPage />} />
-              {/* Extintores = the regional inventory: region cards → region detail → extinguisher detail */}
-              <Route path="/extintores" element={<RegioesPage />} />
+              {/* Fase 1 hub — tabs (Inventário / Fichas / Busca) keyed by path.
+                  Deep detail pages stay standalone (region detail, extinguisher detail). */}
+              <Route path="/extintores" element={<ExtintoresHubPage />} />
+              <Route path="/fichas" element={<ExtintoresHubPage />} />
+              <Route path="/busca" element={<ExtintoresHubPage />} />
               <Route path="/regioes/:regiao" element={<RegiaoDetailPage />} />
               <Route path="/extintores/:id" element={<ExtintorDetailPage />} />
               <Route path="/inspetores" element={<InspetoresPage />} />
               <Route path="/destinatarios" element={<DestinatariosPage />} />
-              <Route path="/fichas" element={<FichasPage />} />
-              <Route path="/busca" element={<BuscaPage />} />
-              <Route path="/alarme/progresso" element={<AlarmeProgressoPage />} />
-              <Route path="/alarme/fotos" element={<AlarmeFotosPage />} />
+              {/* Fase 2 hub — tabs (Progresso / Registro fotográfico / RDOs) keyed by path */}
+              <Route path="/alarme" element={<AlarmeHubPage />} />
+              <Route path="/alarme/fotos" element={<AlarmeHubPage />} />
+              <Route path="/alarme/rdos" element={<AlarmeHubPage />} />
               <Route path="/ajuda" element={<AjudaPage />} />
 
               {/* Owner-only routes — backend also enforces 403 */}

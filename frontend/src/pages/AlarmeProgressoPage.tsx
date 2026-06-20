@@ -1,15 +1,14 @@
 import { useEffect, useState, useCallback } from "react";
 import {
-  alarmeApi, rdosApi,
+  alarmeApi,
   type RelatorioProgresso, type ContagemStatus, type GrupoCentral,
-  type DispositivoBusca, type PaginaBuscaAlarme, type FiltrosAlarme, type RdoRow,
+  type DispositivoBusca, type PaginaBuscaAlarme, type FiltrosAlarme,
 } from "../lib/api";
 import { toast } from "../components/Toast";
 import {
-  Activity, AlertTriangle, FileText, Camera, Download, Loader2,
-  ChevronDown, ChevronRight, Filter, CheckCircle2, FileDown, Send,
+  Activity, AlertTriangle, Download, Loader2,
+  ChevronDown, ChevronRight, Filter, CheckCircle2, FileDown,
 } from "lucide-react";
-import { RdoEnviarModal } from "../components/RdoEnviarModal";
 
 const STATUS_META: Record<string, { label: string; color: string; bar: string }> = {
   pendente:   { label: "Pendente",   color: "text-gray-600",   bar: "bg-gray-400" },
@@ -28,12 +27,6 @@ const TIPOS = [
   { v: "modulo_supervisao", l: "Módulo de supervisão" },
   { v: "isolador", l: "Isolador" },
 ];
-
-function dataBR(iso: string | null): string {
-  if (!iso) return "—";
-  const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  return m ? `${m[3]}/${m[2]}/${m[1]}` : iso;
-}
 
 // A stacked progress bar over the four statuses.
 function BarraStatus({ c }: { c: ContagemStatus }) {
@@ -59,7 +52,10 @@ function BarraStatus({ c }: { c: ContagemStatus }) {
   );
 }
 
-export function AlarmeProgressoPage() {
+// `embedded` hides the standalone page header when rendered inside the Fase 2
+// hub (the hub already shows the title + tabs). The RDO timeline lives in its
+// own tab now, so it's not rendered here.
+export function AlarmeProgressoPage({ embedded = false }: { embedded?: boolean } = {}) {
   const [prog, setProg] = useState<RelatorioProgresso | null>(null);
   const [carregando, setCarregando] = useState(true);
 
@@ -72,15 +68,17 @@ export function AlarmeProgressoPage() {
 
   return (
     <div className="space-y-6">
-      <header>
-        <div className="flex items-center gap-2 text-brand-600">
-          <Activity className="w-5 h-5" />
-          <h1 className="text-xl font-bold text-gray-900">Progresso de instalação — Alarme</h1>
-        </div>
-        <p className="text-sm text-gray-500 mt-1">
-          Andamento por central e laço, lacunas do projeto e relatórios diários (RDO).
-        </p>
-      </header>
+      {!embedded && (
+        <header>
+          <div className="flex items-center gap-2 text-brand-600">
+            <Activity className="w-5 h-5" />
+            <h1 className="text-xl font-bold text-gray-900">Progresso de instalação — Alarme</h1>
+          </div>
+          <p className="text-sm text-gray-500 mt-1">
+            Andamento por central e laço, lacunas do projeto e relatórios diários (RDO).
+          </p>
+        </header>
+      )}
 
       {carregando ? (
         <div className="card p-10 text-center text-gray-400"><Loader2 className="w-8 h-8 mx-auto animate-spin" /></div>
@@ -90,7 +88,6 @@ export function AlarmeProgressoPage() {
           <ReconciliacaoCard prog={prog} />
           <CentraisProgresso centrais={prog.centrais} />
           <BuscaDispositivos />
-          <RdoTimeline />
         </>
       ) : (
         <p className="text-sm text-gray-500">Sem dados de progresso.</p>
@@ -335,94 +332,6 @@ function BuscaDispositivos() {
           )}
         </>
       )}
-    </div>
-  );
-}
-
-// ── RDO timeline ────────────────────────────────────────────────────────────────
-function RdoTimeline() {
-  const [rdos, setRdos] = useState<RdoRow[]>([]);
-  const [carregando, setCarregando] = useState(true);
-  const [enviar, setEnviar] = useState<RdoRow | null>(null);
-  const [baixando, setBaixando] = useState<string | null>(null);
-
-  const carregar = useCallback(() => {
-    setCarregando(true);
-    rdosApi.listar()
-      .then((r) => setRdos(r.rdos))
-      .catch((err) => toast(err instanceof Error ? err.message : "Erro ao carregar RDOs.", "erro"))
-      .finally(() => setCarregando(false));
-  }, []);
-  useEffect(() => carregar(), [carregar]);
-
-  const baixarPdf = async (r: RdoRow) => {
-    setBaixando(r.id);
-    try { await rdosApi.baixarPdf(r.id, r.data); }
-    catch (err) { toast(err instanceof Error ? err.message : "Erro ao gerar PDF.", "erro"); }
-    finally { setBaixando(null); }
-  };
-
-  const exportarLista = async (formato: "pdf" | "csv") => {
-    try { await rdosApi.relatorio({}, formato); }
-    catch (err) { toast(err instanceof Error ? err.message : "Erro ao exportar.", "erro"); }
-  };
-
-  return (
-    <div className="card p-5 space-y-3">
-      <div className="flex items-center gap-2">
-        <FileText className="w-4 h-4 text-gray-500" />
-        <h2 className="text-sm font-bold text-gray-900">Relatórios diários (RDO)</h2>
-        <div className="ml-auto flex gap-2">
-          <button onClick={() => exportarLista("pdf")} className="btn-ghost text-xs"><FileDown className="w-3.5 h-3.5 mr-1" />PDF</button>
-          <button onClick={() => exportarLista("csv")} className="btn-ghost text-xs"><Download className="w-3.5 h-3.5 mr-1" />CSV</button>
-        </div>
-      </div>
-
-      {carregando ? (
-        <div className="py-6 text-center text-gray-400"><Loader2 className="w-6 h-6 mx-auto animate-spin" /></div>
-      ) : rdos.length === 0 ? (
-        <p className="text-sm text-gray-500">Nenhum RDO registrado ainda.</p>
-      ) : (
-        <ul className="divide-y divide-gray-100">
-          {rdos.map((r) => {
-            const totalDisp = r.dispositivos_instalados
-              ? Object.values(r.dispositivos_instalados).reduce((s, n) => s + (Number(n) || 0), 0) : 0;
-            return (
-              <li key={r.id} className="py-3 flex flex-wrap items-center gap-x-4 gap-y-2">
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-semibold text-gray-900">{dataBR(r.data)}</span>
-                    <span className={`badge ${r.status === "concluido" ? "badge-green" : r.status === "cancelado" ? "badge-gray" : "badge-brand"}`}>
-                      {r.status ?? "—"}
-                    </span>
-                  </div>
-                  <p className="text-xs text-gray-500 truncate">
-                    {r.responsavel ?? "—"}{r.central ? ` · ${r.central}` : ""}{r.frente_trabalho ? ` · ${r.frente_trabalho}` : ""}
-                    {" · "}{totalDisp} disp. · {(r.fotos_dia ?? []).length} foto(s)
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <a
-                    href={`/alarme/fotos?data=${encodeURIComponent(r.data ?? "")}`}
-                    className="btn-ghost text-xs"
-                    title="Registro fotográfico do dia"
-                  >
-                    <Camera className="w-3.5 h-3.5 mr-1" /> Fotos
-                  </a>
-                  <button onClick={() => baixarPdf(r)} className="btn-ghost text-xs" disabled={baixando === r.id}>
-                    {baixando === r.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <><FileText className="w-3.5 h-3.5 mr-1" />PDF</>}
-                  </button>
-                  <button onClick={() => setEnviar(r)} className="btn-secondary text-xs">
-                    <Send className="w-3.5 h-3.5 mr-1" /> Enviar
-                  </button>
-                </div>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-
-      {enviar && <RdoEnviarModal rdo={enviar} onClose={() => setEnviar(null)} />}
     </div>
   );
 }

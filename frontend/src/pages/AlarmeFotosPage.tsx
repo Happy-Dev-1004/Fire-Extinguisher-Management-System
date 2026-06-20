@@ -43,20 +43,22 @@ function hojeInput(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-export function AlarmeFotosPage() {
+export function AlarmeFotosPage({ embedded = false }: { embedded?: boolean } = {}) {
   const [aba, setAba] = useState<"data" | "armazenamento">("data");
 
   return (
     <div className="space-y-6">
-      <header>
-        <div className="flex items-center gap-2 text-brand-600">
-          <Camera className="w-5 h-5" />
-          <h1 className="text-xl font-bold text-gray-900">Registro fotográfico — Alarme</h1>
-        </div>
-        <p className="text-sm text-gray-500 mt-1">
-          Galeria de fotos dos dispositivos instalados e relatório de armazenamento.
-        </p>
-      </header>
+      {!embedded && (
+        <header>
+          <div className="flex items-center gap-2 text-brand-600">
+            <Camera className="w-5 h-5" />
+            <h1 className="text-xl font-bold text-gray-900">Registro fotográfico — Alarme</h1>
+          </div>
+          <p className="text-sm text-gray-500 mt-1">
+            Galeria de fotos dos dispositivos instalados e relatório de armazenamento.
+          </p>
+        </header>
+      )}
 
       {/* Segmented tabs */}
       <div className="inline-flex rounded-lg bg-gray-100 p-1">

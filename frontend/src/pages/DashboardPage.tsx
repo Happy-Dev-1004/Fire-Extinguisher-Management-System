@@ -1,142 +1,291 @@
-import { useAuth } from "../hooks/useAuth";
-import { Flame, HardHat, Send, Settings, ArrowRight, Shield } from "lucide-react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { useAuth } from "../hooks/useAuth";
+import {
+  Flame, Bell, Wrench, ArrowRight, Lock, AlertTriangle, Loader2,
+  MapPin, Activity, Clock, FileText, ClipboardCheck,
+} from "lucide-react";
+import { regioesApi, alarmeApi, meApi, type RegiaoProgresso, type RelatorioProgresso, type ItemAtividade } from "../lib/api";
+import { GaugeDonut } from "../components/GaugeDonut";
+import { toast } from "../components/Toast";
 
-const QUICK_LINKS = [
-  {
-    to: "/extintores",
-    label: "Extintores",
-    desc: "Cadastre e gerencie extintores por unidade e setor.",
-    Icon: Flame,
-    color: "bg-orange-50 text-orange-600",
-  },
-  {
-    to: "/inspetores",
-    label: "Inspetores",
-    desc: "Gerencie a equipe de inspeção e acesso via WhatsApp.",
-    Icon: HardHat,
-    color: "bg-sky-50 text-sky-600",
-  },
-  {
-    to: "/destinatarios",
-    label: "Destinatários",
-    desc: "Configure quem recebe as fichas por unidade.",
-    Icon: Send,
-    color: "bg-violet-50 text-violet-600",
-  },
-];
-
-const OWNER_LINKS = [
-  {
-    to: "/configuracoes",
-    label: "Configurações",
-    desc: "Chaves de API e segredos operacionais (criptografados).",
-    Icon: Settings,
-  },
-];
+// Greeting by local hour.
+function saudacao(): string {
+  const h = new Date().getHours();
+  if (h < 12) return "Bom dia";
+  if (h < 18) return "Boa tarde";
+  return "Boa noite";
+}
 
 export function DashboardPage() {
   const { profile } = useAuth();
-  const isOwner = profile?.role === "owner";
+
+  const [regioes, setRegioes] = useState<RegiaoProgresso[] | null>(null);
+  const [cicloMes, setCicloMes] = useState<string | null>(null);
+  const [prog, setProg] = useState<RelatorioProgresso | null>(null);
+  const [atividade, setAtividade] = useState<ItemAtividade[]>([]);
+  const [carregando, setCarregando] = useState(true);
+
+  useEffect(() => {
+    Promise.allSettled([regioesApi.listar(), alarmeApi.progresso(), meApi.atividadeRecente()])
+      .then(([r1, r2, r3]) => {
+        if (r1.status === "fulfilled") { setRegioes(r1.value.regioes); setCicloMes(r1.value.ciclo?.mes_referencia ?? null); }
+        else toast("Não foi possível carregar o progresso da Fase 1.", "erro");
+        if (r2.status === "fulfilled") setProg(r2.value);
+        else toast("Não foi possível carregar o progresso da Fase 2.", "erro");
+        if (r3.status === "fulfilled") setAtividade(r3.value.itens);
+      })
+      .finally(() => setCarregando(false));
+  }, []);
+
+  // ── Phase 1 rollup ──
+  const f1 = (() => {
+    const rs = regioes ?? [];
+    const totalEsperado = rs.reduce((s, r) => s + r.total_esperado, 0);
+    const cadastrado = rs.reduce((s, r) => s + r.total_cadastrado, 0);
+    const inspecionados = rs.reduce((s, r) => s + r.inspecionados, 0);
+    const pctInsp = totalEsperado ? Math.round((inspecionados / totalEsperado) * 100) : 0;
+    return { regioes: rs.length, totalEsperado, cadastrado, inspecionados, pctInsp };
+  })();
+
+  // ── Phase 2 rollup ──
+  const f2 = (() => {
+    if (!prog) return { total: 0, esperado: 534, pctInstalado: 0, faltam: 534 };
+    return {
+      total: prog.geral.total,
+      esperado: prog.total_esperado,
+      pctInstalado: prog.geral.pct_instalado,
+      faltam: prog.reconciliacao.total_faltam,
+    };
+  })();
 
   return (
     <div className="space-y-8 animate-fade-in">
-      {/* Page header */}
+      {/* Header */}
       <div>
-        <h1 className="page-title">Dashboard</h1>
+        <h1 className="page-title">{saudacao()}, {profile?.nome?.split(" ")[0] ?? ""}</h1>
         <p className="text-sm text-gray-500 mt-1">
-          Bem-vindo de volta,{" "}
-          <span className="font-semibold text-gray-700">{profile?.nome}</span>.
-          Aqui está o seu painel de controle.
+          Visão geral do andamento das fases do projeto.
         </p>
       </div>
 
-      {/* Identity cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="card p-5 flex items-center gap-4">
-          <div className="w-11 h-11 rounded-xl bg-brand-50 flex items-center justify-center shrink-0">
-            <Shield className="w-5 h-5 text-brand-600" />
+      {carregando ? (
+        <div className="card p-12 text-center text-gray-400"><Loader2 className="w-8 h-8 mx-auto animate-spin" /></div>
+      ) : (
+        <>
+          {/* Phase cards */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            <FaseCard
+              numero={1}
+              titulo="Extintores"
+              Icon={Flame}
+              cor="#ea580c"
+              corBg="bg-orange-50 text-orange-600"
+              to="/extintores"
+              pct={f1.pctInsp}
+              linhaPrincipal={`${f1.cadastrado} de ${f1.totalEsperado} cadastrados`}
+              linhaSecundaria={`${f1.inspecionados} inspecionados${cicloMes ? ` · ${cicloMes}` : ""} · ${f1.regioes} regiões`}
+              legendaGauge="inspecionado"
+            />
+            <FaseCard
+              numero={2}
+              titulo="Alarme de incêndio"
+              Icon={Bell}
+              cor="#dc2626"
+              corBg="bg-brand-50 text-brand-600"
+              to="/alarme"
+              pct={f2.pctInstalado}
+              linhaPrincipal={`${f2.total} de ${f2.esperado} dispositivos`}
+              linhaSecundaria={f2.faltam > 0 ? `${f2.faltam} pontos pendentes no projeto` : "Inventário completo"}
+              legendaGauge="instalado"
+            />
+            <FaseBloqueada />
           </div>
-          <div>
-            <p className="text-xs font-medium text-gray-400 uppercase tracking-wide">Perfil de acesso</p>
-            <p className="text-base font-bold text-gray-900 mt-0.5">
-              {isOwner ? "Proprietário" : "Membro"}
-            </p>
-          </div>
-        </div>
 
-        <div className="card p-5 sm:col-span-2 flex items-center gap-4">
-          <div className="w-11 h-11 rounded-xl bg-gray-100 flex items-center justify-center shrink-0 text-xl select-none">
-            {profile?.nome?.[0]?.toUpperCase() ?? "?"}
+          {/* Detail row: Phase 1 per-region + Phase 2 BOM gaps */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <RegioesProgresso regioes={regioes ?? []} />
+            <BomGaps prog={prog} />
           </div>
-          <div className="min-w-0">
-            <p className="text-xs font-medium text-gray-400 uppercase tracking-wide">Conta</p>
-            <p className="text-base font-bold text-gray-900 truncate mt-0.5">{profile?.nome}</p>
-            <p className="text-xs text-gray-400 truncate">{profile?.email}</p>
-          </div>
-        </div>
+
+          {/* Recent activity across phases */}
+          <AtividadeRecente itens={atividade} />
+        </>
+      )}
+    </div>
+  );
+}
+
+// ── Recent activity (RDOs + inspections) ───────────────────────────────────────
+function dataBR(iso: string | null): string {
+  if (!iso) return "—";
+  const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : iso;
+}
+
+function AtividadeRecente({ itens }: { itens: ItemAtividade[] }) {
+  return (
+    <div className="card p-5">
+      <div className="flex items-center gap-2 mb-4">
+        <span className="w-7 h-7 rounded-lg bg-gray-100 text-gray-500 flex items-center justify-center"><Clock className="w-4 h-4" /></span>
+        <h2 className="text-sm font-bold text-gray-900">Atividade recente</h2>
       </div>
+      {itens.length === 0 ? (
+        <p className="text-sm text-gray-500">Nenhuma atividade registrada ainda.</p>
+      ) : (
+        <ul className="divide-y divide-gray-100">
+          {itens.map((it) => {
+            const isRdo = it.tipo === "rdo";
+            const Icon = isRdo ? FileText : ClipboardCheck;
+            const cor = isRdo ? "bg-brand-50 text-brand-600" : "bg-orange-50 text-orange-600";
+            return (
+              <li key={`${it.tipo}-${it.id}`} className="py-2.5 flex items-center gap-3">
+                <span className={`w-8 h-8 rounded-lg ${cor} flex items-center justify-center shrink-0`}>
+                  <Icon className="w-4 h-4" />
+                </span>
+                <Link to={it.link} className="flex-1 min-w-0 group">
+                  <p className="text-sm font-medium text-gray-900 truncate group-hover:text-brand-600">{it.titulo}</p>
+                  <p className="text-xs text-gray-500 truncate">{it.descricao}</p>
+                </Link>
+                <div className="text-right shrink-0">
+                  <p className="text-xs text-gray-500">{dataBR(it.data)}</p>
+                  {it.status && (
+                    <span className={`badge ${
+                      it.status === "concluido" || it.status === "Conforme" ? "badge-green"
+                        : it.status === "cancelado" ? "badge-gray"
+                        : it.status === "Reprovado" ? "badge-red"
+                        : "badge-brand"
+                    } mt-0.5`}>{it.status}</span>
+                  )}
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}
 
-      {/* Quick access */}
-      <section>
-        <h2 className="section-title mb-4">Acesso rápido</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {QUICK_LINKS.map(({ to, label, desc, Icon, color }) => (
-            <Link
-              key={to}
-              to={to}
-              className="card-hover p-5 flex flex-col gap-4 group"
-            >
-              <div className={`w-10 h-10 rounded-xl ${color} flex items-center justify-center`}>
-                <Icon className="w-5 h-5" />
+// ── Phase summary card with gauge ──────────────────────────────────────────────
+function FaseCard({
+  numero, titulo, Icon, cor, corBg, to, pct, linhaPrincipal, linhaSecundaria, legendaGauge,
+}: {
+  numero: number; titulo: string; Icon: React.ElementType; cor: string; corBg: string;
+  to: string; pct: number; linhaPrincipal: string; linhaSecundaria: string; legendaGauge: string;
+}) {
+  return (
+    <Link to={to} className="card-hover p-5 flex items-center gap-4 group">
+      <GaugeDonut pct={pct} cor={cor} legenda={legendaGauge} tamanho={104} />
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2">
+          <span className={`w-7 h-7 rounded-lg ${corBg} flex items-center justify-center shrink-0`}>
+            <Icon className="w-4 h-4" />
+          </span>
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">Fase {numero}</p>
+        </div>
+        <p className="font-bold text-gray-900 mt-1.5">{titulo}</p>
+        <p className="text-sm text-gray-700 mt-0.5">{linhaPrincipal}</p>
+        <p className="text-xs text-gray-400 mt-0.5 truncate">{linhaSecundaria}</p>
+        <span className="inline-flex items-center gap-1 text-xs font-medium mt-2 group-hover:gap-2 transition-all" style={{ color: cor }}>
+          Abrir <ArrowRight className="w-3 h-3" />
+        </span>
+      </div>
+    </Link>
+  );
+}
+
+// ── Phase 3 (locked) ──
+function FaseBloqueada() {
+  return (
+    <div className="card p-5 flex items-center gap-4 border-dashed opacity-90">
+      <div className="w-[104px] h-[104px] rounded-full bg-gray-50 border-2 border-dashed border-gray-200 flex items-center justify-center shrink-0">
+        <Lock className="w-7 h-7 text-gray-300" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2">
+          <span className="w-7 h-7 rounded-lg bg-gray-100 text-gray-400 flex items-center justify-center shrink-0">
+            <Wrench className="w-4 h-4" />
+          </span>
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">Fase 3</p>
+        </div>
+        <p className="font-bold text-gray-500 mt-1.5">Instalação</p>
+        <p className="text-sm text-gray-400 mt-0.5">Em breve</p>
+        <p className="text-xs text-gray-400 mt-0.5">Disponível após a conclusão da Fase 2.</p>
+        <span className="inline-flex items-center gap-1 text-xs font-medium text-gray-300 mt-2">Bloqueada</span>
+      </div>
+    </div>
+  );
+}
+
+// ── Phase 1: per-region inspection bars ────────────────────────────────────────
+function RegioesProgresso({ regioes }: { regioes: RegiaoProgresso[] }) {
+  const ordenadas = [...regioes].sort((a, b) => b.pct_inspecionado - a.pct_inspecionado);
+  return (
+    <div className="card p-5">
+      <div className="flex items-center gap-2 mb-4">
+        <span className="w-7 h-7 rounded-lg bg-orange-50 text-orange-600 flex items-center justify-center"><MapPin className="w-4 h-4" /></span>
+        <h2 className="text-sm font-bold text-gray-900">Fase 1 · Progresso por região</h2>
+        <Link to="/extintores" className="ml-auto text-xs text-brand-600 hover:underline">Ver tudo</Link>
+      </div>
+      {ordenadas.length === 0 ? (
+        <p className="text-sm text-gray-500">Sem regiões cadastradas.</p>
+      ) : (
+        <div className="space-y-2.5">
+          {ordenadas.map((r) => (
+            <div key={r.nome} className="flex items-center gap-3">
+              <span className="text-xs text-gray-600 w-32 shrink-0 truncate" title={r.nome}>{r.nome}</span>
+              <div className="flex-1 h-2.5 rounded-full bg-gray-100 overflow-hidden">
+                <div className="h-full bg-orange-500" style={{ width: `${Math.min(100, r.pct_inspecionado)}%` }} />
               </div>
-              <div className="flex-1">
-                <p className="font-semibold text-gray-900 text-sm">{label}</p>
-                <p className="text-xs text-gray-500 mt-1 leading-relaxed">{desc}</p>
-              </div>
-              <div className="flex items-center gap-1 text-xs font-medium text-brand-600 group-hover:gap-2 transition-all">
-                Acessar <ArrowRight className="w-3 h-3" />
-              </div>
-            </Link>
+              <span className="text-xs text-gray-700 w-24 text-right shrink-0">
+                {r.inspecionados}/{r.total_esperado} · {r.pct_inspecionado}%
+              </span>
+            </div>
           ))}
         </div>
-      </section>
-
-      {/* Owner-only section */}
-      {isOwner && (
-        <section>
-          <h2 className="section-title mb-4 flex items-center gap-1.5">
-            <Shield className="w-3.5 h-3.5" /> Administração (proprietário)
-          </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {OWNER_LINKS.map(({ to, label, desc, Icon }) => (
-              <Link
-                key={to}
-                to={to}
-                className="card-hover p-5 flex items-center gap-4 group"
-              >
-                <div className="w-10 h-10 rounded-xl bg-gray-100 flex items-center justify-center shrink-0">
-                  <Icon className="w-5 h-5 text-gray-500" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-gray-900 text-sm">{label}</p>
-                  <p className="text-xs text-gray-500 mt-0.5 leading-relaxed truncate">{desc}</p>
-                </div>
-                <ArrowRight className="w-4 h-4 text-gray-300 group-hover:text-brand-600 transition-colors shrink-0" />
-              </Link>
-            ))}
-          </div>
-        </section>
       )}
+    </div>
+  );
+}
 
-      {/* Coming soon */}
-      <div className="card p-8 text-center border-dashed">
-        <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-3">
-          <Flame className="w-6 h-6 text-gray-300" />
-        </div>
-        <p className="text-sm font-medium text-gray-500">Estatísticas e gráficos em breve</p>
-        <p className="text-xs text-gray-400 mt-1">Resumo de inspeções, vencimentos e irregularidades por unidade.</p>
+// ── Phase 2: BOM gaps ──────────────────────────────────────────────────────────
+function BomGaps({ prog }: { prog: RelatorioProgresso | null }) {
+  const linhas = (prog?.reconciliacao.linhas ?? []).filter((l) => l.esperado > 0);
+  return (
+    <div className="card p-5">
+      <div className="flex items-center gap-2 mb-4">
+        <span className="w-7 h-7 rounded-lg bg-brand-50 text-brand-600 flex items-center justify-center"><Activity className="w-4 h-4" /></span>
+        <h2 className="text-sm font-bold text-gray-900">Fase 2 · Lacunas do projeto</h2>
+        <Link to="/alarme" className="ml-auto text-xs text-brand-600 hover:underline">Ver tudo</Link>
       </div>
+      {linhas.length === 0 ? (
+        <p className="text-sm text-gray-500">Sem dados de dispositivos.</p>
+      ) : (
+        <div className="space-y-2.5">
+          {linhas.map((l) => {
+            const pct = l.esperado > 0 ? Math.round((l.cadastrados / l.esperado) * 100) : 0;
+            return (
+              <div key={l.tipo} className="flex items-center gap-3">
+                <span className="text-xs text-gray-600 w-36 shrink-0 truncate" title={l.label}>{l.label}</span>
+                <div className="flex-1 h-2.5 rounded-full bg-gray-100 overflow-hidden">
+                  <div className={`h-full ${l.faltam > 0 ? "bg-amber-500" : "bg-green-500"}`} style={{ width: `${Math.min(100, pct)}%` }} />
+                </div>
+                <span className="text-xs text-gray-700 w-24 text-right shrink-0">
+                  {l.cadastrados}/{l.esperado}
+                  {l.faltam > 0 && <span className="text-amber-700"> · −{l.faltam}</span>}
+                </span>
+              </div>
+            );
+          })}
+          {prog && prog.reconciliacao.total_faltam > 0 && (
+            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 flex items-start gap-2 mt-3">
+              <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+              {prog.reconciliacao.total_faltam} dispositivos ainda não cadastrados — mapeamento em andamento.
+            </p>
+          )}
+        </div>
+      )}
     </div>
   );
 }

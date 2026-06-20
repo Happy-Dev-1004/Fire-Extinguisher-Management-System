@@ -37,7 +37,7 @@ const EMPTY: PaginaBusca = {
   contagens: { total: 0, em_dia: 0, proximo: 0, vencido: 0, descartado: 0, indeterminado: 0, com_irregularidade: 0 },
 };
 
-export function BuscaPage() {
+export function BuscaPage({ embedded = false }: { embedded?: boolean } = {}) {
   const navigate  = useNavigate();
 
   // ── Filter state ────────────────────────────────────────────────────────────
@@ -156,7 +156,7 @@ export function BuscaPage() {
       {/* Header */}
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Busca e Relatórios</h1>
+          {!embedded && <h1 className="text-2xl font-bold text-gray-900">Busca e Relatórios</h1>}
           <p className="text-sm text-gray-500 mt-0.5">
             Filtre extintores por qualquer combinação de critérios e exporte o resultado.
           </p>

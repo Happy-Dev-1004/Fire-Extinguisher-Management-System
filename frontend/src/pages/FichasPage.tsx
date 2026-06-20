@@ -18,7 +18,7 @@ function mesAtual(): string {
   return `${MESES[d.getMonth()]}/${d.getFullYear()}`;
 }
 
-export function FichasPage() {
+export function FichasPage({ embedded = false }: { embedded?: boolean } = {}) {
   const [unidades, setUnidades]     = useState<string[]>([]);
   const [carregando, setCarregando] = useState(true);
 
@@ -129,12 +129,14 @@ export function FichasPage() {
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
-      <div>
-        <h1 className="page-title">Fichas de Inspeção</h1>
-        <p className="text-sm text-gray-500 mt-0.5">
-          Gere e envie as fichas mensais por unidade via WhatsApp ou e-mail.
-        </p>
-      </div>
+      {!embedded && (
+        <div>
+          <h1 className="page-title">Fichas de Inspeção</h1>
+          <p className="text-sm text-gray-500 mt-0.5">
+            Gere e envie as fichas mensais por unidade via WhatsApp ou e-mail.
+          </p>
+        </div>
+      )}
 
       {/* Current month banner */}
       <div className="card p-4 flex items-center gap-3">

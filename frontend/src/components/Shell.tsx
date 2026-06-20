@@ -4,7 +4,7 @@ import { useAuth } from "../hooks/useAuth";
 import { ToastContainer } from "./Toast";
 import {
   LayoutDashboard, Flame, HardHat, Send, Settings, Users,
-  LogOut, Menu, X, ChevronRight, Shield, FileText, Search, HelpCircle, Camera, Activity,
+  LogOut, Menu, X, ChevronRight, Shield, FileText, Search, HelpCircle, Camera, Activity, Bell,
 } from "lucide-react";
 
 interface NavItem {
@@ -14,19 +14,47 @@ interface NavItem {
   ownerOnly?: boolean;
 }
 
-const NAV_ITEMS: NavItem[] = [
-  { to: "/dashboard",     label: "Dashboard",     Icon: LayoutDashboard },
-  { to: "/extintores",    label: "Extintores",     Icon: Flame },
-  { to: "/fichas",        label: "Fichas",         Icon: FileText },
-  { to: "/busca",         label: "Busca / Relatórios", Icon: Search },
-  { to: "/alarme/progresso", label: "Progresso — Alarme", Icon: Activity },
-  { to: "/alarme/fotos",  label: "Fotos — Alarme", Icon: Camera },
-  { to: "/inspetores",    label: "Inspetores",     Icon: HardHat },
-  { to: "/destinatarios", label: "Destinatários",  Icon: Send },
-  { to: "/ajuda",         label: "Ajuda",          Icon: HelpCircle },
-  { to: "/configuracoes", label: "Configurações",  Icon: Settings, ownerOnly: true },
-  { to: "/equipe",        label: "Equipe",         Icon: Users,    ownerOnly: true },
+interface NavGroup {
+  // Section header shown above the group. null = no header (top-level items).
+  titulo: string | null;
+  items: NavItem[];
+}
+
+// Nav grouped by project phase so Fase 1 (extintores) and Fase 2 (alarme) are
+// visually distinct. Each phase's functions live under its own labeled section.
+const NAV_GROUPS: NavGroup[] = [
+  {
+    titulo: null,
+    items: [{ to: "/dashboard", label: "Dashboard", Icon: LayoutDashboard }],
+  },
+  {
+    titulo: "Fase 1 · Extintores",
+    items: [
+      { to: "/extintores", label: "Extintores",          Icon: Flame },
+      { to: "/fichas",     label: "Fichas",              Icon: FileText },
+      { to: "/busca",      label: "Busca / Relatórios",  Icon: Search },
+    ],
+  },
+  {
+    titulo: "Fase 2 · Alarme de incêndio",
+    items: [
+      { to: "/alarme",        label: "Progresso",            Icon: Activity },
+      { to: "/alarme/fotos",  label: "Registro fotográfico", Icon: Camera },
+      { to: "/alarme/rdos",   label: "RDOs",                 Icon: FileText },
+    ],
+  },
+  {
+    titulo: "Geral",
+    items: [
+      { to: "/inspetores",    label: "Inspetores",    Icon: HardHat },
+      { to: "/destinatarios", label: "Destinatários", Icon: Send },
+      { to: "/ajuda",         label: "Ajuda",         Icon: HelpCircle },
+      { to: "/configuracoes", label: "Configurações", Icon: Settings, ownerOnly: true },
+      { to: "/equipe",        label: "Equipe",        Icon: Users,    ownerOnly: true },
+    ],
+  },
 ];
+void Bell;
 
 export function Shell() {
   const { profile, signOut } = useAuth();
@@ -46,9 +74,13 @@ export function Shell() {
     return () => document.removeEventListener("mousedown", handler);
   }, [sidebarOpen]);
 
-  const visibleItems = NAV_ITEMS.filter(
-    (item) => !item.ownerOnly || profile?.role === "owner"
-  );
+  // Filter owner-only items, then drop any group left empty.
+  const visibleGroups = NAV_GROUPS
+    .map((g) => ({
+      ...g,
+      items: g.items.filter((item) => !item.ownerOnly || profile?.role === "owner"),
+    }))
+    .filter((g) => g.items.length > 0);
 
   const handleSignOut = async () => {
     await signOut();
@@ -81,34 +113,41 @@ export function Shell() {
         )}
       </div>
 
-      {/* Nav */}
-      <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-0.5">
-        <p className="section-title px-3 pb-2">Menu</p>
-        {visibleItems.map(({ to, label, Icon, ownerOnly }) => (
-          <NavLink
-            key={to}
-            to={to}
-            className={({ isActive }) =>
-              `group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-150 ${
-                isActive
-                  ? "bg-brand-600 text-white shadow-sm"
-                  : ownerOnly
-                  ? "text-gray-500 hover:bg-gray-100 hover:text-gray-700"
-                  : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
-              }`
-            }
-          >
-            {({ isActive }) => (
-              <>
-                <Icon className={`w-4 h-4 shrink-0 ${isActive ? "text-white" : "text-gray-400 group-hover:text-gray-600"}`} />
-                <span className="flex-1">{label}</span>
-                {ownerOnly && !false && (
-                  <Shield className={`w-3 h-3 shrink-0 ${isActive ? "text-white/60" : "text-gray-300"}`} />
+      {/* Nav — grouped by phase */}
+      <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-4">
+        {visibleGroups.map((grupo, gi) => (
+          <div key={grupo.titulo ?? `g${gi}`} className="space-y-0.5">
+            {grupo.titulo && <p className="section-title px-3 pb-1.5">{grupo.titulo}</p>}
+            {grupo.items.map(({ to, label, Icon, ownerOnly }) => (
+              <NavLink
+                key={to}
+                to={to}
+                // Phase-2 hub at /alarme should stay highlighted on its sub-routes
+                // (/alarme/fotos etc.) only for the exact hub; sub-items handle their own.
+                end={to === "/alarme"}
+                className={({ isActive }) =>
+                  `group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-150 ${
+                    isActive
+                      ? "bg-brand-600 text-white shadow-sm"
+                      : ownerOnly
+                      ? "text-gray-500 hover:bg-gray-100 hover:text-gray-700"
+                      : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+                  }`
+                }
+              >
+                {({ isActive }) => (
+                  <>
+                    <Icon className={`w-4 h-4 shrink-0 ${isActive ? "text-white" : "text-gray-400 group-hover:text-gray-600"}`} />
+                    <span className="flex-1">{label}</span>
+                    {ownerOnly && (
+                      <Shield className={`w-3 h-3 shrink-0 ${isActive ? "text-white/60" : "text-gray-300"}`} />
+                    )}
+                    {isActive && <ChevronRight className="w-3 h-3 text-white/60 shrink-0" />}
+                  </>
                 )}
-                {isActive && <ChevronRight className="w-3 h-3 text-white/60 shrink-0" />}
-              </>
-            )}
-          </NavLink>
+              </NavLink>
+            ))}
+          </div>
         ))}
       </nav>
 
