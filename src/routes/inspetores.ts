@@ -27,6 +27,12 @@ const InspetorBodySchema = z.object({
   // this unit, so they never need to type a "unidade:" command in WhatsApp.
   unidade:  z.string().min(1, "Unidade é obrigatória."),
   ativo:    z.boolean().optional(),
+  // Per-phase WhatsApp permissions. Phase 1 = extinguisher inspection; Phase 2 =
+  // fire-alarm (RDO + device photos). The webhook routes each phase only to
+  // inspectors granted that phase, so the two never collide and no tokens are
+  // spent on the wrong phase. Default: Fase 1 on, Fase 2 off.
+  pode_fase1: z.boolean().optional(),
+  pode_fase2: z.boolean().optional(),
 });
 
 // ── GET /inspetores ───────────────────────────────────────────────────────────
@@ -35,7 +41,7 @@ const InspetorBodySchema = z.object({
 router.get("/", async (_req: Request, res: Response) => {
   const { data, error } = await supabaseAdmin
     .from("inspetores")
-    .select("id, nome, telefone, telefone_normalizado, unidade_contexto, ativo, em_sessao, sessao_atividade_em, created_at, updated_at")
+    .select("id, nome, telefone, telefone_normalizado, unidade_contexto, ativo, pode_fase1, pode_fase2, em_sessao, sessao_atividade_em, em_sessao_fase2, sessao_fase2_atividade_em, created_at, updated_at")
     .order("nome");
 
   if (error) {
@@ -43,16 +49,25 @@ router.get("/", async (_req: Request, res: Response) => {
     return res.status(500).json({ erro: "Erro ao buscar inspetores." });
   }
 
-  // Expose unidade_contexto as "unidade", and compute whether the session is
-  // genuinely open (apply the same 3h inactivity backstop used by the webhook,
+  // Expose unidade_contexto as "unidade", and compute whether each phase session
+  // is genuinely open (apply the same 3h inactivity backstop used by the webhook,
   // read-only here — we don't persist the auto-close from a GET).
   const BACKSTOP_MS = 3 * 60 * 60 * 1000;
   const agora = Date.now();
-  const inspetores = (data ?? []).map(({ unidade_contexto, sessao_atividade_em, em_sessao, ...rest }: any) => {
-    const ultima = sessao_atividade_em ? new Date(sessao_atividade_em).getTime() : 0;
-    const sessaoViva = !!em_sessao && (!ultima || agora - ultima <= BACKSTOP_MS);
-    return { ...rest, unidade: unidade_contexto ?? "", em_sessao: sessaoViva };
-  });
+  const viva = (aberta: any, atividade: any) => {
+    const ultima = atividade ? new Date(atividade).getTime() : 0;
+    return !!aberta && (!ultima || agora - ultima <= BACKSTOP_MS);
+  };
+  const inspetores = (data ?? []).map(
+    ({ unidade_contexto, sessao_atividade_em, em_sessao, sessao_fase2_atividade_em, em_sessao_fase2, ...rest }: any) => ({
+      ...rest,
+      unidade: unidade_contexto ?? "",
+      pode_fase1: rest.pode_fase1 ?? true,
+      pode_fase2: rest.pode_fase2 ?? false,
+      em_sessao: viva(em_sessao, sessao_atividade_em),
+      em_sessao_fase2: viva(em_sessao_fase2, sessao_fase2_atividade_em),
+    })
+  );
 
   return res.json({ inspetores });
 });
@@ -65,7 +80,7 @@ router.post("/", async (req: Request, res: Response) => {
   if (!parsed.success) {
     return res.status(400).json({ erro: parsed.error.flatten().fieldErrors });
   }
-  const { nome, telefone, unidade } = parsed.data;
+  const { nome, telefone, unidade, pode_fase1, pode_fase2 } = parsed.data;
 
   let telefoneNormalizado: string;
   try {
@@ -96,8 +111,10 @@ router.post("/", async (req: Request, res: Response) => {
       telefone_normalizado: telefoneNormalizado,
       unidade_contexto: unidade,
       ativo: true,
+      pode_fase1: pode_fase1 ?? true,
+      pode_fase2: pode_fase2 ?? false,
     })
-    .select("id, nome, telefone, telefone_normalizado, unidade_contexto, ativo, created_at, updated_at")
+    .select("id, nome, telefone, telefone_normalizado, unidade_contexto, ativo, pode_fase1, pode_fase2, created_at, updated_at")
     .single();
 
   if (error) {
@@ -105,7 +122,7 @@ router.post("/", async (req: Request, res: Response) => {
     return res.status(500).json({ erro: "Erro ao cadastrar inspetor." });
   }
 
-  log.info({ id: data.id, nome: data.nome, unidade }, "inspetor criado");
+  log.info({ id: data.id, nome: data.nome, unidade, pode_fase1: data.pode_fase1, pode_fase2: data.pode_fase2 }, "inspetor criado");
   const { unidade_contexto, ...rest } = data as any;
   return res.status(201).json({ ...rest, unidade: unidade_contexto ?? "" });
 });
@@ -143,9 +160,11 @@ router.put("/:id", async (req: Request, res: Response) => {
 
   const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
 
-  if (updates.nome !== undefined)    patch.nome = updates.nome;
-  if (updates.ativo !== undefined)   patch.ativo = updates.ativo;
-  if (updates.unidade !== undefined) patch.unidade_contexto = updates.unidade;
+  if (updates.nome !== undefined)       patch.nome = updates.nome;
+  if (updates.ativo !== undefined)      patch.ativo = updates.ativo;
+  if (updates.unidade !== undefined)    patch.unidade_contexto = updates.unidade;
+  if (updates.pode_fase1 !== undefined) patch.pode_fase1 = updates.pode_fase1;
+  if (updates.pode_fase2 !== undefined) patch.pode_fase2 = updates.pode_fase2;
 
   if (updates.telefone !== undefined) {
     let novoNormalizado: string;
@@ -184,7 +203,7 @@ router.put("/:id", async (req: Request, res: Response) => {
     .from("inspetores")
     .update(patch)
     .eq("id", id)
-    .select("id, nome, telefone, telefone_normalizado, unidade_contexto, ativo, created_at, updated_at")
+    .select("id, nome, telefone, telefone_normalizado, unidade_contexto, ativo, pode_fase1, pode_fase2, created_at, updated_at")
     .single();
 
   if (error) {

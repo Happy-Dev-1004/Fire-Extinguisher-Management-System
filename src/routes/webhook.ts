@@ -9,6 +9,7 @@ import { processarRdo } from "../rdo/maquina";
 import { rdoDeps } from "../rdo/deps";
 import { processarFotoDispositivo } from "../alarme/fotosDispositivo";
 import { fotosDispositivoDeps } from "../alarme/fotosDispositivoDeps";
+import { sendWhatsAppMessage } from "../notificacao/zapi";
 
 const router = Router();
 const log = logger.child({ rota: "webhook" });
@@ -76,6 +77,40 @@ async function buscarLoteAberto<T = any>(
 
   if (error) return { data: null, error };
   return { data: (data?.[0] as T) ?? null, error: null };
+}
+
+export interface Permissoes {
+  pode_fase1: boolean;
+  pode_fase2: boolean;
+}
+
+// Resolves the active inspector for a phone and returns their per-phase
+// permissions, or null if the number isn't a registered active inspector.
+// Matches ANY phone variant (with/without the 9th digit) so the inspector is
+// recognised regardless of how WhatsApp/Z-API formatted their number.
+export async function getPermissoes(phone: string): Promise<Permissoes | null> {
+  const variantes = variantesTelefone(phone);
+  if (variantes.length === 0) return null;
+
+  const { data, error } = await supabaseAdmin
+    .from("inspetores")
+    .select("id, pode_fase1, pode_fase2")
+    .in("telefone_normalizado", variantes)
+    .eq("ativo", true)
+    .limit(1);
+
+  if (error) {
+    log.error({ err: error.message }, "erro ao verificar autorização no banco");
+    return null;
+  }
+  const row = data?.[0] as any;
+  if (!row) return null;
+  // Back-compat: rows created before migration 0026 may lack the flags →
+  // treat as Phase 1 only (the historical behaviour), never Phase 2.
+  return {
+    pode_fase1: row.pode_fase1 ?? true,
+    pode_fase2: row.pode_fase2 ?? false,
+  };
 }
 
 export async function isAuthorized(phone: string): Promise<boolean> {
@@ -156,6 +191,62 @@ async function tocarSessao(phone: string): Promise<void> {
     .update({ sessao_atividade_em: new Date().toISOString() })
     .in("telefone_normalizado", variantes);
 }
+
+// ── Phase 2 work-session gate ─────────────────────────────────────────────────
+// Independent of the Phase 1 session: Phase 2 (alarme) must be explicitly opened
+// with "alarme" and closed with "encerrar alarme". Starting/ending Phase 1 has no
+// effect here, so the two phases never bleed into each other. Same 3h backstop.
+async function emSessaoFase2(phone: string): Promise<boolean> {
+  const variantes = variantesTelefone(phone);
+  if (variantes.length === 0) return false;
+
+  const { data } = await supabaseAdmin
+    .from("inspetores")
+    .select("em_sessao_fase2, sessao_fase2_atividade_em")
+    .in("telefone_normalizado", variantes)
+    .eq("ativo", true)
+    .limit(1);
+
+  const row = data?.[0] as any;
+  if (!row || !row.em_sessao_fase2) return false;
+
+  const ultima = row.sessao_fase2_atividade_em ? new Date(row.sessao_fase2_atividade_em).getTime() : 0;
+  if (ultima && Date.now() - ultima > SESSAO_BACKSTOP_MS) {
+    await definirSessaoFase2(phone, false);
+    log.info({ phone }, "sessão Fase 2 encerrada automaticamente por inatividade (backstop 3h)");
+    return false;
+  }
+  return true;
+}
+
+async function definirSessaoFase2(phone: string, aberta: boolean): Promise<void> {
+  const variantes = variantesTelefone(phone);
+  if (variantes.length === 0) return;
+  const agora = new Date().toISOString();
+  await supabaseAdmin
+    .from("inspetores")
+    .update({
+      em_sessao_fase2: aberta,
+      ...(aberta ? { sessao_fase2_iniciada_em: agora } : {}),
+      sessao_fase2_atividade_em: agora,
+    })
+    .in("telefone_normalizado", variantes);
+}
+
+async function tocarSessaoFase2(phone: string): Promise<void> {
+  const variantes = variantesTelefone(phone);
+  if (variantes.length === 0) return;
+  await supabaseAdmin
+    .from("inspetores")
+    .update({ sessao_fase2_atividade_em: new Date().toISOString() })
+    .in("telefone_normalizado", variantes);
+}
+
+// Phase 2 session commands. The RDO trigger ("rdo") is also a valid Phase-2
+// entry (the RDO engine manages its own conversation), but device-photo work
+// needs the session open so photos aren't wasted.
+const ABRIR_FASE2   = ["alarme", "iniciar alarme", "fase 2", "fase2", "iniciar fase 2"];
+const ENCERRAR_FASE2 = ["encerrar alarme", "finalizar alarme", "encerrar fase 2", "sair alarme", "parar alarme"];
 
 router.post("/", (req: Request, res: Response) => {
   // Always respond 200 immediately so Z-API stops retrying
@@ -245,52 +336,80 @@ async function processWebhook(body: any): Promise<void> {
   )?.trim();
   const textBody: string | undefined = rawTextBody?.toLowerCase();
 
-  if (!phone || !(await isAuthorized(phone))) {
-    log.warn({ phone: phone ?? "desconhecido" }, "número não autorizado — mensagem ignorada");
+  if (!phone) {
+    log.warn({ phone: "desconhecido" }, "webhook sem telefone — ignorado");
+    return;
+  }
+  const permissoes = await getPermissoes(phone);
+  if (!permissoes) {
+    log.warn({ phone }, "número não autorizado — mensagem ignorada");
     return;
   }
 
-  log.info({ phone }, "inspetor autorizado");
+  log.info({ phone, fase1: permissoes.pode_fase1, fase2: permissoes.pode_fase2 }, "inspetor autorizado");
 
-  // ── RDO (Relatório Diário de Obra) guided flow ─────────────────────────────
-  // If the supervisor has an active RDO session OR sends the "RDO" trigger, the
-  // RDO engine handles this message (asks the next question / stores the answer
-  // / collects photos). It returns true when it consumed the message, so we stop
-  // before the extinguisher logic. Sessions are keyed by normalized phone, so
-  // the extinguisher flow and RDO never collide.
   const messageId: string | null =
     body?.messageId ?? body?.message?.messageId ?? body?.id ?? null;
   const telNorm = (() => { try { return normalizar(phone); } catch { return null; } })();
-  if (telNorm) {
-    const consumido = await processarRdo(rdoDeps, {
-      telefone_normalizado: telNorm,
-      telefone_envio: phone,   // raw phone (with country code) for Z-API replies
-      messageId,
-      texto: rawTextBody ?? null,
-      imageUrl: isImage ? (imageUrl ?? null) : null,
-    });
-    if (consumido) return;
-  }
 
-  // ── Device photo record (Phase 2) ──────────────────────────────────────────
-  // After RDO, before extinguisher logic. If the supervisor is in device-photo
-  // mode (or sends the "dispositivo" trigger), this engine handles the message:
-  // it names a device, attaches photos to it (marking it installed), and parks
-  // unmatched photos for review — never losing one. Keyed by normalized phone,
-  // so it never collides with the extinguisher or RDO flows.
-  if (telNorm) {
-    const consumido = await processarFotoDispositivo(fotosDispositivoDeps, {
+  // ── Phase 2 (alarme) ───────────────────────────────────────────────────────
+  // Only runs for inspectors granted Phase 2. Phase 2 has its OWN start/end
+  // commands and sessions, fully independent of Phase 1, so neither phase leaks
+  // into the other and no tokens are spent outside an explicitly-open session.
+  if (permissoes.pode_fase2 && telNorm) {
+    // Phase 2 session commands (explicit open/close).
+    if (isText && textBody && ABRIR_FASE2.includes(textBody)) {
+      await definirSessaoFase2(phone, true);
+      log.info({ phone }, "sessão FASE 2 (alarme) ABERTA");
+      await sendWhatsAppMessage(phone,
+        "🔔 *Modo Alarme (Fase 2) iniciado.*\n" +
+        "Envie *RDO* para o relatório diário, ou *dispositivo* para registrar fotos de um dispositivo.\n" +
+        "Escreva *encerrar alarme* quando terminar.");
+      return;
+    }
+    if (isText && textBody && ENCERRAR_FASE2.includes(textBody)) {
+      await definirSessaoFase2(phone, false);
+      log.info({ phone }, "sessão FASE 2 (alarme) ENCERRADA");
+      await sendWhatsAppMessage(phone, "✅ Modo Alarme (Fase 2) encerrado.");
+      return;
+    }
+
+    // RDO guided flow — the engine manages its own conversation/session, so it's
+    // allowed whenever the person has Phase 2 (it has explicit RDO/cancelar
+    // commands and won't consume unrelated messages).
+    const consumidoRdo = await processarRdo(rdoDeps, {
       telefone_normalizado: telNorm,
       telefone_envio: phone,
-      telefone_origem: phone,
       messageId,
       texto: rawTextBody ?? null,
       imageUrl: isImage ? (imageUrl ?? null) : null,
     });
-    if (consumido) return;
+    if (consumidoRdo) { await tocarSessaoFase2(phone); return; }
+
+    // Device-photo record — only while a Phase 2 session is open, so stray photos
+    // don't get processed/stored when the supervisor isn't actively registering.
+    if (await emSessaoFase2(phone)) {
+      await tocarSessaoFase2(phone);
+      const consumidoDisp = await processarFotoDispositivo(fotosDispositivoDeps, {
+        telefone_normalizado: telNorm,
+        telefone_envio: phone,
+        telefone_origem: phone,
+        messageId,
+        texto: rawTextBody ?? null,
+        imageUrl: isImage ? (imageUrl ?? null) : null,
+      });
+      if (consumidoDisp) return;
+    }
   }
 
-  // ── Session commands (token gate) ──────────────────────────────────────────
+  // From here down is PHASE 1 (extintores). Block it entirely for inspectors who
+  // only have Phase 2 — their photos must never reach OpenAI analysis.
+  if (!permissoes.pode_fase1) {
+    log.info({ phone }, "mensagem ignorada — inspetor sem permissão de Fase 1");
+    return;
+  }
+
+  // ── PHASE 1 — Session commands (token gate) ────────────────────────────────
   // "Iniciar" OPENS a work session → photos start being processed.
   // "Encerrar" CLOSES it → photos are ignored until the next "Iniciar".
   const INICIADORES = ["iniciar", "início", "inicio", "começar", "comecar", "iniciar tarefa", "iniciar inspeção", "iniciar inspecao", "start"];

@@ -6,11 +6,11 @@ import { toast } from "../components/Toast";
 import { formatarData } from "../lib/formatters";
 import {
   Plus, Pencil, UserMinus, UserCheck, HardHat,
-  Phone, AlertTriangle, CheckCircle2,
+  Phone, AlertTriangle, Flame, Bell,
 } from "lucide-react";
 
-type FormData = { nome: string; telefone: string; unidade: string };
-const FORM_VAZIO: FormData = { nome: "", telefone: "", unidade: "" };
+type FormData = { nome: string; telefone: string; unidade: string; pode_fase1: boolean; pode_fase2: boolean };
+const FORM_VAZIO: FormData = { nome: "", telefone: "", unidade: "", pode_fase1: true, pode_fase2: false };
 
 export function InspetoresPage() {
   const [inspetores, setInspetores]   = useState<Inspetor[]>([]);
@@ -49,7 +49,13 @@ export function InspetoresPage() {
 
   function abrirEditar(i: Inspetor) {
     setEditando(i);
-    setForm({ nome: i.nome, telefone: i.telefone, unidade: i.unidade ?? "" });
+    setForm({
+      nome: i.nome,
+      telefone: i.telefone,
+      unidade: i.unidade ?? "",
+      pode_fase1: i.pode_fase1 ?? true,
+      pode_fase2: i.pode_fase2 ?? false,
+    });
     setErroForm("");
     setModalAberto(true);
   }
@@ -64,6 +70,8 @@ export function InspetoresPage() {
           nome: form.nome.trim(),
           telefone: form.telefone.trim(),
           unidade: form.unidade.trim(),
+          pode_fase1: form.pode_fase1,
+          pode_fase2: form.pode_fase2,
         });
         toast("Inspetor atualizado.");
       } else {
@@ -71,6 +79,8 @@ export function InspetoresPage() {
           nome: form.nome.trim(),
           telefone: form.telefone.trim(),
           unidade: form.unidade.trim(),
+          pode_fase1: form.pode_fase1,
+          pode_fase2: form.pode_fase2,
         });
         toast("Inspetor cadastrado.");
       }
@@ -127,7 +137,8 @@ export function InspetoresPage() {
       <div className="card p-4 flex items-start gap-3 bg-sky-50 border-sky-200">
         <Phone className="w-4 h-4 text-sky-600 shrink-0 mt-0.5" />
         <p className="text-sm text-sky-800">
-          Somente números cadastrados aqui podem enviar fotos de extintores via WhatsApp.
+          Somente números cadastrados aqui podem enviar mensagens via WhatsApp. Cada inspetor
+          recebe permissão por <strong>fase</strong>: Fase 1 (extintores) e/ou Fase 2 (alarme).
           O número deve ser o mesmo que envia as mensagens — inclua o DDI (ex: <strong>5577777777777</strong>).
         </p>
       </div>
@@ -186,10 +197,22 @@ export function InspetoresPage() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-sm font-semibold text-gray-900">{i.nome}</span>
-                      <span className="badge-green"><CheckCircle2 className="w-3 h-3" /> Autorizado</span>
-                      {i.em_sessao && (
-                        <span className="badge-brand" title="Sessão de trabalho aberta — fotos estão sendo processadas">
-                          <span className="w-1.5 h-1.5 rounded-full bg-brand-600 animate-pulse" /> Em sessão
+                      {(i.pode_fase1 ?? true) && (
+                        <span className="badge-amber" title="Pode enviar fotos de extintores (Fase 1)">
+                          <Flame className="w-3 h-3" /> Fase 1
+                        </span>
+                      )}
+                      {i.pode_fase2 && (
+                        <span className="badge-brand" title="Pode registrar RDO e fotos de dispositivos (Fase 2)">
+                          <Bell className="w-3 h-3" /> Fase 2
+                        </span>
+                      )}
+                      {!(i.pode_fase1 ?? true) && !i.pode_fase2 && (
+                        <span className="badge-gray" title="Sem permissão de fase — mensagens são ignoradas">Sem fase</span>
+                      )}
+                      {(i.em_sessao || i.em_sessao_fase2) && (
+                        <span className="badge-green" title="Sessão de trabalho aberta — mensagens estão sendo processadas">
+                          <span className="w-1.5 h-1.5 rounded-full bg-green-600 animate-pulse" /> Em sessão
                         </span>
                       )}
                     </div>
@@ -313,6 +336,50 @@ export function InspetoresPage() {
             <p className="field-hint">
               Unidade que este inspetor cobre. Todas as fotos enviadas por ele
               serão atribuídas automaticamente a esta unidade.
+            </p>
+          </div>
+
+          {/* Per-phase permissions */}
+          <div>
+            <label className="label">Permissões por fase</label>
+            <div className="space-y-2 mt-1">
+              <label className="flex items-start gap-3 rounded-lg border border-gray-200 p-3 cursor-pointer hover:bg-gray-50">
+                <input
+                  type="checkbox"
+                  className="mt-0.5"
+                  checked={form.pode_fase1}
+                  onChange={(e) => setForm({ ...form, pode_fase1: e.target.checked })}
+                />
+                <span className="flex-1">
+                  <span className="flex items-center gap-1.5 text-sm font-medium text-gray-900">
+                    <Flame className="w-3.5 h-3.5 text-amber-600" /> Fase 1 — Extintores
+                  </span>
+                  <span className="block text-xs text-gray-500 mt-0.5">
+                    Enviar fotos de extintores para inspeção (análise por IA).
+                  </span>
+                </span>
+              </label>
+              <label className="flex items-start gap-3 rounded-lg border border-gray-200 p-3 cursor-pointer hover:bg-gray-50">
+                <input
+                  type="checkbox"
+                  className="mt-0.5"
+                  checked={form.pode_fase2}
+                  onChange={(e) => setForm({ ...form, pode_fase2: e.target.checked })}
+                />
+                <span className="flex-1">
+                  <span className="flex items-center gap-1.5 text-sm font-medium text-gray-900">
+                    <Bell className="w-3.5 h-3.5 text-brand-600" /> Fase 2 — Alarme de incêndio
+                  </span>
+                  <span className="block text-xs text-gray-500 mt-0.5">
+                    Registrar RDO e fotos de dispositivos. Use para a equipe de instalação
+                    (90 dias) e, depois, para a equipe de gestão — basta alternar a permissão.
+                  </span>
+                </span>
+              </label>
+            </div>
+            <p className="field-hint">
+              Cada fase é iniciada e encerrada por comandos próprios no WhatsApp, então
+              um inspetor de uma fase nunca dispara a outra (sem gasto de tokens à toa).
             </p>
           </div>
 

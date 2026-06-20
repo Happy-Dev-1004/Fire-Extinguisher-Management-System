@@ -139,7 +139,10 @@ export interface Inspetor {
   telefone_normalizado: string;
   unidade: string;            // fixed unit this inspector covers
   ativo: boolean;
-  em_sessao?: boolean;        // currently in an open WhatsApp work session
+  pode_fase1?: boolean;       // permission: Phase 1 (extintores)
+  pode_fase2?: boolean;       // permission: Phase 2 (alarme — RDO + device photos)
+  em_sessao?: boolean;        // Phase 1 work session open
+  em_sessao_fase2?: boolean;  // Phase 2 work session open
   created_at: string;
   updated_at: string;
 }

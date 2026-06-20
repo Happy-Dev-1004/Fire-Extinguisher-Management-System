@@ -25,7 +25,7 @@ vi.mock("../logger", () => ({ logger: { child: logChild } }));
 
 // Import after mocks
 import inspetoresRouter from "./inspetores";
-import { isAuthorized } from "./webhook";
+import { isAuthorized, getPermissoes } from "./webhook";
 
 // ── Chain builder ─────────────────────────────────────────────────────────────
 // Returns a fresh set of mock functions wired into a fluent Supabase-like chain.
@@ -79,11 +79,16 @@ const INSPETOR_ROW = {
   updated_at: "2026-01-01T00:00:00Z",
 };
 
-// GET also selects the session columns; the route collapses them into em_sessao.
+// GET also selects the session + phase columns; the route collapses the session
+// columns into em_sessao/em_sessao_fase2 and defaults the phase flags.
 const INSPETOR_ROW_GET = {
   ...INSPETOR_ROW,
+  pode_fase1: true,
+  pode_fase2: false,
   em_sessao: false,
   sessao_atividade_em: null,
+  em_sessao_fase2: false,
+  sessao_fase2_atividade_em: null,
 };
 
 // What POST/PUT return (unidade_contexto mapped → unidade). These endpoints
@@ -99,8 +104,14 @@ const INSPETOR_RESPOSTA = {
   updated_at: "2026-01-01T00:00:00Z",
 };
 
-// What GET returns — adds the computed em_sessao flag.
-const INSPETOR_RESPOSTA_GET = { ...INSPETOR_RESPOSTA, em_sessao: false };
+// What GET returns — adds the computed session flags + phase permissions.
+const INSPETOR_RESPOSTA_GET = {
+  ...INSPETOR_RESPOSTA,
+  pode_fase1: true,
+  pode_fase2: false,
+  em_sessao: false,
+  em_sessao_fase2: false,
+};
 
 function makeReq(
   overrides: Partial<Request> & { admin?: AdminRecord } = {}
@@ -455,5 +466,56 @@ describe("isAuthorized (webhook)", () => {
 
     const result = await isAuthorized("11912345678");
     expect(result).toBe(false);
+  });
+});
+
+// Per-phase permissions resolver — the webhook's phase-aware authorization core.
+describe("getPermissoes (webhook phase permissions)", () => {
+  it("retorna as permissões do inspetor ativo", async () => {
+    const { limitFn } = buildChain();
+    limitFn.mockResolvedValueOnce({ data: [{ id: "i1", pode_fase1: true, pode_fase2: true }], error: null });
+
+    const p = await getPermissoes("11912345678");
+    expect(p).toEqual({ pode_fase1: true, pode_fase2: true });
+  });
+
+  it("um inspetor só de Fase 1 NÃO tem Fase 2 (bloqueia alarme/RDO/dispositivos)", async () => {
+    const { limitFn } = buildChain();
+    limitFn.mockResolvedValueOnce({ data: [{ id: "i1", pode_fase1: true, pode_fase2: false }], error: null });
+
+    const p = await getPermissoes("11912345678");
+    expect(p?.pode_fase1).toBe(true);
+    expect(p?.pode_fase2).toBe(false);
+  });
+
+  it("um inspetor só de Fase 2 NÃO tem Fase 1 (suas fotos nunca vão à análise de extintor)", async () => {
+    const { limitFn } = buildChain();
+    limitFn.mockResolvedValueOnce({ data: [{ id: "i1", pode_fase1: false, pode_fase2: true }], error: null });
+
+    const p = await getPermissoes("11912345678");
+    expect(p?.pode_fase1).toBe(false);
+    expect(p?.pode_fase2).toBe(true);
+  });
+
+  it("back-compat: linha sem as colunas → Fase 1 (true), Fase 2 (false)", async () => {
+    const { limitFn } = buildChain();
+    limitFn.mockResolvedValueOnce({ data: [{ id: "i1" }], error: null }); // legacy row, no flags
+
+    const p = await getPermissoes("11912345678");
+    expect(p).toEqual({ pode_fase1: true, pode_fase2: false });
+  });
+
+  it("número não cadastrado → null (não autorizado)", async () => {
+    const { limitFn } = buildChain();
+    limitFn.mockResolvedValueOnce({ data: [], error: null });
+
+    expect(await getPermissoes("11999999999")).toBeNull();
+  });
+
+  it("erro de banco → null (falha segura)", async () => {
+    const { limitFn } = buildChain();
+    limitFn.mockResolvedValueOnce({ data: null, error: { message: "DB down" } });
+
+    expect(await getPermissoes("11912345678")).toBeNull();
   });
 });

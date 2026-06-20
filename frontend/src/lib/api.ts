@@ -124,10 +124,10 @@ export const inspetoresApi = {
   listar: () =>
     request<{ inspetores: import("./types").Inspetor[] }>("GET", "/inspetores"),
 
-  criar: (body: { nome: string; telefone: string; unidade: string }) =>
+  criar: (body: { nome: string; telefone: string; unidade: string; pode_fase1?: boolean; pode_fase2?: boolean }) =>
     request<import("./types").Inspetor>("POST", "/inspetores", body),
 
-  atualizar: (id: string, body: Partial<{ nome: string; telefone: string; unidade: string; ativo: boolean }>) =>
+  atualizar: (id: string, body: Partial<{ nome: string; telefone: string; unidade: string; ativo: boolean; pode_fase1: boolean; pode_fase2: boolean }>) =>
     request<import("./types").Inspetor>("PUT", `/inspetores/${id}`, body),
 
   desativar: (id: string) =>
