@@ -44,13 +44,16 @@
   .dark .border-gray-200     { border-color: theme("colors.gray.800"); }
   .dark .border-gray-300     { border-color: theme("colors.gray.700"); }
 
-  /* Text */
-  .dark .text-gray-900       { color: theme("colors.gray.100"); }
-  .dark .text-gray-800       { color: theme("colors.gray.200"); }
-  .dark .text-gray-700       { color: theme("colors.gray.300"); }
-  .dark .text-gray-600       { color: theme("colors.gray.400"); }
+  /* Text — brightened for legibility on the near-black background. Even the
+     faintest gray (gray-400, used for captions/legends) lands on gray-400 so it
+     stays clearly readable instead of fading into the surface. */
+  .dark .text-gray-900       { color: theme("colors.gray.50"); }
+  .dark .text-gray-800       { color: theme("colors.gray.100"); }
+  .dark .text-gray-700       { color: theme("colors.gray.200"); }
+  .dark .text-gray-600       { color: theme("colors.gray.300"); }
   .dark .text-gray-500       { color: theme("colors.gray.400"); }
-  .dark .text-gray-400       { color: theme("colors.gray.500"); }
+  .dark .text-gray-400       { color: theme("colors.gray.400"); }
+  .dark .text-gray-300       { color: theme("colors.gray.500"); }
 
   /* Dividers (divide-* sets the child border color) */
   .dark .divide-gray-100 > :not([hidden]) ~ :not([hidden]) { border-color: theme("colors.gray.800"); }
