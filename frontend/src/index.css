@@ -10,15 +10,77 @@
   html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
 
   body {
-    @apply bg-gray-50 text-gray-900 font-sans;
+    @apply bg-gray-50 text-gray-900 font-sans transition-colors duration-200;
+    @apply dark:bg-gray-950 dark:text-gray-100;
     font-feature-settings: "cv02","cv03","cv04","cv11";
   }
+
+  /* Tell the browser to render native form controls / default UI in the active
+     scheme, so date pickers, scrollbars and inputs match the theme. */
+  html.dark { color-scheme: dark; }
 
   /* Custom scrollbar — subtle */
   ::-webkit-scrollbar { width: 6px; height: 6px; }
   ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb { @apply bg-gray-200 rounded-full; }
-  ::-webkit-scrollbar-thumb:hover { @apply bg-gray-300; }
+  ::-webkit-scrollbar-thumb { @apply bg-gray-200 rounded-full dark:bg-gray-700; }
+  ::-webkit-scrollbar-thumb:hover { @apply bg-gray-300 dark:bg-gray-600; }
+
+  /* ── Dark-mode defaults for raw utility colors ───────────────────────────
+     Many pages use literal Tailwind grays (text-gray-900, bg-white, etc.)
+     without per-element dark: variants. Rather than hand-edit every file, these
+     scoped rules retarget the common surface/border/text utilities inside
+     dark mode so the WHOLE app stays harmonious. Component classes (.card,
+     .input, …) already have their own dark: variants and override these.
+     Any element can still opt out by adding an explicit dark:* class, which
+     wins by source order. */
+
+  /* Surfaces */
+  .dark .bg-white            { background-color: theme("colors.gray.900"); }
+  .dark .bg-gray-50          { background-color: theme("colors.gray.900"); }
+  .dark .bg-gray-100         { background-color: theme("colors.gray.800"); }
+
+  /* Borders */
+  .dark .border-gray-100     { border-color: theme("colors.gray.800"); }
+  .dark .border-gray-200     { border-color: theme("colors.gray.800"); }
+  .dark .border-gray-300     { border-color: theme("colors.gray.700"); }
+
+  /* Text */
+  .dark .text-gray-900       { color: theme("colors.gray.100"); }
+  .dark .text-gray-800       { color: theme("colors.gray.200"); }
+  .dark .text-gray-700       { color: theme("colors.gray.300"); }
+  .dark .text-gray-600       { color: theme("colors.gray.400"); }
+  .dark .text-gray-500       { color: theme("colors.gray.400"); }
+  .dark .text-gray-400       { color: theme("colors.gray.500"); }
+
+  /* Dividers (divide-* sets the child border color) */
+  .dark .divide-gray-100 > :not([hidden]) ~ :not([hidden]) { border-color: theme("colors.gray.800"); }
+  .dark .divide-gray-200 > :not([hidden]) ~ :not([hidden]) { border-color: theme("colors.gray.800"); }
+
+  /* Soft tinted backgrounds (icon chips, info/alert cards) → translucent in dark
+     so the hue reads against a dark surface instead of glowing as a light block.
+     The matching text-*-700/800 utilities are lightened too for contrast. */
+  .dark .bg-orange-50  { background-color: rgb(249 115 22 / 0.12); }
+  .dark .bg-amber-50   { background-color: rgb(245 158 11 / 0.12); }
+  .dark .bg-sky-50     { background-color: rgb(14 165 233 / 0.12); }
+  .dark .bg-blue-50    { background-color: rgb(59 130 246 / 0.12); }
+  .dark .bg-green-50   { background-color: rgb(34 197 94 / 0.12); }
+  .dark .bg-red-50     { background-color: rgb(239 68 68 / 0.12); }
+  .dark .bg-violet-50  { background-color: rgb(139 92 246 / 0.12); }
+  .dark .bg-brand-50   { background-color: rgb(229 20 20 / 0.15); }
+  .dark .bg-brand-100  { background-color: rgb(229 20 20 / 0.20); }
+  .dark .bg-orange-100 { background-color: rgb(249 115 22 / 0.20); }
+  .dark .bg-sky-100    { background-color: rgb(14 165 233 / 0.20); }
+  .dark .bg-amber-100  { background-color: rgb(245 158 11 / 0.20); }
+
+  .dark .text-amber-800 { color: theme("colors.amber.300"); }
+  .dark .text-amber-700 { color: theme("colors.amber.300"); }
+  .dark .text-sky-800   { color: theme("colors.sky.300"); }
+  .dark .text-orange-600 { color: theme("colors.orange.400"); }
+  .dark .text-brand-700 { color: theme("colors.brand.300"); }
+
+  /* Borders on tinted cards */
+  .dark .border-amber-200 { border-color: rgb(245 158 11 / 0.30); }
+  .dark .border-sky-200   { border-color: rgb(14 165 233 / 0.30); }
 }
 
 @layer components {
@@ -36,7 +98,9 @@
   .btn-secondary {
     @apply btn bg-white text-gray-700 border border-gray-300 shadow-sm
            hover:bg-gray-50 hover:border-gray-400 active:bg-gray-100
-           focus:ring-brand-500;
+           focus:ring-brand-500
+           dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700
+           dark:hover:bg-gray-700 dark:hover:border-gray-600 dark:active:bg-gray-700;
   }
   .btn-danger {
     @apply btn bg-red-600 text-white shadow-sm
@@ -46,14 +110,16 @@
   .btn-ghost {
     @apply btn bg-transparent text-gray-600
            hover:bg-gray-100 hover:text-gray-900
-           focus:ring-brand-500;
+           focus:ring-brand-500
+           dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-white;
   }
   .btn-sm { @apply px-3 py-1.5 text-xs rounded-md; }
   .btn-xs { @apply px-2 py-1 text-xs rounded; }
   .btn-icon {
     @apply inline-flex items-center justify-center w-9 h-9 rounded-lg text-gray-500
            hover:bg-gray-100 hover:text-gray-700
-           transition-colors focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-1;
+           transition-colors focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-1
+           dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200 dark:focus:ring-offset-gray-900;
   }
 
   /* ── Form inputs ─────────────────────────────────────────────────────── */
@@ -62,71 +128,78 @@
            text-gray-900 placeholder-gray-400
            transition-shadow duration-150
            focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20
-           disabled:bg-gray-50 disabled:text-gray-500;
+           disabled:bg-gray-50 disabled:text-gray-500
+           dark:bg-gray-800 dark:border-gray-700 dark:text-gray-100 dark:placeholder-gray-500
+           dark:disabled:bg-gray-800/60 dark:disabled:text-gray-500;
   }
   .label {
-    @apply block text-sm font-medium text-gray-700 mb-1.5;
+    @apply block text-sm font-medium text-gray-700 mb-1.5 dark:text-gray-300;
   }
   .input-error {
-    @apply border-red-400 focus:border-red-500 focus:ring-red-500/20;
+    @apply border-red-400 focus:border-red-500 focus:ring-red-500/20 dark:border-red-500;
   }
   .field-hint {
-    @apply text-xs text-gray-400 mt-1.5;
+    @apply text-xs text-gray-400 mt-1.5 dark:text-gray-500;
   }
 
   /* ── Cards ───────────────────────────────────────────────────────────── */
   .card {
-    @apply bg-white rounded-xl border border-gray-200 shadow-card;
+    @apply bg-white rounded-xl border border-gray-200 shadow-card
+           dark:bg-gray-900 dark:border-gray-800;
   }
   .card-hover {
-    @apply card transition-shadow duration-200 hover:shadow-card-hover;
+    @apply card transition-shadow duration-200 hover:shadow-card-hover
+           dark:hover:border-gray-700;
   }
 
   /* ── Typography ──────────────────────────────────────────────────────── */
   .page-title {
-    @apply text-2xl font-bold text-gray-900 tracking-tight;
+    @apply text-2xl font-bold text-gray-900 tracking-tight dark:text-gray-50;
   }
   .section-title {
-    @apply text-xs font-semibold text-gray-500 uppercase tracking-widest;
+    @apply text-xs font-semibold text-gray-500 uppercase tracking-widest dark:text-gray-400;
   }
 
   /* ── Status badges ───────────────────────────────────────────────────── */
   .badge {
     @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ring-inset;
   }
-  .badge-green  { @apply badge bg-green-50  text-green-700  ring-green-600/20; }
-  .badge-red    { @apply badge bg-red-50    text-red-700    ring-red-600/20; }
-  .badge-amber  { @apply badge bg-amber-50  text-amber-700  ring-amber-600/20; }
-  .badge-gray   { @apply badge bg-gray-100  text-gray-600   ring-gray-500/20; }
-  .badge-blue   { @apply badge bg-blue-50   text-blue-700   ring-blue-600/20; }
-  .badge-brand  { @apply badge bg-brand-50  text-brand-700  ring-brand-600/20; }
+  .badge-green  { @apply badge bg-green-50  text-green-700  ring-green-600/20  dark:bg-green-500/10 dark:text-green-300 dark:ring-green-400/30; }
+  .badge-red    { @apply badge bg-red-50    text-red-700    ring-red-600/20    dark:bg-red-500/10   dark:text-red-300   dark:ring-red-400/30; }
+  .badge-amber  { @apply badge bg-amber-50  text-amber-700  ring-amber-600/20  dark:bg-amber-500/10 dark:text-amber-300 dark:ring-amber-400/30; }
+  .badge-gray   { @apply badge bg-gray-100  text-gray-600   ring-gray-500/20   dark:bg-gray-700/40  dark:text-gray-300  dark:ring-gray-500/30; }
+  .badge-blue   { @apply badge bg-blue-50   text-blue-700   ring-blue-600/20   dark:bg-blue-500/10  dark:text-blue-300  dark:ring-blue-400/30; }
+  .badge-brand  { @apply badge bg-brand-50  text-brand-700  ring-brand-600/20  dark:bg-brand-500/15 dark:text-brand-300 dark:ring-brand-400/30; }
 
   /* backward compat aliases */
   .badge-yellow { @apply badge-amber; }
 
   /* ── Table ───────────────────────────────────────────────────────────── */
   .table-th {
-    @apply px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap bg-gray-50;
+    @apply px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap bg-gray-50
+           dark:text-gray-400 dark:bg-gray-800/60;
   }
   .table-td {
-    @apply px-4 py-3.5 text-sm text-gray-700 whitespace-nowrap;
+    @apply px-4 py-3.5 text-sm text-gray-700 whitespace-nowrap dark:text-gray-300;
   }
   .table-row {
-    @apply border-b border-gray-100 hover:bg-gray-50/70 transition-colors duration-100;
+    @apply border-b border-gray-100 hover:bg-gray-50/70 transition-colors duration-100
+           dark:border-gray-800 dark:hover:bg-gray-800/50;
   }
 
   /* ── Page skeleton loader ────────────────────────────────────────────── */
   .skeleton {
-    @apply animate-pulse bg-gray-200 rounded-lg;
+    @apply animate-pulse bg-gray-200 rounded-lg dark:bg-gray-700;
   }
 
   /* ── Divider ─────────────────────────────────────────────────────────── */
   .divider {
-    @apply border-t border-gray-100 my-4;
+    @apply border-t border-gray-100 my-4 dark:border-gray-800;
   }
 
   /* ── Inline code ─────────────────────────────────────────────────────── */
   .code {
-    @apply font-mono text-[0.85em] bg-gray-100 text-gray-800 rounded px-1.5 py-0.5;
+    @apply font-mono text-[0.85em] bg-gray-100 text-gray-800 rounded px-1.5 py-0.5
+           dark:bg-gray-800 dark:text-gray-200;
   }
 }
