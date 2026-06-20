@@ -5,7 +5,8 @@ import {
   Flame, Bell, Wrench, ArrowRight, Lock, AlertTriangle, Loader2,
   MapPin, Activity, Clock, FileText, ClipboardCheck,
 } from "lucide-react";
-import { regioesApi, alarmeApi, meApi, type RegiaoProgresso, type RelatorioProgresso, type ItemAtividade } from "../lib/api";
+import { regioesApi, alarmeApi, meApi, type RelatorioProgresso, type ItemAtividade } from "../lib/api";
+import type { RegiaoProgresso } from "../lib/types";
 import { GaugeDonut } from "../components/GaugeDonut";
 import { toast } from "../components/Toast";
 
