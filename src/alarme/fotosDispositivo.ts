@@ -106,7 +106,29 @@ export async function processarFotoDispositivo(deps: Deps, e: Entrada): Promise<
       );
       return true;
     }
-    return false; // not ours
+    // A photo sent while in the alarm session but BEFORE "dispositivo" mode must
+    // never be lost: park it for review and tell the supervisor how to register
+    // it. Without this, the photo would fall through and be dropped.
+    if (e.imageUrl) {
+      const url = await deps.subirFoto("dispositivo-pendente", e.imageUrl, suffixFoto(e));
+      if (url) {
+        await deps.registrarFotoPendente({
+          identificador: null,
+          central_numero: e.central_numero ?? null,
+          foto_url: url,
+          motivo: "Foto enviada sem ativar o modo dispositivo (guardada para revisão).",
+          telefone_origem: origem,
+        });
+      }
+      await deps.enviar(
+        envio,
+        "⚠️ Recebi a foto, mas o *modo dispositivo* não estava ativo, então a guardei para *revisão* " +
+          "(ela não foi perdida).\nPara vincular fotos a um dispositivo, primeiro escreva *dispositivo*, " +
+          "informe o identificador e depois envie as fotos."
+      );
+      return true;
+    }
+    return false; // not ours (plain text, etc.)
   }
 
   // ── In device-photo mode ────────────────────────────────────────────────────

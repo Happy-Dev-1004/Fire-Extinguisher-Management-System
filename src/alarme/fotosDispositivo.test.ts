@@ -116,6 +116,26 @@ describe("device-photo WhatsApp flow", () => {
     expect(fake.pendentes[0].identificador).toBeNull();
   });
 
+  it("parks a photo sent WITHOUT ever entering 'dispositivo' mode — never dropped", async () => {
+    // No "dispositivo" trigger at all (the real-world miss): a photo arrives in
+    // the alarm session. It must be consumed (true) and parked, not lost.
+    const handled = await processarFotoDispositivo(fake.deps, {
+      telefone_normalizado: PHONE, imageUrl: "https://wa/img1.jpg", messageId: "m0",
+    });
+    expect(handled).toBe(true);
+    expect(fake.pendentes.length).toBe(1);
+    expect(fake.pendentes[0].foto_url).toContain("storage/foto-");
+    expect(fake.fotosPorDispositivo.size).toBe(0);
+    expect(fake.enviadas[PHONE].some((m) => m.includes("modo dispositivo") && m.includes("revisão"))).toBe(true);
+  });
+
+  it("a plain text message (no photo) without device mode is NOT consumed", async () => {
+    const handled = await processarFotoDispositivo(fake.deps, {
+      telefone_normalizado: PHONE, texto: "bom dia", messageId: "m0",
+    });
+    expect(handled).toBe(false); // lets the webhook continue its routing
+  });
+
   it("asks to disambiguate when the identifier matches several devices", async () => {
     await processarFotoDispositivo(fake.deps, { telefone_normalizado: PHONE, texto: "dispositivo", messageId: "m0" });
     await processarFotoDispositivo(fake.deps, { telefone_normalizado: PHONE, texto: "Torrefação", messageId: "m1" });
