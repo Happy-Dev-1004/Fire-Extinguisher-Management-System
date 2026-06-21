@@ -394,11 +394,15 @@ function Inline({ children }: { children: React.ReactNode }) {
 function Nota({ children, tipo = "info" }: { children: React.ReactNode; tipo?: "info" | "alerta" }) {
   const alerta = tipo === "alerta";
   const Icon = alerta ? AlertTriangle : Info;
+  // Info notes use a calm blue (not brand red — red read as an error). Alerts use
+  // amber. Both have explicit dark variants so they harmonise on the dark theme.
   return (
     <div className={`mt-3.5 flex items-start gap-2.5 rounded-lg border px-3.5 py-2.5 text-sm ${
-      alerta ? "bg-amber-50 border-amber-200 text-amber-800" : "bg-brand-50/60 border-brand-100 text-brand-900/80"
+      alerta
+        ? "bg-amber-50 border-amber-200 text-amber-800 dark:bg-amber-500/10 dark:border-amber-500/30 dark:text-amber-200"
+        : "bg-blue-50 border-blue-200 text-blue-800 dark:bg-blue-500/10 dark:border-blue-500/30 dark:text-blue-200"
     }`}>
-      <Icon className={`w-4 h-4 shrink-0 mt-0.5 ${alerta ? "text-amber-500" : "text-brand-500"}`} />
+      <Icon className={`w-4 h-4 shrink-0 mt-0.5 ${alerta ? "text-amber-500" : "text-blue-500 dark:text-blue-400"}`} />
       <span>{children}</span>
     </div>
   );
