@@ -356,9 +356,12 @@ function ArmazenamentoView() {
         </div>
       )}
 
-      <div className="card p-4 bg-amber-50 border-amber-200">
-        <p className="text-sm text-amber-800">
-          <strong>Arquivamento:</strong> {rel.nota_arquivamento}
+      <div className="card p-4 bg-sky-50 border-sky-200">
+        <p className="text-sm text-sky-800">
+          <strong>Armazenamento:</strong> as fotos dos dispositivos são guardadas com segurança
+          e <strong>nunca são apagadas automaticamente</strong>. Quando um dispositivo passa de{" "}
+          {rel.alvo_fotos_por_dispositivo} fotos, ele é sinalizado acima para uma eventual
+          organização das imagens mais antigas — sempre preservando as mais recentes.
         </p>
       </div>
     </div>
