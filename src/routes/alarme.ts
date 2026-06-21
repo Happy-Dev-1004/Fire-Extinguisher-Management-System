@@ -89,13 +89,12 @@ router.get("/dispositivos", async (req: Request, res: Response) => {
     centralId = (c as any).id;
   }
 
+  // Join the central's numero so results can be ordered Central 1→4 (the join
+  // column can't be reliably ordered in SQL via PostgREST, so we sort in JS).
   let q = supabaseAdmin
     .from("dispositivos_alarme")
-    .select("*")
-    .eq("ativo", true)
-    .order("tipo_dispositivo")
-    .order("setor")
-    .order("created_at");
+    .select("*, centrais!inner(numero)")
+    .eq("ativo", true);
 
   if (centralId)            q = q.eq("central_id", centralId);
   if (f.tipo_dispositivo)   q = q.eq("tipo_dispositivo", f.tipo_dispositivo);
@@ -107,7 +106,30 @@ router.get("/dispositivos", async (req: Request, res: Response) => {
     log.error({ err: error.message }, "erro ao listar dispositivos");
     return res.status(500).json({ erro: "Erro ao buscar dispositivos." });
   }
-  return res.json({ dispositivos: data ?? [] });
+
+  // Order: Central (1→4) → tipo → laço → setor → endereço. Empty/null sorts last.
+  const cmpNum = (a: number | null, b: number | null) =>
+    a == null ? (b == null ? 0 : 1) : b == null ? -1 : a - b;
+  const cmpStr = (a: string | null, b: string | null) => {
+    const x = a ?? "", y = b ?? "";
+    if (!x && !y) return 0;
+    if (!x) return 1;
+    if (!y) return -1;
+    return x.localeCompare(y, "pt-BR");
+  };
+  const dispositivos = (data ?? [])
+    .map((d: any) => ({ ...d, _central_numero: d.centrais?.numero ?? null }))
+    .sort((a: any, b: any) =>
+      cmpNum(a._central_numero, b._central_numero) ||
+      cmpStr(a.tipo_dispositivo, b.tipo_dispositivo) ||
+      cmpNum(a.laco ?? null, b.laco ?? null) ||
+      cmpStr(a.setor, b.setor) ||
+      cmpStr(a.endereco, b.endereco)
+    )
+    // strip the join helpers so the response shape stays unchanged
+    .map(({ centrais, _central_numero, ...rest }: any) => rest);
+
+  return res.json({ dispositivos });
 });
 
 router.get("/dispositivos/:id", async (req: Request, res: Response) => {

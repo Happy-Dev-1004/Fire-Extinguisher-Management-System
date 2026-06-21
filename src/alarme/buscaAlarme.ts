@@ -116,8 +116,6 @@ export async function buscarDispositivos(
   if (filtros.status_instalacao)          q = q.eq("status_instalacao", filtros.status_instalacao);
   if (filtros.cadastro_pendente != null)  q = q.eq("cadastro_pendente", filtros.cadastro_pendente);
 
-  q = q.order("tipo_dispositivo").order("setor").order("created_at");
-
   const { data, error } = await q;
   if (error) {
     log.error({ err: error.message }, "erro na busca de dispositivos");
@@ -129,6 +127,27 @@ export async function buscarDispositivos(
   if (filtros.com_foto != null) {
     linhas = linhas.filter((l) => (filtros.com_foto ? l.qtd_fotos > 0 : l.qtd_fotos === 0));
   }
+
+  // Stable, human-readable ordering: Central (C1→C4) → tipo → laço → setor →
+  // endereço. central_numero/laco live on the joined table, where PostgREST
+  // ordering is unreliable, so we sort here after mapping. Empty/null values
+  // sort LAST in every key (a named/addressed device comes before a blank one).
+  const cmpNum = (a: number | null, b: number | null) =>
+    a == null ? (b == null ? 0 : 1) : b == null ? -1 : a - b;
+  const cmpStr = (a: string | null, b: string | null) => {
+    const x = a ?? "", y = b ?? "";
+    if (!x && !y) return 0;
+    if (!x) return 1;
+    if (!y) return -1;
+    return x.localeCompare(y, "pt-BR");
+  };
+  linhas.sort((a, b) =>
+    cmpNum(a.central_numero, b.central_numero) ||
+    a.tipo_label.localeCompare(b.tipo_label, "pt-BR") ||
+    cmpNum(a.laco, b.laco) ||
+    cmpStr(a.setor, b.setor) ||
+    cmpStr(a.endereco, b.endereco)
+  );
 
   const contagens: ContagensAlarme = {
     total: linhas.length,
