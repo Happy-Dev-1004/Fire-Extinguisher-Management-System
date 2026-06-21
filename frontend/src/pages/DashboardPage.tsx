@@ -8,6 +8,7 @@ import {
 import { regioesApi, alarmeApi, type RelatorioProgresso } from "../lib/api";
 import type { RegiaoProgresso } from "../lib/types";
 import { GaugeDonut } from "../components/GaugeDonut";
+import { SaudeCard } from "../components/SaudeCard";
 import { toast } from "../components/Toast";
 
 // Greeting by local hour.
@@ -107,6 +108,8 @@ export function DashboardPage() {
             <BomGaps prog={prog} />
           </div>
 
+          {/* System health — owner only (OpenAI / Z-API status) */}
+          {profile?.role === "owner" && <SaudeCard />}
         </>
       )}
     </div>

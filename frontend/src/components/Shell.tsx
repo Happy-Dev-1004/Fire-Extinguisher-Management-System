@@ -3,9 +3,10 @@ import { NavLink, Outlet, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { useTheme } from "../hooks/useTheme";
 import { ToastContainer } from "./Toast";
+import { NotificationBell } from "./NotificationBell";
 import {
   LayoutDashboard, Flame, HardHat, Send, Settings, Users,
-  LogOut, Menu, X, ChevronRight, Shield, FileText, Search, HelpCircle, Camera, Activity, Bell,
+  LogOut, Menu, X, ChevronRight, Shield, FileText, Search, HelpCircle, Camera, Activity,
   Sun, Moon,
 } from "lucide-react";
 
@@ -56,7 +57,6 @@ const NAV_GROUPS: NavGroup[] = [
     ],
   },
 ];
-void Bell;
 
 export function Shell() {
   const { profile, signOut } = useAuth();
@@ -231,6 +231,8 @@ export function Shell() {
 
           {/* Right side */}
           <div className="ml-auto flex items-center gap-3">
+            {/* Notifications */}
+            <NotificationBell />
             {/* Dark / light mode toggle */}
             <button
               onClick={alternar}

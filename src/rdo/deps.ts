@@ -5,6 +5,7 @@ import { supabaseAdmin } from "../db-admin";
 import { sendWhatsAppMessage } from "../notificacao/zapi";
 import { uploadFotoUrl } from "../fotos/storage";
 import { logger } from "../logger";
+import { registrarNotificacao } from "../notificacao/notificacoes";
 import type { Deps, Sessao } from "./maquina";
 import type { Pergunta } from "./perguntas";
 
@@ -82,6 +83,15 @@ export const rdoDeps: Deps = {
       .single();
     if (error) throw new Error(`Erro ao finalizar RDO: ${error.message}`);
     log.info({ rdoId }, "RDO concluído");
+    const r = data as any;
+    const dataBR = r.data ? String(r.data).split("-").reverse().join("/") : "—";
+    void registrarNotificacao({
+      tipo: "rdo",
+      severidade: "sucesso",
+      titulo: `RDO concluído · ${dataBR}`,
+      mensagem: [r.responsavel, r.central, r.frente_trabalho].filter(Boolean).join(" · ") || undefined,
+      metadata: { rdo_id: rdoId, data: r.data, responsavel: r.responsavel },
+    });
     return data;
   },
 

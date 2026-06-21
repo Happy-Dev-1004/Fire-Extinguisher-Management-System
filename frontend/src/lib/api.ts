@@ -70,6 +70,37 @@ export const meApi = {
   get: () => request<AdminProfile>("GET", "/me"),
 };
 
+// ── /notificacoes ──────────────────────────────────────────────────────────────
+
+export interface Notificacao {
+  id: string;
+  tipo: string;
+  severidade: "info" | "sucesso" | "aviso" | "critico";
+  titulo: string;
+  mensagem: string | null;
+  metadata: Record<string, unknown>;
+  contador: number;
+  lida: boolean;
+  created_at: string;
+  atualizado_em: string;
+}
+
+export interface SaudeSistema {
+  openai: { tokens_mes: number; limite_mes: number; pct: number; ultima_falha: string | null };
+  zapi: { renova_em: string | null; dias_para_renovar: number | null; conectado: boolean | null; ultima_falha: string | null };
+}
+
+export const notificacoesApi = {
+  listar: () =>
+    request<{ notificacoes: Notificacao[]; nao_lidas: number }>("GET", "/notificacoes"),
+  marcarLida: (id: string) =>
+    request<{ ok: boolean }>("POST", `/notificacoes/${id}/lida`),
+  lerTodas: () =>
+    request<{ ok: boolean }>("POST", "/notificacoes/ler-todas"),
+  saude: () =>
+    request<SaudeSistema>("GET", "/notificacoes/saude"),
+};
+
 // ── /equipe ───────────────────────────────────────────────────────────────────
 
 export const equipeApi = {

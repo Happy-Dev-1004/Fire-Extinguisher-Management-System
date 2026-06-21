@@ -8,6 +8,7 @@ import { salvarPorRegiao } from "../persistencia/salvarPorRegiao";
 import { notificarInspetorPorLote } from "../notificacao/notificar";
 import { variantesTelefone } from "../inspetores/normalizar";
 import { getSecret } from "../segredos/getSecret";
+import { registrarUsoOpenAI, ehFalhaCriticaOpenAI, alertarFalhaOpenAI } from "../notificacao/saude";
 
 const MIN_FOTOS = 1;
 
@@ -123,8 +124,18 @@ export async function analisarLote(lote: LoteFotos): Promise<RespostaIA | null> 
       ],
     });
     rawResposta = completion.choices[0]?.message?.content ?? "";
+    // Track token consumption (OpenAI has no balance API — we tally it ourselves).
+    void registrarUsoOpenAI({
+      loteId: lote.id,
+      modelo: "gpt-4o",
+      prompt_tokens: completion.usage?.prompt_tokens,
+      completion_tokens: completion.usage?.completion_tokens,
+      total_tokens: completion.usage?.total_tokens,
+    });
   } catch (err: any) {
     log.error({ err: err.message }, "erro na chamada à API OpenAI");
+    // If this is "out of quota / key dead", raise a critical owner alert now.
+    if (ehFalhaCriticaOpenAI(err)) void alertarFalhaOpenAI(err);
     await supabase.from("lotes_fotos").update({ status: "erro_ia" }).eq("id", lote.id);
     return null;
   }

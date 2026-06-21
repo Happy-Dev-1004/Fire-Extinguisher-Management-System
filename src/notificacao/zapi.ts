@@ -67,6 +67,11 @@ export async function sendWhatsAppMessage(phone: string, text: string): Promise<
           { status: response.status, detalhe, tentativa },
           "falha ao enviar confirmação — erro do cliente Z-API"
         );
+        // 401/403 = token/subscription dead → raise a critical owner alert (lazy
+        // import avoids a module cycle: saude → notificacoes → zapi).
+        if (response.status === 401 || response.status === 403) {
+          void import("./saude").then((m) => m.alertarFalhaZApi(response.status)).catch(() => {});
+        }
         return false;
       }
 

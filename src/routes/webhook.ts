@@ -10,6 +10,7 @@ import { rdoDeps } from "../rdo/deps";
 import { processarFotoDispositivo } from "../alarme/fotosDispositivo";
 import { fotosDispositivoDeps } from "../alarme/fotosDispositivoDeps";
 import { sendWhatsAppMessage } from "../notificacao/zapi";
+import { registrarNotificacao } from "../notificacao/notificacoes";
 
 const router = Router();
 const log = logger.child({ rota: "webhook" });
@@ -361,6 +362,12 @@ async function processWebhook(body: any): Promise<void> {
     if (isText && textBody && ABRIR_FASE2.includes(textBody)) {
       await definirSessaoFase2(phone, true);
       log.info({ phone }, "sessão FASE 2 (alarme) ABERTA");
+      const info = await getInspetorInfo(phone);
+      void registrarNotificacao({
+        tipo: "sessao",
+        titulo: `${info.nome} iniciou trabalho no alarme (Fase 2)`,
+        metadata: { fase: 2, inspetor: info.nome },
+      });
       await sendWhatsAppMessage(phone,
         "🔔 *Modo Alarme (Fase 2) iniciado.*\n" +
         "Envie *RDO* para o relatório diário, ou *dispositivo* para registrar fotos de um dispositivo.\n" +
@@ -418,6 +425,13 @@ async function processWebhook(body: any): Promise<void> {
   if (isText && textBody && INICIADORES.includes(textBody)) {
     await definirSessao(phone, true);
     log.info({ phone }, "sessão de trabalho ABERTA pelo inspetor (Iniciar)");
+    const info = await getInspetorInfo(phone);
+    void registrarNotificacao({
+      tipo: "sessao",
+      titulo: `${info.nome} iniciou inspeção de extintores`,
+      mensagem: info.regiao ? `Região: ${info.regiao}` : undefined,
+      metadata: { fase: 1, inspetor: info.nome, regiao: info.regiao },
+    });
     return;
   }
   if (isText && textBody && ENCERRADORES.includes(textBody)) {
@@ -493,6 +507,21 @@ async function processWebhook(body: any): Promise<void> {
   }
   await tocarSessao(phone);
 
+  // Collapsed photo notification: one rolling row per (inspector + region), so
+  // the bell shows "N fotos recebidas · Região" instead of one row per photo.
+  // grupo_chave folds repeats into the same unread entry (contador increments).
+  void (async () => {
+    const info = await getInspetorInfo(phone);
+    const regiaoTxt = info.regiao ?? "região não informada";
+    await registrarNotificacao({
+      tipo: "foto",
+      titulo: `Fotos de extintores recebidas · ${regiaoTxt}`,
+      mensagem: `${info.nome} está enviando fotos.`,
+      grupoChave: `foto:${normalizar(phone) || phone}:${info.regiao ?? "-"}`,
+      metadata: { inspetor: info.nome, regiao: info.regiao },
+    });
+  })();
+
   // Album model: photos arrive uncaptioned and ACCUMULATE in the current open
   // batch until the inspector sends the number. No inactivity timer is used —
   // batches close on a number text or on "Encerrar", never on a timeout, so a
@@ -515,6 +544,22 @@ async function getUnidadeContexto(phone: string): Promise<string | null> {
   const row = data?.[0] as any;
   // Prefer the region context (the new model); fall back to legacy unidade.
   return row?.regiao_contexto ?? row?.unidade_contexto ?? null;
+}
+
+// Resolves the inspector's display name + active region for notification text.
+async function getInspetorInfo(phone: string): Promise<{ nome: string; regiao: string | null }> {
+  const variantes = variantesTelefone(phone);
+  if (variantes.length === 0) return { nome: "Inspetor", regiao: null };
+  const { data } = await supabaseAdmin
+    .from("inspetores")
+    .select("nome, unidade_contexto, regiao_contexto")
+    .in("telefone_normalizado", variantes)
+    .limit(1);
+  const row = data?.[0] as any;
+  return {
+    nome: row?.nome ?? "Inspetor",
+    regiao: row?.regiao_contexto ?? row?.unidade_contexto ?? null,
+  };
 }
 
 async function handleImageWithCaption(

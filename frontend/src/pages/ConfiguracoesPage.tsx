@@ -12,6 +12,8 @@ const LABELS: Record<string, string> = {
   ZAPI_TOKEN:        "Z-API Token",
   ZAPI_CLIENT_TOKEN: "Z-API Client Token",
   WHATSAPP_NUMERO:   "Número WhatsApp",
+  OPENAI_LIMITE_TOKENS_MES: "Limite mensal de tokens (OpenAI)",
+  ZAPI_RENOVA_EM:    "Data de renovação da Z-API",
 };
 
 const DICAS: Record<string, string> = {
@@ -20,6 +22,8 @@ const DICAS: Record<string, string> = {
   ZAPI_TOKEN:        "Token de acesso Z-API",
   ZAPI_CLIENT_TOKEN: "Client-Token do cabeçalho Z-API",
   WHATSAPP_NUMERO:   "DDI + DDD + número, só dígitos. Ex: 5542999990000",
+  OPENAI_LIMITE_TOKENS_MES: "Alerta quando o uso mensal chegar perto deste limite. Ex: 2000000",
+  ZAPI_RENOVA_EM:    "Avisa antes do vencimento da assinatura. Formato AAAA-MM-DD",
 };
 
 export function ConfiguracoesPage() {

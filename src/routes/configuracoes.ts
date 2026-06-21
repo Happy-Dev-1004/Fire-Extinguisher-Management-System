@@ -21,6 +21,10 @@ export const NOMES_SEGREDOS = [
   "ZAPI_TOKEN",
   "ZAPI_CLIENT_TOKEN",
   "WHATSAPP_NUMERO",
+  // Health/alert settings (not real secrets, but stored the same way so they're
+  // owner-only and read via getSecret by the health checks):
+  "OPENAI_LIMITE_TOKENS_MES", // monthly token budget for the OpenAI usage alert
+  "ZAPI_RENOVA_EM",           // Z-API subscription renewal date (YYYY-MM-DD)
 ] as const;
 
 export type NomeSegredo = (typeof NOMES_SEGREDOS)[number];
@@ -38,6 +42,10 @@ const VALIDADORES: Partial<Record<NomeSegredo, (v: string) => string | null>> = 
     v.length >= 8 ? null : "ZAPI_CLIENT_TOKEN muito curto.",
   WHATSAPP_NUMERO: (v) =>
     /^\d{10,15}$/.test(v) ? null : "Número WhatsApp deve conter apenas dígitos (10-15 caracteres).",
+  OPENAI_LIMITE_TOKENS_MES: (v) =>
+    /^\d{4,}$/.test(v) ? null : "Informe o limite mensal de tokens (apenas dígitos, ex.: 2000000).",
+  ZAPI_RENOVA_EM: (v) =>
+    /^\d{4}-\d{2}-\d{2}$/.test(v) ? null : "Use a data no formato AAAA-MM-DD (ex.: 2026-09-15).",
 };
 
 // ── GET /configuracoes ────────────────────────────────────────────────────────

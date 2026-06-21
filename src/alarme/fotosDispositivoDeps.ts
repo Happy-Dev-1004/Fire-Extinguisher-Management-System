@@ -5,6 +5,8 @@ import { supabaseAdmin } from "../db-admin";
 import { sendWhatsAppMessage } from "../notificacao/zapi";
 import { uploadFotoUrl } from "../fotos/storage";
 import { logger } from "../logger";
+import { registrarNotificacao } from "../notificacao/notificacoes";
+import { TIPO_LABEL } from "./expectedBom";
 import type { Deps, SessaoFoto } from "./fotosDispositivo";
 import type { DispositivoCandidato } from "./fotosMatcher";
 
@@ -86,6 +88,27 @@ export const fotosDispositivoDeps: Deps = {
       p_id: dispositivoId,
       p_foto: url,
     });
+    // Notify "device installed" on the FIRST photo (total becomes 1). Best-effort.
+    const notificarInstalacao = async (total: number) => {
+      if (total !== 1) return;
+      const { data: d } = await supabaseAdmin
+        .from("dispositivos_alarme")
+        .select("tipo_dispositivo, setor, endereco, centrais(numero, nome)")
+        .eq("id", dispositivoId)
+        .maybeSingle();
+      const dv = d as any;
+      if (!dv) return;
+      const central = dv.centrais?.numero ? `Central ${dv.centrais.numero}` : "central não definida";
+      const local = [dv.setor, dv.endereco].filter(Boolean).join(" · ") || "local não informado";
+      const tipo = TIPO_LABEL[dv.tipo_dispositivo] ?? dv.tipo_dispositivo;
+      void registrarNotificacao({
+        tipo: "instalacao",
+        severidade: "sucesso",
+        titulo: `Dispositivo instalado · ${tipo}`,
+        mensagem: `${local} (${central})`,
+        metadata: { dispositivo_id: dispositivoId, tipo: dv.tipo_dispositivo, setor: dv.setor, central: dv.centrais?.numero },
+      });
+    };
     if (error) {
       // Fallback: read-modify-write (sessions are serialized per phone anyway).
       log.warn({ err: error.message }, "rpc append_foto_dispositivo indisponível — fallback");
@@ -107,10 +130,13 @@ export const fotosDispositivoDeps: Deps = {
           data_instalacao: (atual as any)?.data_instalacao ?? hoje,
         })
         .eq("id", dispositivoId);
+      await notificarInstalacao(fotos.length);
       return { total: fotos.length };
     }
     const row = Array.isArray(data) ? data[0] : data;
-    return { total: (row?.fotos as string[] | undefined)?.length ?? 1 };
+    const total = (row?.fotos as string[] | undefined)?.length ?? 1;
+    await notificarInstalacao(total);
+    return { total };
   },
 
   async registrarFotoPendente(input) {

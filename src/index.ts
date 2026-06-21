@@ -4,6 +4,7 @@ import cors from "cors";
 import extintoresRouter    from "./routes/extintores";
 import inspecoesRouter     from "./routes/inspecoes";
 import webhookRouter, { varrerLotesAbandonados } from "./routes/webhook";
+import { rodarChecagemSaude } from "./notificacao/saude";
 import fichaRouter         from "./routes/ficha";
 import setupRouter         from "./routes/setup";
 import meRouter            from "./routes/me";
@@ -17,6 +18,7 @@ import manutencaoRouter      from "./routes/manutencao";
 import regioesRouter         from "./routes/regioes";
 import alarmeRouter          from "./routes/alarme";
 import rdosRouter            from "./routes/rdos";
+import notificacoesRouter    from "./routes/notificacoes";
 import { requireAuth, requireAdmin, requireOwner } from "./auth/middleware";
 import { logger } from "./logger";
 import { supabaseAdmin } from "./db-admin";
@@ -159,6 +161,9 @@ app.use("/alarme",          requireAuth, requireAdmin, alarmeRouter);
 // RDO (Relatório Diário de Obra) read API: owner + member.
 app.use("/rdos",            requireAuth, requireAdmin, rdosRouter);
 
+// Notifications: owner + member (health sub-route is owner-gated inside).
+app.use("/notificacoes",    requireAuth, requireAdmin, notificacoesRouter);
+
 // Bind to 0.0.0.0 so the platform's proxy (Railway/Render) can reach the
 // container — binding to localhost/IPv6-only causes a 502 at the edge.
 app.listen(Number(PORT), "0.0.0.0", () => {
@@ -179,4 +184,16 @@ app.listen(Number(PORT), "0.0.0.0", () => {
       logger.warn({ err: err.message }, "falha na varredura periódica de lotes abandonados")
     );
   }, 30_000);
+
+  // Hourly system-health check: OpenAI monthly-token threshold + Z-API status and
+  // renewal-date warnings. De-duplicated inside (won't re-alert every hour). Runs
+  // once on startup, then every hour.
+  rodarChecagemSaude().catch((err) =>
+    logger.warn({ err: err.message }, "falha na checagem de saúde inicial")
+  );
+  setInterval(() => {
+    rodarChecagemSaude().catch((err) =>
+      logger.warn({ err: err.message }, "falha na checagem de saúde periódica")
+    );
+  }, 60 * 60 * 1000);
 });
