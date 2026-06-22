@@ -7,6 +7,10 @@
 //   GET  /rdos/:id/dispositivos-instalados — devices installed that day + links
 //   GET  /rdos/destinatarios        — preview who will receive an RDO
 //   POST /rdos/:id/enviar           — generate + send PDF (WhatsApp / email / ambos)
+//   GET  /rdos/:id/pdf?preview=true — light (photoless) PDF for inline preview
+//   POST /rdos/:id/fotos            — add photos to fotos_dia (manual)
+//   DELETE /rdos/:id/fotos          — remove one photo from fotos_dia
+//   DELETE /rdos/:id                — soft-delete (status='excluido')
 //   GET  /rdos/sessoes/ativas       — active capture sessions (debug/ops visibility)
 
 import { Router, type Request, type Response } from "express";
@@ -17,6 +21,7 @@ import { gerarRdoPdf } from "../rdo/gerarPdf";
 import { enviarRdo, UNIDADE_RDO } from "../rdo/enviarRdo";
 import { resolverDestinatarios } from "../destinatarios/resolver";
 import { rdosParaCsv, rdosParaPdf, type RdoResumo } from "../alarme/relatorioAlarme";
+import { uploadFotoBase64 } from "../fotos/storage";
 
 const router = Router();
 const log = logger.child({ rota: "/rdos" });
@@ -34,7 +39,9 @@ router.get("/", async (req: Request, res: Response) => {
   }
   const f = parsed.data;
   let q = supabaseAdmin.from("rdos").select("*").order("created_at", { ascending: false });
-  if (f.status)          q = q.eq("status", f.status);
+  // Soft-deleted RDOs (status='excluido') are hidden from all lists.
+  if (f.status) q = q.eq("status", f.status);
+  else          q = q.neq("status", "excluido");
   if (f.data)            q = q.eq("data", f.data);
   if (f.telefone_origem) q = q.eq("telefone_origem", f.telefone_origem);
 
@@ -124,8 +131,10 @@ router.get("/:id", async (req: Request, res: Response) => {
 });
 
 // ── RDO PDF (inline) ──────────────────────────────────────────────────────────
+// ?preview=true renders a light, photoless PDF so the inline modal loads fast.
 router.get("/:id/pdf", async (req: Request, res: Response) => {
-  const result = await gerarRdoPdf(String(req.params.id));
+  const preview = req.query.preview === "true";
+  const result = await gerarRdoPdf(String(req.params.id), { semFotos: preview });
   if (!result.ok) {
     const status = result.motivo === "RDO não encontrado." ? 404 : 500;
     return res.status(status).json({ erro: result.motivo });
@@ -134,6 +143,63 @@ router.get("/:id/pdf", async (req: Request, res: Response) => {
   res.setHeader("Content-Type", "application/pdf");
   res.setHeader("Content-Disposition", `inline; filename="${fileName}"`);
   return res.send(result.pdfBuffer);
+});
+
+// ── Add / remove RDO photos (fotos_dia) — manual, mirrors extinguisher photos ──
+const FotosRdoSchema = z.object({
+  fotos: z.array(z.string().min(1)).min(1, "Envie ao menos uma foto."), // base64/data-URI
+});
+
+router.post("/:id/fotos", async (req: Request, res: Response) => {
+  const parsed = FotosRdoSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ erro: "Dados inválidos.", detalhes: parsed.error.flatten().fieldErrors });
+  }
+  const { data: rdo } = await supabaseAdmin
+    .from("rdos").select("fotos_dia").eq("id", req.params.id).maybeSingle();
+  if (!rdo) return res.status(404).json({ erro: "RDO não encontrado." });
+
+  const urls: string[] = [];
+  for (let i = 0; i < parsed.data.fotos.length; i++) {
+    const url = await uploadFotoBase64(`rdos/${req.params.id}`, parsed.data.fotos[i], `manual-${Date.now()}-${i}`);
+    if (url) urls.push(url);
+  }
+  if (urls.length === 0) return res.status(502).json({ erro: "Falha ao processar as fotos." });
+
+  const novas = [ ...(((rdo as any).fotos_dia as string[]) ?? []), ...urls ];
+  const { data, error } = await supabaseAdmin
+    .from("rdos").update({ fotos_dia: novas }).eq("id", req.params.id).select().single();
+  if (error) return res.status(400).json({ erro: error.message });
+  log.info({ id: req.params.id, adicionadas: urls.length }, "fotos adicionadas ao RDO");
+  return res.json(data);
+});
+
+const RemoverFotoRdoSchema = z.object({ url: z.string().min(1) });
+
+router.delete("/:id/fotos", async (req: Request, res: Response) => {
+  const parsed = RemoverFotoRdoSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ erro: "Informe a url da foto.", detalhes: parsed.error.flatten().fieldErrors });
+  }
+  const { data: rdo } = await supabaseAdmin
+    .from("rdos").select("fotos_dia").eq("id", req.params.id).maybeSingle();
+  if (!rdo) return res.status(404).json({ erro: "RDO não encontrado." });
+  const novas = (((rdo as any).fotos_dia as string[]) ?? []).filter((u) => u !== parsed.data.url);
+  const { data, error } = await supabaseAdmin
+    .from("rdos").update({ fotos_dia: novas }).eq("id", req.params.id).select().single();
+  if (error) return res.status(400).json({ erro: error.message });
+  log.info({ id: req.params.id }, "foto removida do RDO");
+  return res.json(data);
+});
+
+// ── Soft-delete an RDO (status='excluido'; kept for audit, hidden from lists) ──
+router.delete("/:id", async (req: Request, res: Response) => {
+  const { data, error } = await supabaseAdmin
+    .from("rdos").update({ status: "excluido" }).eq("id", req.params.id).select("id").maybeSingle();
+  if (error) return res.status(400).json({ erro: error.message });
+  if (!data) return res.status(404).json({ erro: "RDO não encontrado." });
+  log.info({ id: req.params.id, by: req.admin?.email }, "RDO excluído (soft-delete)");
+  return res.status(204).send();
 });
 
 // ── Send the RDO PDF to recipients (WhatsApp / email / ambos) ─────────────────

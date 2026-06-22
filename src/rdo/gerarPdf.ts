@@ -58,7 +58,10 @@ async function dispositivosInstaladosDoDia(
   }));
 }
 
-export async function gerarRdoPdf(rdoId: string): Promise<GerarRdoPdfResult> {
+export async function gerarRdoPdf(
+  rdoId: string,
+  opts: { semFotos?: boolean } = {}
+): Promise<GerarRdoPdfResult> {
   const { data: rdo, error } = await supabaseAdmin
     .from("rdos").select("*").eq("id", rdoId).maybeSingle();
   if (error) {
@@ -70,7 +73,9 @@ export async function gerarRdoPdf(rdoId: string): Promise<GerarRdoPdfResult> {
   const r = rdo as any;
 
   // Downscale the day's photos to small inline data-URIs (keeps the PDF light).
-  const fotos: string[] = Array.isArray(r.fotos_dia) ? r.fotos_dia.filter(Boolean) : [];
+  // In preview mode (semFotos) we skip the fetch+downscale entirely so the inline
+  // preview renders fast.
+  const fotos: string[] = !opts.semFotos && Array.isArray(r.fotos_dia) ? r.fotos_dia.filter(Boolean) : [];
   const thumbMap = fotos.length ? await thumbnailsDeUrls(fotos) : new Map<string, string>();
   const fotosDataUris = fotos.map((u) => thumbMap.get(u)).filter((x): x is string => !!x);
 

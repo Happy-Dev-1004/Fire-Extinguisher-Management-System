@@ -5,10 +5,11 @@ import {
   type DispositivoAlarme,
   type RelatorioArmazenamento,
 } from "../lib/api";
+import { downscaleToBase64 } from "../lib/foto";
 import { toast } from "../components/Toast";
 import {
   Camera, Calendar, HardDrive, ChevronLeft, ImageOff, X,
-  Loader2, MapPin, Cpu,
+  Loader2, MapPin, Cpu, ImagePlus, Trash2,
 } from "lucide-react";
 
 // pt-BR labels for the device type enum.
@@ -217,10 +218,40 @@ function DispositivoGaleria({
   // Re-fetch the full device (the list payload already has fotos, but this keeps
   // the gallery fresh if photos changed).
   const [disp, setDisp] = useState<DispositivoAlarme | DispositivoInstalado>(dispositivo);
+  const [enviando, setEnviando] = useState(false);
+  const [removendo, setRemovendo] = useState<string | null>(null);
 
   useEffect(() => {
     alarmeApi.dispositivo(dispositivo.id).then(setDisp).catch(() => {/* keep list copy */});
   }, [dispositivo.id]);
+
+  async function adicionarFotos(files: FileList | null) {
+    if (!files || files.length === 0) return;
+    setEnviando(true);
+    try {
+      const base64s = await Promise.all(Array.from(files).slice(0, 10).map(downscaleToBase64));
+      const atualizado = await alarmeApi.adicionarFotos(disp.id, base64s.filter(Boolean) as string[]);
+      setDisp((x) => ({ ...x, ...atualizado }));
+      toast("Fotos adicionadas.", "sucesso");
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Erro ao adicionar fotos.", "erro");
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  async function removerFoto(url: string) {
+    setRemovendo(url);
+    try {
+      const atualizado = await alarmeApi.removerFoto(disp.id, url);
+      setDisp((x) => ({ ...x, ...atualizado }));
+      toast("Foto removida.", "sucesso");
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Erro ao remover foto.", "erro");
+    } finally {
+      setRemovendo(null);
+    }
+  }
 
   return (
     <div className="space-y-4">
@@ -246,29 +277,46 @@ function DispositivoGaleria({
         </div>
       </div>
 
-      {disp.fotos.length === 0 ? (
-        <div className="card p-10 text-center text-gray-400">
-          <ImageOff className="w-10 h-10 mx-auto mb-2" />
-          Este dispositivo ainda não tem fotos.
+      <div className="card p-5">
+        <div className="flex items-center justify-between mb-3">
+          <p className="section-title flex items-center gap-1.5">
+            <Camera className="w-3.5 h-3.5" /> Fotos {disp.fotos?.length ? `(${disp.fotos.length})` : ""}
+          </p>
+          <label className={`btn-secondary btn-sm cursor-pointer ${enviando ? "opacity-60 pointer-events-none" : ""}`}>
+            {enviando ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ImagePlus className="w-3.5 h-3.5" />}
+            Adicionar fotos
+            <input type="file" accept="image/*" multiple className="hidden"
+              onChange={(e) => { void adicionarFotos(e.target.files); e.target.value = ""; }} />
+          </label>
         </div>
-      ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-          {disp.fotos.map((url, i) => (
-            <button
-              key={url}
-              onClick={() => onAbrir(url)}
-              className="aspect-square rounded-lg overflow-hidden bg-gray-100 group"
-            >
-              <img
-                src={url}
-                alt={`Foto ${i + 1}`}
-                loading="lazy"
-                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
-              />
-            </button>
-          ))}
-        </div>
-      )}
+
+        {disp.fotos.length === 0 ? (
+          <p className="text-sm text-gray-400 py-2">Nenhuma foto. Use "Adicionar fotos" para enviar manualmente.</p>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+            {disp.fotos.map((url, i) => (
+              <div key={url} className="relative aspect-square rounded-lg overflow-hidden bg-gray-100 group">
+                <button onClick={() => onAbrir(url)} className="block w-full h-full">
+                  <img
+                    src={url}
+                    alt={`Foto ${i + 1}`}
+                    loading="lazy"
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+                  />
+                </button>
+                <button
+                  onClick={() => removerFoto(url)}
+                  disabled={removendo === url}
+                  title="Remover foto"
+                  className="absolute top-1 right-1 w-6 h-6 rounded-full bg-black/50 hover:bg-red-600 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                >
+                  {removendo === url ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

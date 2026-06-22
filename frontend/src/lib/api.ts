@@ -249,6 +249,19 @@ async function previewBlob(path: string, body: unknown): Promise<string> {
   return URL.createObjectURL(blob);
 }
 
+// GET variant of previewBlob (for endpoints that serve the PDF via GET).
+async function previewBlobGet(path: string): Promise<string> {
+  const token = _getToken ? await _getToken() : null;
+  const res = await fetch(`${BASE}${path}`, {
+    headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+  });
+  if (!res.ok) {
+    const json = await res.json().catch(() => ({}));
+    throw new Error(json.erro ?? json.error ?? `Erro HTTP ${res.status}`);
+  }
+  return URL.createObjectURL(await res.blob());
+}
+
 export const relatorioApi = {
   ficha: (unidade: string, mes_referencia: string) =>
     downloadBlob(
@@ -499,6 +512,19 @@ export const rdosApi = {
 
   baixarPdf: (id: string, data: string | null) =>
     downloadBlob(`/rdos/${id}/pdf`, undefined, `rdo_${(data ?? "sem-data").replace(/\//g, "-")}.pdf`, "GET"),
+
+  // Inline preview (light, photoless) — returns an object URL for an iframe.
+  preview: (id: string) => previewBlobGet(`/rdos/${id}/pdf?preview=true`),
+
+  // Manual photo add/remove on fotos_dia (base64 client-downscaled).
+  adicionarFotos: (id: string, fotos: string[]) =>
+    request<RdoRow>("POST", `/rdos/${id}/fotos`, { fotos }),
+  removerFoto: (id: string, url: string) =>
+    request<RdoRow>("DELETE", `/rdos/${id}/fotos`, { url }),
+
+  // Soft-delete the RDO.
+  excluir: (id: string) =>
+    request<void>("DELETE", `/rdos/${id}`),
 
   enviar: (id: string, canal: "whatsapp" | "email" | "ambos") =>
     request<{ mensagem: string; enviados: number; falhas: number; detalhes: unknown[] }>(
