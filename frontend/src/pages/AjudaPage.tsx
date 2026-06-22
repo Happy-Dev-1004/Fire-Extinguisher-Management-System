@@ -3,7 +3,7 @@ import {
   HelpCircle, Smartphone, LayoutDashboard, ChevronDown, MapPin, Camera,
   CheckCircle2, PlayCircle, StopCircle, ShieldCheck, Clock, Circle, FileText,
   Send, Users, CalendarDays, Flame, Search, Settings, AlertTriangle,
-  Hash, Tag, Gauge, SignpostBig, Info,
+  Hash, Tag, Gauge, SignpostBig, Info, Bell, Activity, Image as ImageIcon,
 } from "lucide-react";
 
 type Aba = "inspetores" | "usuarios";
@@ -66,7 +66,37 @@ const FOTO_ITENS = [
   { Icon: SignpostBig, texto: "O piso / localização (sinalização de piso)" },
 ];
 
+// Inspector guide with a phase sub-toggle (Fase 1 = extintores, Fase 2 = alarme).
 function GuiaInspetores() {
+  const [fase, setFase] = useState<1 | 2>(1);
+  return (
+    <div className="space-y-6">
+      {/* Phase sub-toggle */}
+      <div className="inline-flex p-1 bg-gray-100 rounded-xl">
+        <button
+          onClick={() => setFase(1)}
+          className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
+            fase === 1 ? "bg-white text-brand-600 shadow-sm" : "text-gray-500 hover:text-gray-700"
+          }`}
+        >
+          <Flame className="w-4 h-4" /> Fase 1 · Extintores
+        </button>
+        <button
+          onClick={() => setFase(2)}
+          className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
+            fase === 2 ? "bg-white text-brand-600 shadow-sm" : "text-gray-500 hover:text-gray-700"
+          }`}
+        >
+          <Bell className="w-4 h-4" /> Fase 2 · Alarme
+        </button>
+      </div>
+
+      {fase === 1 ? <GuiaInspetoresFase1 /> : <GuiaInspetoresFase2 />}
+    </div>
+  );
+}
+
+function GuiaInspetoresFase1() {
   return (
     <div className="space-y-6">
       <p className="text-sm text-gray-600 leading-relaxed">
@@ -180,6 +210,104 @@ function GuiaInspetores() {
           <Regra>O número deve ser o da <strong>etiqueta amarela</strong> do extintor.</Regra>
           <Regra>Para <strong>trocar de região</strong>, envie o novo nome da região e continue.</Regra>
           <Regra>Seu número de WhatsApp precisa estar <strong>cadastrado como inspetor</strong> no painel.</Regra>
+        </ul>
+      </div>
+    </div>
+  );
+}
+
+// ── Phase 2 (alarme) inspector guide ──────────────────────────────────────────
+function GuiaInspetoresFase2() {
+  return (
+    <div className="space-y-6">
+      <p className="text-sm text-gray-600 leading-relaxed">
+        Na Fase 2, a equipe de alarme usa o <strong>WhatsApp</strong> para registrar o
+        <strong> Relatório Diário de Obra (RDO)</strong> e as <strong>fotos dos dispositivos</strong> instalados.
+        Seu número precisa ter <strong>permissão de Fase 2</strong> no painel (Inspetores).
+      </p>
+
+      {/* Step 1 — open the alarm session */}
+      <PassoCard n={1} Icon={Bell} titulo="Inicie o modo Alarme">
+        <p>Antes de tudo, ative o trabalho de Fase 2:</p>
+        <Comando>alarme</Comando>
+        <p className="mt-3">
+          A partir daí você pode registrar o RDO e as fotos dos dispositivos. Ao terminar o dia, envie
+          <Inline>encerrar alarme</Inline> (ou a sessão fecha sozinha após 3 horas sem mensagens).
+        </p>
+        <Nota>Sem permissão de <strong>Fase 2</strong>, as mensagens de alarme são ignoradas — peça ao gestor para liberar no painel.</Nota>
+      </PassoCard>
+
+      {/* Step 2 — RDO */}
+      <PassoCard n={2} Icon={FileText} titulo="Faça o RDO (relatório diário)">
+        <p>Para abrir o relatório do dia, envie:</p>
+        <Comando>RDO</Comando>
+        <p className="mt-3">
+          O sistema faz <strong>uma pergunta de cada vez</strong> (data, responsável, período, efetivo,
+          dispositivos instalados, etc.). Basta responder cada uma. No final, envie as
+          <strong> fotos do dia</strong> e escreva <Inline>pronto</Inline> para concluir.
+        </p>
+        <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <div className="flex items-start gap-2.5 rounded-lg border px-3 py-2.5 border-gray-200 bg-gray-50/60 dark:border-gray-800 dark:bg-gray-800/40">
+            <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5 text-gray-400" />
+            <span className="text-sm text-gray-600"><Inline>voltar</Inline> corrige a resposta anterior</span>
+          </div>
+          <div className="flex items-start gap-2.5 rounded-lg border px-3 py-2.5 border-gray-200 bg-gray-50/60 dark:border-gray-800 dark:bg-gray-800/40">
+            <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5 text-gray-400" />
+            <span className="text-sm text-gray-600"><Inline>cancelar</Inline> descarta e recomeça o RDO</span>
+          </div>
+        </div>
+        <Nota>Você pode responder a data como <Inline>hoje</Inline>, e pular perguntas opcionais com <Inline>pular</Inline>.</Nota>
+      </PassoCard>
+
+      {/* Step 3 — device photos */}
+      <PassoCard n={3} Icon={Camera} titulo="Registre as fotos de um dispositivo">
+        <p>Para vincular fotos a um dispositivo instalado, envie:</p>
+        <Comando>dispositivo</Comando>
+        <p className="mt-3">
+          Em seguida, informe <strong>qual dispositivo</strong> (pelo endereço, ex.: <Inline>L1.05</Inline>,
+          ou por <strong>setor + tipo</strong>, ex.: <Inline>Torrefação sirene</Inline>) e <strong>envie as fotos</strong> dele.
+          Cada foto é anexada e o dispositivo passa para <strong>instalado</strong>. Ao terminar, escreva
+          <Inline>encerrar dispositivo</Inline>.
+        </p>
+        <Nota tipo="alerta">
+          Se enviar uma foto <strong>sem identificar</strong> o dispositivo (ou com um nome que não existe),
+          ela <strong>não é perdida</strong> — fica guardada para revisão no painel.
+        </Nota>
+      </PassoCard>
+
+      {/* Step 4 — close */}
+      <PassoCard n={4} Icon={StopCircle} titulo="Encerre ao final do dia">
+        <p>Quando terminar o trabalho de alarme, envie:</p>
+        <Comando>encerrar alarme</Comando>
+        <p className="mt-3">A sessão de Fase 2 fecha. Envie <Inline>alarme</Inline> de novo no próximo dia.</p>
+      </PassoCard>
+
+      {/* Example timeline */}
+      <div className="card p-5">
+        <p className="section-title mb-4">Exemplo de um dia de alarme</p>
+        <ol className="space-y-2.5">
+          <Linha cor="text-brand-600" Icon={Bell} cmd="alarme" desc="abre o modo Fase 2" />
+          <Linha cor="text-emerald-600" Icon={FileText} cmd="RDO" desc="inicia o relatório do dia" />
+          <Linha cor="text-gray-400" Icon={CheckCircle2} cmd="responde as perguntas + fotos" desc="e escreve 'pronto'" plain />
+          <Linha cor="text-emerald-600" Icon={Camera} cmd="dispositivo" desc="entra no registro de fotos" />
+          <Linha cor="text-gray-400" Icon={Tag} cmd="Torrefação sirene" desc="identifica o dispositivo" plain />
+          <Linha cor="text-gray-400" Icon={Camera} cmd="fotos do dispositivo" desc="ficam vinculadas" plain />
+          <Linha cor="text-amber-600" Icon={StopCircle} cmd="encerrar dispositivo" desc="fecha o registro de fotos" />
+          <Linha cor="text-rose-600" Icon={StopCircle} cmd="encerrar alarme" desc="fim do dia" />
+        </ol>
+      </div>
+
+      {/* Rules */}
+      <div className="card p-5">
+        <p className="section-title mb-3 flex items-center gap-1.5 text-amber-600">
+          <AlertTriangle className="w-3.5 h-3.5" /> Regras importantes
+        </p>
+        <ul className="space-y-2.5 text-sm text-gray-700">
+          <Regra>Sempre envie <Inline>alarme</Inline> <strong>antes</strong> de registrar RDO ou fotos de dispositivo.</Regra>
+          <Regra>Para as fotos de dispositivo, <strong>identifique o dispositivo primeiro</strong>, depois envie as fotos.</Regra>
+          <Regra>O <strong>RDO</strong> e o <strong>registro de dispositivo</strong> são fluxos separados — cada um tem seu próprio começo e fim.</Regra>
+          <Regra>Seu número precisa ter <strong>permissão de Fase 2</strong> no painel (Inspetores).</Regra>
+          <Regra>Nada é perdido: fotos sem dispositivo identificado vão para a <strong>revisão</strong> no painel.</Regra>
         </ul>
       </div>
     </div>
@@ -306,6 +434,80 @@ const ARTIGOS: Artigo[] = [
       <div className="space-y-2">
         <LinhaArtigo Icon={Smartphone}><strong>Inspetores</strong> — cadastre o WhatsApp (com DDI, ex.: 5577999999999) de quem fotografa. Só números ativos podem enviar fotos.</LinhaArtigo>
         <LinhaArtigo Icon={Send}><strong>Destinatários</strong> — cadastre quem recebe as fichas por região, com telefone e/ou e-mail.</LinhaArtigo>
+      </div>
+    ),
+  },
+  // ── Fase 2 (alarme) ───────────────────────────────────────────────────────
+  {
+    id: "f2-visao-geral",
+    Icon: Bell,
+    titulo: "Fase 2 · Alarme: como funciona",
+    resumo: "Instalação dos dispositivos do sistema de alarme.",
+    conteudo: (
+      <div className="space-y-3">
+        <p>A Fase 2 acompanha a <strong>instalação do sistema de alarme de incêndio</strong> nas 4 centrais. O fluxo é:</p>
+        <ol className="list-decimal pl-5 space-y-1.5">
+          <li>A equipe de alarme envia, pelo WhatsApp, o <strong>RDO</strong> e as <strong>fotos dos dispositivos</strong> (veja a aba "Para inspetores" → Fase 2).</li>
+          <li>Cada dispositivo fotografado passa a <strong>instalado</strong> e aparece no <strong>registro fotográfico</strong>.</li>
+          <li>O painel mostra o <strong>progresso</strong> por central e laço, e as <strong>lacunas</strong> do projeto (o que falta cadastrar).</li>
+          <li>Os <strong>RDOs</strong> ficam listados, com PDF, prévia, fotos e envio aos destinatários.</li>
+        </ol>
+        <Nota>Tudo da Fase 2 fica no menu lateral, na seção <strong>Fase 2 · Alarme de incêndio</strong> (Progresso, Registro fotográfico, RDOs).</Nota>
+      </div>
+    ),
+  },
+  {
+    id: "f2-progresso",
+    Icon: Activity,
+    titulo: "Progresso da instalação",
+    resumo: "Andamento por central e laço, e lacunas do projeto.",
+    conteudo: (
+      <div className="space-y-2">
+        <LinhaArtigo Icon={Activity}>Veja o andamento geral e <strong>por central e laço</strong>: quantos dispositivos estão pendente / instalado / endereçado / testado.</LinhaArtigo>
+        <LinhaArtigo Icon={AlertTriangle}>As <strong>lacunas do projeto</strong> mostram, por tipo (detector, acionador, sirene…), quanto já foi cadastrado e quanto falta.</LinhaArtigo>
+        <LinhaArtigo Icon={Search}>Use a <strong>busca</strong> com filtros (central, tipo, setor, status) e <strong>exporte</strong> em PDF ou CSV.</LinhaArtigo>
+        <Nota>Enquanto o mapeamento de endereços, módulos e isoladores não terminar, eles aparecem como <strong>pendentes</strong> — é o esperado.</Nota>
+      </div>
+    ),
+  },
+  {
+    id: "f2-fotos",
+    Icon: ImageIcon,
+    titulo: "Registro fotográfico dos dispositivos",
+    resumo: "Galeria por data, adicionar e remover fotos.",
+    conteudo: (
+      <div className="space-y-2">
+        <LinhaArtigo Icon={CalendarDays}>Em <strong>Registro fotográfico → Por data</strong>, escolha o dia para ver os dispositivos instalados/fotografados.</LinhaArtigo>
+        <LinhaArtigo Icon={Camera}>Clique num dispositivo para abrir a <strong>galeria</strong>. Lá você pode <strong>Adicionar fotos</strong> manualmente e <strong>remover</strong> qualquer foto.</LinhaArtigo>
+        <LinhaArtigo Icon={ImageIcon}>Fotos enviadas pelo WhatsApp sem identificar o dispositivo ficam na <strong>revisão</strong> para serem atribuídas.</LinhaArtigo>
+        <Nota>A aba <strong>Armazenamento</strong> mostra quanto espaço as fotos ocupam (nada é apagado automaticamente).</Nota>
+      </div>
+    ),
+  },
+  {
+    id: "f2-rdos",
+    Icon: FileText,
+    titulo: "RDOs: prévia, fotos, PDF, envio e exclusão",
+    resumo: "Gerenciar os relatórios diários de obra.",
+    conteudo: (
+      <div className="space-y-2">
+        <LinhaArtigo Icon={FileText}>Em <strong>RDOs</strong>, cada relatório tem: <strong>Prévia</strong> (PDF na tela), <strong>Fotos</strong> (adicionar/remover as fotos do dia), <strong>PDF</strong> (baixar) e <strong>Enviar</strong>.</LinhaArtigo>
+        <LinhaArtigo Icon={Send}><strong>Enviar</strong> manda o PDF aos destinatários da unidade <Inline>RDO</Inline> (cadastre-os em Destinatários) por WhatsApp e/ou e-mail.</LinhaArtigo>
+        <LinhaArtigo Icon={CheckCircle2}><strong>Excluir</strong> remove o RDO das listas (mantido no histórico para auditoria).</LinhaArtigo>
+        <Nota>A prévia é leve (sem fotos) para abrir rápido; o botão <strong>PDF</strong> baixa a versão completa com as fotos.</Nota>
+      </div>
+    ),
+  },
+  {
+    id: "f2-permissoes",
+    Icon: ShieldCheck,
+    titulo: "Permissões por fase (Fase 1 / Fase 2)",
+    resumo: "Quem pode trabalhar em cada fase.",
+    conteudo: (
+      <div className="space-y-2">
+        <LinhaArtigo Icon={ShieldCheck}>Na página <strong>Inspetores</strong>, cada pessoa recebe permissão de <strong>Fase 1</strong> (extintores) e/ou <strong>Fase 2</strong> (alarme).</LinhaArtigo>
+        <LinhaArtigo Icon={Users}>Use para a troca <strong>instalação → gestão</strong>: ao fim da obra, tire a Fase 2 da equipe instaladora e dê para a equipe de gestão.</LinhaArtigo>
+        <Nota>Cada fase tem seus próprios comandos de início/fim no WhatsApp, então um inspetor de uma fase nunca dispara a outra — sem gasto de recursos à toa.</Nota>
       </div>
     ),
   },
