@@ -114,11 +114,13 @@ function GuiaInspetores() {
             <div
               key={texto}
               className={`flex items-start gap-2.5 rounded-lg border px-3 py-2.5 ${
-                destaque ? "border-brand-200 bg-brand-50/50" : "border-gray-200 bg-gray-50/60"
+                destaque
+                  ? "border-brand-200 bg-brand-50/50 dark:border-brand-500/30 dark:bg-brand-500/10"
+                  : "border-gray-200 bg-gray-50/60 dark:border-gray-800 dark:bg-gray-800/40"
               }`}
             >
-              <Icon className={`w-4 h-4 shrink-0 mt-0.5 ${destaque ? "text-brand-600" : "text-gray-400"}`} />
-              <span className={`text-sm ${destaque ? "text-gray-800 font-medium" : "text-gray-600"}`}>{texto}</span>
+              <Icon className={`w-4 h-4 shrink-0 mt-0.5 ${destaque ? "text-brand-600 dark:text-brand-400" : "text-gray-400"}`} />
+              <span className={`text-sm ${destaque ? "text-gray-800 dark:text-gray-100 font-medium" : "text-gray-600"}`}>{texto}</span>
             </div>
           ))}
         </div>
