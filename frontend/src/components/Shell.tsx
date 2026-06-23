@@ -49,7 +49,9 @@ const NAV_GROUPS: NavGroup[] = [
   {
     titulo: "Fase 3 · Hidrantes",
     items: [
-      { to: "/hidrantes", label: "Hidrantes", Icon: Droplets },
+      { to: "/hidrantes",        label: "Hidrantes",          Icon: Droplets },
+      { to: "/hidrantes/fichas", label: "Fichas",             Icon: FileText },
+      { to: "/hidrantes/busca",  label: "Busca / Relatórios", Icon: Search },
     ],
   },
   {
@@ -131,9 +133,10 @@ export function Shell() {
               <NavLink
                 key={to}
                 to={to}
-                // Phase-2 hub at /alarme should stay highlighted on its sub-routes
-                // (/alarme/fotos etc.) only for the exact hub; sub-items handle their own.
-                end={to === "/alarme"}
+                // Hub roots (/alarme, /hidrantes) must match exactly so they
+                // don't stay highlighted on their sub-routes (/hidrantes/fichas
+                // etc.) — those sub-items handle their own active state.
+                end={to === "/alarme" || to === "/hidrantes"}
                 className={({ isActive }) =>
                   `group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-150 ${
                     isActive

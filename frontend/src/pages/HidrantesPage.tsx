@@ -126,10 +126,14 @@ export function HidrantesPage({ embedded = false }: { embedded?: boolean } = {})
     <div className="space-y-6 animate-fade-in">
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
-          {!embedded && <h1 className="page-title">Hidrantes</h1>}
-          <p className="text-sm text-gray-500 mt-0.5">
-            Inventário de hidrantes por unidade e progresso da inspeção mensal.
-          </p>
+          {!embedded && (
+            <>
+              <h1 className="page-title">Hidrantes</h1>
+              <p className="text-sm text-gray-500 mt-0.5">
+                Inventário de hidrantes por unidade e progresso da inspeção mensal.
+              </p>
+            </>
+          )}
         </div>
         <div className="flex gap-2">
           <button onClick={carregar} className="btn-secondary btn-sm" disabled={carregando}>

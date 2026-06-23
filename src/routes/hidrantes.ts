@@ -3,6 +3,7 @@
 //
 //   GET    /hidrantes                       — units with progress counts + cycle
 //   GET    /hidrantes/pendentes             — parked AI results (manual assign)
+//   GET    /hidrantes/busca                  — filter hydrants across units (paginated)
 //   GET    /hidrantes/unidade/:unidade      — hydrants of a unit (+ situação)
 //   GET    /hidrantes/:id                   — one hydrant (+ situação)
 //   PUT    /hidrantes/:id                   — manual edit
@@ -99,6 +100,54 @@ router.get("/ficha/:unidade", async (req: Request, res: Response) => {
   res.setHeader("Content-Type", "application/pdf");
   res.setHeader("Content-Disposition", `inline; filename="hidrantes_${unidade.replace(/\s+/g, "_")}_${ts}.pdf"`);
   return res.send(result.pdfBuffer);
+});
+
+// ── GET /hidrantes/busca — filter hydrants across all units ──────────────────
+// Hydrants have no expiry dates, so situação is checklist-derived. Filters:
+//   unidade, numero, setor, inspetor (partial), situacao, status_inspecao.
+const BuscaSchema = z.object({
+  unidade:         z.string().optional(),
+  numero:          z.string().optional(),
+  setor:           z.string().optional(),
+  inspetor:        z.string().optional(),
+  situacao:        z.enum(["atencao", "pendente", "ok", "indeterminado"]).optional(),
+  status_inspecao: z.enum(["nao_inspecionado", "aguardando_verificacao", "verificado"]).optional(),
+  page:            z.coerce.number().int().min(1).default(1),
+});
+const POR_PAGINA = 50;
+
+router.get("/busca", async (req: Request, res: Response) => {
+  const parsed = BuscaSchema.safeParse(req.query);
+  if (!parsed.success) return res.status(400).json({ erro: "Filtros inválidos." });
+  const f = parsed.data;
+
+  let query = supabaseAdmin.from("hidrantes").select("*").not("unidade", "is", null);
+  if (f.unidade)         query = query.eq("unidade", f.unidade);
+  if (f.status_inspecao) query = query.eq("status_inspecao", f.status_inspecao);
+  if (f.numero)          query = query.ilike("numero", `%${f.numero}%`);
+  if (f.setor)           query = query.ilike("setor", `%${f.setor}%`);
+  if (f.inspetor)        query = query.ilike("inspetor", `%${f.inspetor}%`);
+
+  const { data, error } = await query.order("unidade").order("numero_int", { ascending: true });
+  if (error) return res.status(500).json({ erro: error.message });
+
+  // situação is computed in app code → filter + count after fetch.
+  let linhas = (data ?? []).map((h: any) => ({ ...h, situacao: calcularSituacaoHidrante(h) }));
+  if (f.situacao) linhas = linhas.filter((h) => h.situacao === f.situacao);
+
+  const contagens = {
+    total: linhas.length,
+    atencao:       linhas.filter((h) => h.situacao === "atencao").length,
+    pendente:      linhas.filter((h) => h.situacao === "pendente").length,
+    ok:            linhas.filter((h) => h.situacao === "ok").length,
+    indeterminado: linhas.filter((h) => h.situacao === "indeterminado").length,
+  };
+
+  const total = linhas.length;
+  const total_paginas = Math.max(1, Math.ceil(total / POR_PAGINA));
+  const pagina = Math.min(f.page, total_paginas);
+  const resultados = linhas.slice((pagina - 1) * POR_PAGINA, pagina * POR_PAGINA);
+  return res.json({ resultados, total, pagina, total_paginas, contagens });
 });
 
 // ── GET /hidrantes/:id ───────────────────────────────────────────────────────

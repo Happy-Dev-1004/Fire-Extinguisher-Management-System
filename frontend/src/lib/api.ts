@@ -25,6 +25,8 @@ import type {
   UnidadeHidranteProgresso,
   Hidrante,
   UnidadeHidrante,
+  FiltrosBuscaHidrante,
+  PaginaBuscaHidrante,
 } from "./types";
 
 const BASE = import.meta.env.VITE_API_BASE as string ?? "/api";
@@ -392,6 +394,16 @@ export const hidrantesApi = {
 
   pendentes: () =>
     request<{ pendentes: any[] }>("GET", "/hidrantes/pendentes"),
+
+  // Filter hydrants across units (paginated). situação is checklist-derived.
+  buscar: (filtros: FiltrosBuscaHidrante) => {
+    const qs = new URLSearchParams();
+    for (const [k, v] of Object.entries(filtros)) {
+      if (v !== undefined && v !== null && v !== "") qs.set(k, String(v));
+    }
+    const q = qs.toString();
+    return request<PaginaBuscaHidrante>("GET", `/hidrantes/busca${q ? `?${q}` : ""}`);
+  },
 
   // Unit ficha PDF (preview = light/photoless).
   fichaPreview: (unidade: string) =>

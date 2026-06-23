@@ -12,7 +12,7 @@ import { RegiaoDetailPage } from "./pages/RegiaoDetailPage";
 import { AjudaPage } from "./pages/AjudaPage";
 import { ExtintoresHubPage } from "./pages/ExtintoresHubPage";
 import { AlarmeHubPage } from "./pages/AlarmeHubPage";
-import { HidrantesPage } from "./pages/HidrantesPage";
+import { HidrantesHubPage } from "./pages/HidrantesHubPage";
 import { UnidadeHidranteDetailPage } from "./pages/UnidadeHidranteDetailPage";
 import { HidranteDetailPage } from "./pages/HidranteDetailPage";
 import { RequireAuth } from "./components/RequireAuth";
@@ -43,8 +43,12 @@ export function App() {
               <Route path="/alarme" element={<AlarmeHubPage />} />
               <Route path="/alarme/fotos" element={<AlarmeHubPage />} />
               <Route path="/alarme/rdos" element={<AlarmeHubPage />} />
-              {/* Fase 3 — hidrantes: unit list → unit detail → hydrant detail */}
-              <Route path="/hidrantes" element={<HidrantesPage />} />
+              {/* Fase 3 hub — tabs (Inventário / Fichas / Busca) keyed by path.
+                  Tab + unit routes must precede /hidrantes/:id so "fichas",
+                  "busca", "unidade" aren't captured as an id. */}
+              <Route path="/hidrantes" element={<HidrantesHubPage />} />
+              <Route path="/hidrantes/fichas" element={<HidrantesHubPage />} />
+              <Route path="/hidrantes/busca" element={<HidrantesHubPage />} />
               <Route path="/hidrantes/unidade/:unidade" element={<UnidadeHidranteDetailPage />} />
               <Route path="/hidrantes/:id" element={<HidranteDetailPage />} />
               <Route path="/ajuda" element={<AjudaPage />} />

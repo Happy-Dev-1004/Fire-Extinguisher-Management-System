@@ -100,6 +100,34 @@ export interface UnidadeHidrante {
   created_at:      string;
 }
 
+// Hydrant search (Phase 3). Mirrors FiltrosBusca/PaginaBusca but situação is
+// checklist-derived (no expiry filters).
+export interface FiltrosBuscaHidrante {
+  unidade?:         string;
+  numero?:          string;
+  setor?:           string;
+  inspetor?:        string;
+  situacao?:        SituacaoHidrante;
+  status_inspecao?: StatusInspecao;
+  page?:            number;
+}
+
+export interface ContagensHidrante {
+  total:         number;
+  atencao:       number;
+  pendente:      number;
+  ok:            number;
+  indeterminado: number;
+}
+
+export interface PaginaBuscaHidrante {
+  resultados:    Hidrante[];
+  total:         number;
+  pagina:        number;
+  total_paginas: number;
+  contagens:     ContagensHidrante;
+}
+
 export interface ExtintorRegiao {
   id:                 string;
   numero:             string;
