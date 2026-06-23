@@ -13,6 +13,8 @@
 //   POST   /hidrantes/novo-mes              — archive + reset (OWNER)
 //   POST   /hidrantes/seed                  — create the slots (OWNER)
 //   GET    /hidrantes/ficha/:unidade        — unit ficha PDF (?preview=true light)
+//   GET    /hidrantes/ficha/:unidade/destinatarios — preview recipients
+//   POST   /hidrantes/ficha/:unidade/enviar — send ficha to recipients (wa/email)
 
 import { Router, type Request, type Response } from "express";
 import { z } from "zod";
@@ -22,6 +24,9 @@ import { uploadFotoBase64 } from "../fotos/storage";
 import { calcularSituacaoHidrante } from "../extintores/situacaoHidrante";
 import { gerarFichaUnidadeHidrante } from "../ficha/gerarFichaUnidadeHidrante";
 import { limparCacheUnidadesHidrante } from "../regioes/unidadesHidrante";
+import { resolverDestinatarios } from "../destinatarios/resolver";
+import { enviarFichaWhatsApp } from "../notificacao/enviarFicha";
+import { enviarFichaEmail } from "../notificacao/enviarFichaEmail";
 
 const router = Router();
 const log = logger.child({ rota: "/hidrantes" });
@@ -100,6 +105,92 @@ router.get("/ficha/:unidade", async (req: Request, res: Response) => {
   res.setHeader("Content-Type", "application/pdf");
   res.setHeader("Content-Disposition", `inline; filename="hidrantes_${unidade.replace(/\s+/g, "_")}_${ts}.pdf"`);
   return res.send(result.pdfBuffer);
+});
+
+// Resolve the active cycle's reference month (used as the ficha's "mês").
+async function mesDoCicloAtivo(): Promise<string> {
+  const { data } = await supabaseAdmin
+    .from("ciclos_hidrante").select("mes_referencia").eq("status", "ativo").maybeSingle();
+  return (data as any)?.mes_referencia ?? "";
+}
+
+// ── GET /hidrantes/ficha/:unidade/destinatarios — preview recipients ─────────
+router.get("/ficha/:unidade/destinatarios", async (req: Request, res: Response) => {
+  const unidade = decodeURIComponent(String(req.params.unidade));
+  const destinatarios = await resolverDestinatarios(unidade);
+  return res.json({ unidade, destinatarios });
+});
+
+// ── POST /hidrantes/ficha/:unidade/enviar — send the ficha to recipients ─────
+// Generates the hydrant ficha PDF and sends it to all resolved recipients of
+// the unit (WhatsApp and/or e-mail). Mirrors POST /ficha/enviar (Phase 1).
+const EnviarHidranteSchema = z.object({
+  canal: z.enum(["whatsapp", "email", "ambos"]).default("ambos"),
+});
+
+router.post("/ficha/:unidade/enviar", async (req: Request, res: Response) => {
+  const unidade = decodeURIComponent(String(req.params.unidade));
+  const parsed = EnviarHidranteSchema.safeParse(req.body ?? {});
+  const canal = parsed.success ? parsed.data.canal : "ambos";
+  const log = logger.child({ rota: "/hidrantes/ficha/enviar", unidade, canal });
+
+  const destinatarios = await resolverDestinatarios(unidade);
+  if (destinatarios.length === 0) {
+    return res.status(422).json({
+      erro: `Nenhum destinatário configurado para a unidade "${unidade}". Cadastre ao menos um destinatário ativo antes de enviar.`,
+    });
+  }
+
+  const ficha = await gerarFichaUnidadeHidrante(unidade, { semFotos: false });
+  if (!ficha.ok) return res.status(404).json({ erro: ficha.motivo });
+
+  const mes = await mesDoCicloAtivo();
+  const assunto = `Ficha de inspeção mensal dos hidrantes — ${unidade}${mes ? ` — ${mes}` : ""}`;
+
+  const usarWhats = canal === "ambos" || canal === "whatsapp";
+  const usarEmail = canal === "ambos" || canal === "email";
+  const comTelefone = usarWhats ? destinatarios.filter((d) => d.telefone_normalizado)    : [];
+  const comEmail    = usarEmail ? destinatarios.filter((d) => d.email && d.email.trim())  : [];
+
+  const [resWhats, resEmail] = await Promise.all([
+    comTelefone.length
+      ? enviarFichaWhatsApp({ unidade, mes, pdfBuffer: ficha.pdfBuffer, destinatarios: comTelefone, assunto, prefixoArquivo: "hidrantes" })
+      : Promise.resolve([]),
+    comEmail.length
+      ? enviarFichaEmail({ unidade, mes, pdfBuffer: ficha.pdfBuffer, destinatarios: comEmail, assunto, prefixoArquivo: "hidrantes", descricaoItem: "dos hidrantes" })
+      : Promise.resolve([]),
+  ]);
+
+  const whatsById = new Map(resWhats.map((r) => [r.destinatario.id, r]));
+  const emailById = new Map(resEmail.map((r) => [r.destinatario.id, r]));
+  const detalhes = destinatarios.map((d) => {
+    const w = whatsById.get(d.id);
+    const e = emailById.get(d.id);
+    return {
+      destinatario: { id: d.id, nome: d.nome, telefone: d.telefone, email: d.email ?? null },
+      whatsapp: (usarWhats && d.telefone_normalizado)
+        ? { tentado: true, ok: w?.ok ?? false, motivo: w?.motivo }
+        : { tentado: false, ok: false },
+      email: (usarEmail && d.email && d.email.trim())
+        ? { tentado: true, ok: e?.ok ?? false, motivo: e?.motivo }
+        : { tentado: false, ok: false },
+    };
+  });
+
+  const sucessoCompleto = detalhes.filter(
+    (d) => (!d.whatsapp.tentado || d.whatsapp.ok) && (!d.email.tentado || d.email.ok)
+  ).length;
+  const comFalha = detalhes.length - sucessoCompleto;
+  const whatsOk = resWhats.filter((r) => r.ok).length;
+  const emailOk = resEmail.filter((r) => r.ok).length;
+
+  log.info({ total: destinatarios.length, sucessoCompleto, comFalha, whatsOk, emailOk }, "ficha de hidrantes enviada");
+  return res.json({
+    mensagem: `Ficha entregue a ${sucessoCompleto} de ${destinatarios.length} destinatário(s) (WhatsApp: ${whatsOk}, e-mail: ${emailOk}).`,
+    enviados: sucessoCompleto,
+    falhas:   comFalha,
+    detalhes,
+  });
 });
 
 // ── GET /hidrantes/busca — filter hydrants across all units ──────────────────

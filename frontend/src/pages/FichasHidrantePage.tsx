@@ -1,9 +1,13 @@
 import { useState, useEffect } from "react";
 import { hidrantesApi } from "../lib/api";
-import type { UnidadeHidranteProgresso } from "../lib/types";
+import type {
+  UnidadeHidranteProgresso, DestinatarioResolvido, ResultadoEnvioMulti,
+} from "../lib/types";
+import { Modal } from "../components/Modal";
 import { toast } from "../components/Toast";
 import {
   FileText, Download, Loader2, Droplets, CalendarDays, Eye, X,
+  Send, CheckCircle2, AlertTriangle, MessageCircle, Mail,
 } from "lucide-react";
 
 const MESES = [
@@ -15,9 +19,8 @@ function mesAtual(): string {
   return `${MESES[d.getMonth()]}/${d.getFullYear()}`;
 }
 
-// Fase 3 · Fichas — the official monthly hydrant ficha per unit (preview + PDF),
-// mirroring the Fase 1 Fichas tab. Hydrant fichas are generated on demand from
-// the unit's slots; there is no expiry, so the format is the inspection checklist.
+// Fase 3 · Fichas — the official monthly hydrant ficha per unit (preview, PDF
+// download, and send to the unit's recipients), mirroring the Fase 1 Fichas tab.
 export function FichasHidrantePage({ embedded = false }: { embedded?: boolean } = {}) {
   const [unidades, setUnidades]     = useState<UnidadeHidranteProgresso[]>([]);
   const [carregando, setCarregando] = useState(true);
@@ -26,6 +29,16 @@ export function FichasHidrantePage({ embedded = false }: { embedded?: boolean } 
   const [previewando, setPreviewando]   = useState<string | null>(null);
   const [previewUrl, setPreviewUrl]     = useState<string | null>(null);
   const [previewUnidade, setPreviewUnidade] = useState("");
+
+  // Send modal state
+  const [modalEnvio, setModalEnvio]                 = useState(false);
+  const [unidadeSelecionada, setUnidadeSelecionada] = useState("");
+  const [preview, setPreview]                       = useState<DestinatarioResolvido[]>([]);
+  const [carregandoPreview, setCarregandoPreview]   = useState(false);
+  const [enviando, setEnviando]                     = useState(false);
+  const [resultado, setResultado]                   = useState<{
+    enviados: number; falhas: number; detalhes: ResultadoEnvioMulti[];
+  } | null>(null);
 
   useEffect(() => { void carregar(); }, []);
   useEffect(() => () => { if (previewUrl) URL.revokeObjectURL(previewUrl); }, [previewUrl]);
@@ -72,13 +85,47 @@ export function FichasHidrantePage({ embedded = false }: { embedded?: boolean } 
     }
   }
 
+  async function abrirEnvio(unidade: string) {
+    setUnidadeSelecionada(unidade);
+    setPreview([]);
+    setResultado(null);
+    setModalEnvio(true);
+    setCarregandoPreview(true);
+    try {
+      const r = await hidrantesApi.previewDestinatarios(unidade);
+      setPreview(r.destinatarios);
+    } catch {
+      toast("Erro ao carregar destinatários.", "erro");
+    } finally {
+      setCarregandoPreview(false);
+    }
+  }
+
+  async function confirmarEnvio(canal: "whatsapp" | "email" | "ambos") {
+    setEnviando(true);
+    try {
+      const r = await hidrantesApi.enviarFicha(unidadeSelecionada, canal);
+      setResultado({ enviados: r.enviados, falhas: r.falhas, detalhes: r.detalhes });
+      toast(
+        r.falhas === 0
+          ? `Ficha enviada para ${r.enviados} destinatário(s).`
+          : `${r.enviados} enviados, ${r.falhas} falha(s).`,
+        r.falhas === 0 ? "sucesso" : "info",
+      );
+    } catch (err: unknown) {
+      toast(err instanceof Error ? err.message : "Erro ao enviar ficha.", "erro");
+    } finally {
+      setEnviando(false);
+    }
+  }
+
   return (
     <div className="space-y-6 animate-fade-in">
       {!embedded && (
         <div>
           <h1 className="page-title">Fichas de Inspeção — Hidrantes</h1>
           <p className="text-sm text-gray-500 mt-0.5">
-            Gere a ficha mensal de inspeção dos hidrantes (formato oficial) por unidade.
+            Gere, baixe e envie a ficha mensal de inspeção dos hidrantes (formato oficial) por unidade.
           </p>
         </div>
       )}
@@ -91,7 +138,7 @@ export function FichasHidrantePage({ embedded = false }: { embedded?: boolean } 
         <div>
           <p className="text-sm font-semibold text-gray-900">Mês atual: {mesAtual()}</p>
           <p className="text-xs text-gray-400">
-            Pré-visualize ou baixe o PDF da <strong>Ficha de Inspeção Mensal dos Hidrantes</strong> de cada unidade.
+            Pré-visualize, baixe o PDF ou envie (WhatsApp / e-mail) a <strong>Ficha de Inspeção Mensal dos Hidrantes</strong> de cada unidade ao responsável.
           </p>
         </div>
       </div>
@@ -155,17 +202,143 @@ export function FichasHidrantePage({ embedded = false }: { embedded?: boolean } 
                 <button
                   onClick={() => baixarPDF(u.nome)}
                   disabled={baixando === u.nome}
-                  className="btn-primary btn-sm"
+                  className="btn-secondary btn-sm"
                   title="Baixar PDF da ficha"
                 >
                   {baixando === u.nome ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
                   Baixar PDF
+                </button>
+                <button
+                  onClick={() => abrirEnvio(u.nome)}
+                  className="btn-primary btn-sm"
+                  title="Enviar ficha ao responsável"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                  Enviar
                 </button>
               </div>
             </div>
           ))}
         </div>
       )}
+
+      {/* Send modal */}
+      <Modal
+        open={modalEnvio}
+        titulo={`Enviar ficha — ${unidadeSelecionada}`}
+        onClose={() => { if (!enviando) setModalEnvio(false); }}
+        largura="max-w-md"
+      >
+        {resultado ? (
+          <div className="space-y-4">
+            <div className={`flex items-center gap-2.5 p-3.5 rounded-xl border ${
+              resultado.falhas === 0 ? "bg-green-50 border-green-200" : "bg-amber-50 border-amber-200"
+            }`}>
+              {resultado.falhas === 0
+                ? <CheckCircle2 className="w-4 h-4 text-green-600 shrink-0" />
+                : <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />}
+              <p className={`text-sm font-medium ${resultado.falhas === 0 ? "text-green-800" : "text-amber-800"}`}>
+                {resultado.falhas === 0
+                  ? `Ficha enviada para ${resultado.enviados} destinatário(s).`
+                  : `${resultado.enviados} enviados, ${resultado.falhas} falha(s).`}
+              </p>
+            </div>
+            <div className="card overflow-hidden">
+              <ul className="divide-y divide-gray-100">
+                {resultado.detalhes.map((r) => (
+                  <li key={r.destinatario.id} className="px-4 py-3">
+                    <p className="text-sm font-medium text-gray-800 truncate mb-1.5">{r.destinatario.nome}</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {r.whatsapp.tentado && (
+                        r.whatsapp.ok
+                          ? <span className="badge-green"><MessageCircle className="w-3 h-3" /> WhatsApp ✓</span>
+                          : <span className="badge-red" title={r.whatsapp.motivo}><MessageCircle className="w-3 h-3" /> WhatsApp ✗</span>
+                      )}
+                      {r.email.tentado && (
+                        r.email.ok
+                          ? <span className="badge-green"><Mail className="w-3 h-3" /> E-mail ✓</span>
+                          : <span className="badge-red" title={r.email.motivo}><Mail className="w-3 h-3" /> E-mail ✗</span>
+                      )}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <button onClick={() => setModalEnvio(false)} className="btn-primary w-full">Fechar</button>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <div>
+              <p className="section-title mb-2">Destinatários</p>
+              {carregandoPreview ? (
+                <div className="flex items-center gap-2 py-3 text-gray-400 text-sm">
+                  <Loader2 className="w-4 h-4 animate-spin" /> Carregando…
+                </div>
+              ) : preview.length === 0 ? (
+                <div className="flex items-center gap-2.5 rounded-lg bg-red-50 border border-red-200 px-3 py-2.5">
+                  <AlertTriangle className="w-4 h-4 text-red-500 shrink-0" />
+                  <p className="text-sm text-red-700">
+                    Nenhum destinatário ativo para esta unidade.
+                    <br />
+                    <span className="text-xs">Cadastre destinatários em <strong>Destinatários</strong> antes de enviar.</span>
+                  </p>
+                </div>
+              ) : (
+                <div className="card overflow-hidden">
+                  <ul className="divide-y divide-gray-100">
+                    {preview.map((d) => (
+                      <li key={d.id} className="flex items-center justify-between gap-3 px-4 py-3">
+                        <p className="text-sm font-medium text-gray-800">{d.nome}</p>
+                        <p className="text-xs text-gray-400">{d.telefone}</p>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+
+            {/* Channel picker */}
+            <div className="pt-1">
+              <p className="section-title mb-2">Como deseja enviar?</p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <button
+                  type="button"
+                  onClick={() => confirmarEnvio("whatsapp")}
+                  disabled={enviando || preview.length === 0 || carregandoPreview}
+                  className="btn-secondary"
+                >
+                  <MessageCircle className="w-4 h-4" /> WhatsApp
+                </button>
+                <button
+                  type="button"
+                  onClick={() => confirmarEnvio("email")}
+                  disabled={enviando || preview.length === 0 || carregandoPreview}
+                  className="btn-secondary"
+                >
+                  <Mail className="w-4 h-4" /> E-mail
+                </button>
+                <button
+                  type="button"
+                  onClick={() => confirmarEnvio("ambos")}
+                  disabled={enviando || preview.length === 0 || carregandoPreview}
+                  className="btn-primary"
+                >
+                  {enviando ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                  Ambos
+                </button>
+              </div>
+              <button
+                type="button"
+                onClick={() => setModalEnvio(false)}
+                disabled={enviando}
+                className="btn-secondary w-full mt-2"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
 
       {/* Ficha PDF preview overlay */}
       {previewUrl && (

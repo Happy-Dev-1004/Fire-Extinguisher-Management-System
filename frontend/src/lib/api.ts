@@ -412,6 +412,18 @@ export const hidrantesApi = {
     const ts = new Date().toISOString().slice(0, 10);
     return downloadBlob(`/hidrantes/ficha/${encodeURIComponent(unidade)}`, undefined, `hidrantes_${unidade.replace(/\s+/g, "_")}_${ts}.pdf`, "GET");
   },
+
+  // Preview recipients for a unit before sending.
+  previewDestinatarios: (unidade: string) =>
+    request<{ unidade: string; destinatarios: DestinatarioResolvido[] }>(
+      "GET", `/hidrantes/ficha/${encodeURIComponent(unidade)}/destinatarios`
+    ),
+
+  // Send the unit's hydrant ficha to its recipients (WhatsApp / e-mail / both).
+  enviarFicha: (unidade: string, canal: "whatsapp" | "email" | "ambos" = "ambos") =>
+    request<{ mensagem: string; enviados: number; falhas: number; detalhes: ResultadoEnvioMulti[] }>(
+      "POST", `/hidrantes/ficha/${encodeURIComponent(unidade)}/enviar`, { canal }
+    ),
 };
 
 export const unidadesHidranteApi = {

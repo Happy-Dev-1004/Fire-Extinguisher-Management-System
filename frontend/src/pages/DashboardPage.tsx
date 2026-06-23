@@ -131,6 +131,9 @@ export function DashboardPage() {
             <BomGaps prog={prog} />
           </div>
 
+          {/* Phase 3 per-unit hydrant progress */}
+          <UnidadesHidranteProgresso unidades={unidadesHid ?? []} />
+
           {/* System health — owner only (OpenAI / Z-API status) */}
           {profile?.role === "owner" && <SaudeCard />}
         </>
@@ -192,6 +195,43 @@ function RegioesProgresso({ regioes }: { regioes: RegiaoProgresso[] }) {
               </span>
             </div>
           ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Phase 3: per-unit hydrant inspection bars ──────────────────────────────────
+function UnidadesHidranteProgresso({ unidades }: { unidades: UnidadeHidranteProgresso[] }) {
+  const ordenadas = [...unidades].sort((a, b) => b.pct_inspecionado - a.pct_inspecionado);
+  return (
+    <div className="card p-5">
+      <div className="flex items-center gap-2 mb-4">
+        <span className="w-7 h-7 rounded-lg bg-sky-50 text-sky-600 flex items-center justify-center"><Droplets className="w-4 h-4" /></span>
+        <h2 className="text-sm font-bold text-gray-900">Fase 3 · Progresso por unidade</h2>
+        <Link to="/hidrantes" className="ml-auto text-xs text-brand-600 hover:underline">Ver tudo</Link>
+      </div>
+      {ordenadas.length === 0 ? (
+        <p className="text-sm text-gray-500">Nenhuma unidade cadastrada. Cadastre as unidades em Hidrantes.</p>
+      ) : (
+        <div className="space-y-2.5">
+          {ordenadas.map((u) => (
+            <div key={u.nome} className="flex items-center gap-3">
+              <span className="text-xs text-gray-600 w-32 shrink-0 truncate" title={u.nome}>{u.nome}</span>
+              {/* verified (green) + awaiting (amber) on the same track */}
+              <div className="flex-1 h-2.5 rounded-full bg-gray-100 overflow-hidden flex">
+                <div className="h-full bg-green-500" style={{ width: `${Math.min(100, u.pct_verificado)}%` }} />
+                <div className="h-full bg-amber-400" style={{ width: `${Math.max(0, Math.min(100, u.pct_inspecionado) - Math.min(100, u.pct_verificado))}%` }} />
+              </div>
+              <span className="text-xs text-gray-700 w-24 text-right shrink-0">
+                {u.inspecionados}/{u.total_esperado} · {u.pct_inspecionado}%
+              </span>
+            </div>
+          ))}
+          <p className="text-[11px] text-gray-400 flex items-center gap-3 pt-1">
+            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-500" /> verificados</span>
+            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-400" /> aguardando</span>
+          </p>
         </div>
       )}
     </div>

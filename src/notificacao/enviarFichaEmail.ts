@@ -24,6 +24,11 @@ export interface EnviarFichaEmailInput {
   mes:           string;
   pdfBuffer:     Buffer;
   destinatarios: DestinatarioResolvido[]; // only those with a non-empty email
+  // Subject / file-name label + body noun. Default to the extinguisher wording
+  // so existing callers are unchanged; Phase 3 passes the hydrant wording.
+  assunto?:        string;
+  prefixoArquivo?: string;
+  descricaoItem?:  string; // e.g. "dos extintores" | "dos hidrantes"
 }
 
 export async function enviarFichaEmail(input: EnviarFichaEmailInput): Promise<ResultadoEnvio[]> {
@@ -46,8 +51,10 @@ export async function enviarFichaEmail(input: EnviarFichaEmailInput): Promise<Re
   }
 
   const resend    = new Resend(apiKey);
-  const fileName  = `ficha_${input.unidade.replace(/\s+/g, "_")}_${input.mes.replace("/", "-")}.pdf`;
-  const assunto   = `Ficha de inspeção de extintores — ${input.unidade} — ${input.mes}`;
+  const prefixo   = input.prefixoArquivo ?? "ficha";
+  const fileName  = `${prefixo}_${input.unidade.replace(/\s+/g, "_")}_${input.mes.replace("/", "-")}.pdf`;
+  const assunto   = input.assunto ?? `Ficha de inspeção de extintores — ${input.unidade} — ${input.mes}`;
+  const descricaoItem = input.descricaoItem ?? "dos extintores";
   const base64Pdf = input.pdfBuffer.toString("base64");
 
   log.info(
@@ -70,7 +77,7 @@ export async function enviarFichaEmail(input: EnviarFichaEmailInput): Promise<Re
           subject: assunto,
           html:
             `<p>Olá, ${escapeHtml(dest.nome)}.</p>` +
-            `<p>Segue em anexo a ficha de inspeção mensal dos extintores da unidade ` +
+            `<p>Segue em anexo a ficha de inspeção mensal ${escapeHtml(descricaoItem)} da unidade ` +
             `<strong>${escapeHtml(input.unidade)}</strong> referente a <strong>${escapeHtml(input.mes)}</strong>.</p>` +
             `<p>Atenciosamente,<br/>Sistema de Gestão de Extintores</p>`,
           attachments: [{ filename: fileName, content: base64Pdf }],

@@ -31,6 +31,10 @@ export interface EnviarFichaInput {
   mes:           string;
   pdfBuffer:     Buffer;
   destinatarios: DestinatarioResolvido[];
+  // Caption / file-name label. Defaults to the extinguisher wording so existing
+  // callers are unchanged; Phase 3 passes "hidrantes" / "ficha_hidrantes".
+  assunto?:      string;
+  prefixoArquivo?: string;
 }
 
 export async function enviarFichaWhatsApp(input: EnviarFichaInput): Promise<ResultadoEnvio[]> {
@@ -51,8 +55,9 @@ export async function enviarFichaWhatsApp(input: EnviarFichaInput): Promise<Resu
   // base64 fails with "Base64/Url could not be read". The path extension must
   // match the file type too (.../send-document/pdf).
   const base64Pdf = `data:application/pdf;base64,${input.pdfBuffer.toString("base64")}`;
-  const caption   = `Ficha de inspeção de extintores — ${input.unidade} — ${input.mes}`;
-  const fileName  = `ficha_${input.unidade.replace(/\s+/g, "_")}_${input.mes.replace("/", "-")}.pdf`;
+  const caption   = input.assunto ?? `Ficha de inspeção de extintores — ${input.unidade} — ${input.mes}`;
+  const prefixo   = input.prefixoArquivo ?? "ficha";
+  const fileName  = `${prefixo}_${input.unidade.replace(/\s+/g, "_")}_${input.mes.replace("/", "-")}.pdf`;
   const url       = `https://api.z-api.io/instances/${config.instanceId}/token/${config.token}/send-document/pdf`;
 
   log.info(
