@@ -85,10 +85,13 @@ const INSPETOR_ROW_GET = {
   ...INSPETOR_ROW,
   pode_fase1: true,
   pode_fase2: false,
+  pode_fase3: false,
   em_sessao: false,
   sessao_atividade_em: null,
   em_sessao_fase2: false,
   sessao_fase2_atividade_em: null,
+  em_sessao_fase3: false,
+  sessao_fase3_atividade_em: null,
 };
 
 // What POST/PUT return (unidade_contexto mapped → unidade). These endpoints
@@ -109,8 +112,10 @@ const INSPETOR_RESPOSTA_GET = {
   ...INSPETOR_RESPOSTA,
   pode_fase1: true,
   pode_fase2: false,
+  pode_fase3: false,
   em_sessao: false,
   em_sessao_fase2: false,
+  em_sessao_fase3: false,
 };
 
 function makeReq(
@@ -473,10 +478,10 @@ describe("isAuthorized (webhook)", () => {
 describe("getPermissoes (webhook phase permissions)", () => {
   it("retorna as permissões do inspetor ativo", async () => {
     const { limitFn } = buildChain();
-    limitFn.mockResolvedValueOnce({ data: [{ id: "i1", pode_fase1: true, pode_fase2: true }], error: null });
+    limitFn.mockResolvedValueOnce({ data: [{ id: "i1", pode_fase1: true, pode_fase2: true, pode_fase3: false }], error: null });
 
     const p = await getPermissoes("11912345678");
-    expect(p).toEqual({ pode_fase1: true, pode_fase2: true });
+    expect(p).toEqual({ pode_fase1: true, pode_fase2: true, pode_fase3: false });
   });
 
   it("um inspetor só de Fase 1 NÃO tem Fase 2 (bloqueia alarme/RDO/dispositivos)", async () => {
@@ -502,7 +507,7 @@ describe("getPermissoes (webhook phase permissions)", () => {
     limitFn.mockResolvedValueOnce({ data: [{ id: "i1" }], error: null }); // legacy row, no flags
 
     const p = await getPermissoes("11912345678");
-    expect(p).toEqual({ pode_fase1: true, pode_fase2: false });
+    expect(p).toEqual({ pode_fase1: true, pode_fase2: false, pode_fase3: false });
   });
 
   it("número não cadastrado → null (não autorizado)", async () => {

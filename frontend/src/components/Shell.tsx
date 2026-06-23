@@ -7,7 +7,7 @@ import { NotificationBell } from "./NotificationBell";
 import {
   LayoutDashboard, Flame, HardHat, Send, Settings, Users,
   LogOut, Menu, X, ChevronRight, Shield, FileText, Search, HelpCircle, Camera, Activity,
-  Sun, Moon,
+  Sun, Moon, Droplets,
 } from "lucide-react";
 
 interface NavItem {
@@ -44,6 +44,12 @@ const NAV_GROUPS: NavGroup[] = [
       { to: "/alarme",        label: "Progresso",            Icon: Activity },
       { to: "/alarme/fotos",  label: "Registro fotográfico", Icon: Camera },
       { to: "/alarme/rdos",   label: "RDOs",                 Icon: FileText },
+    ],
+  },
+  {
+    titulo: "Fase 3 · Hidrantes",
+    items: [
+      { to: "/hidrantes", label: "Hidrantes", Icon: Droplets },
     ],
   },
   {

@@ -3,7 +3,7 @@ import {
   HelpCircle, Smartphone, LayoutDashboard, ChevronDown, MapPin, Camera,
   CheckCircle2, PlayCircle, StopCircle, ShieldCheck, Clock, Circle, FileText,
   Send, Users, CalendarDays, Flame, Search, Settings, AlertTriangle,
-  Hash, Tag, Gauge, SignpostBig, Info, Bell, Activity, Image as ImageIcon,
+  Hash, Tag, Gauge, SignpostBig, Info, Bell, Activity, Image as ImageIcon, Droplets,
 } from "lucide-react";
 
 type Aba = "inspetores" | "usuarios";
@@ -66,32 +66,22 @@ const FOTO_ITENS = [
   { Icon: SignpostBig, texto: "O piso / localização (sinalização de piso)" },
 ];
 
-// Inspector guide with a phase sub-toggle (Fase 1 = extintores, Fase 2 = alarme).
+// Inspector guide with a phase sub-toggle (1 = extintores, 2 = alarme, 3 = hidrantes).
 function GuiaInspetores() {
-  const [fase, setFase] = useState<1 | 2>(1);
+  const [fase, setFase] = useState<1 | 2 | 3>(1);
+  const btn = (n: 1 | 2 | 3) => `inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
+    fase === n ? "bg-white text-brand-600 shadow-sm" : "text-gray-500 hover:text-gray-700"
+  }`;
   return (
     <div className="space-y-6">
       {/* Phase sub-toggle */}
-      <div className="inline-flex p-1 bg-gray-100 rounded-xl">
-        <button
-          onClick={() => setFase(1)}
-          className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
-            fase === 1 ? "bg-white text-brand-600 shadow-sm" : "text-gray-500 hover:text-gray-700"
-          }`}
-        >
-          <Flame className="w-4 h-4" /> Fase 1 · Extintores
-        </button>
-        <button
-          onClick={() => setFase(2)}
-          className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
-            fase === 2 ? "bg-white text-brand-600 shadow-sm" : "text-gray-500 hover:text-gray-700"
-          }`}
-        >
-          <Bell className="w-4 h-4" /> Fase 2 · Alarme
-        </button>
+      <div className="inline-flex p-1 bg-gray-100 rounded-xl flex-wrap">
+        <button onClick={() => setFase(1)} className={btn(1)}><Flame className="w-4 h-4" /> Fase 1 · Extintores</button>
+        <button onClick={() => setFase(2)} className={btn(2)}><Bell className="w-4 h-4" /> Fase 2 · Alarme</button>
+        <button onClick={() => setFase(3)} className={btn(3)}><Droplets className="w-4 h-4" /> Fase 3 · Hidrantes</button>
       </div>
 
-      {fase === 1 ? <GuiaInspetoresFase1 /> : <GuiaInspetoresFase2 />}
+      {fase === 1 ? <GuiaInspetoresFase1 /> : fase === 2 ? <GuiaInspetoresFase2 /> : <GuiaInspetoresFase3 />}
     </div>
   );
 }
@@ -314,6 +304,85 @@ function GuiaInspetoresFase2() {
   );
 }
 
+// ── Phase 3 (hidrantes) inspector guide ───────────────────────────────────────
+function GuiaInspetoresFase3() {
+  return (
+    <div className="space-y-6">
+      <p className="text-sm text-gray-600 leading-relaxed">
+        Na Fase 3, os inspetores fotografam os <strong>hidrantes</strong> pelo <strong>WhatsApp</strong>,
+        no mesmo formato de álbum da Fase 1. O sistema lê as fotos com IA e preenche o checklist de cada
+        hidrante. Seu número precisa ter <strong>permissão de Fase 3</strong> no painel (Inspetores).
+      </p>
+
+      <PassoCard n={1} Icon={Droplets} titulo="Inicie o modo Hidrantes">
+        <p>Antes de tudo, ative a Fase 3:</p>
+        <Comando>hidrante</Comando>
+        <p className="mt-3">
+          A partir daí, suas fotos passam a ser analisadas como hidrantes. Ao terminar, envie
+          <Inline>encerrar hidrante</Inline> (ou a sessão fecha sozinha após 3 horas).
+        </p>
+      </PassoCard>
+
+      <PassoCard n={2} Icon={MapPin} titulo="Informe a unidade">
+        <p>Antes de fotografar, envie o <strong>nome da unidade</strong> onde você está (ex.: a unidade do projeto):</p>
+        <Comando>EDP</Comando>
+        <Nota>Você só envia a unidade <strong>uma vez</strong>. Todos os hidrantes seguintes ficam nessa unidade, até trocar.</Nota>
+      </PassoCard>
+
+      <PassoCard n={3} Icon={Camera} titulo="Fotografe cada hidrante (álbum)">
+        <p>
+          Para <strong>cada hidrante</strong>, envie um <strong>álbum de fotos juntas</strong>. As fotos devem cobrir:
+        </p>
+        <ul className="mt-2 list-disc pl-5 space-y-1">
+          <li>a <strong>caixa</strong> aberta (mangueira, esguicho, adaptador, chave Storz, tampa);</li>
+          <li>a <strong>placa</strong> de identificação;</li>
+          <li>a <strong>sinalização no piso</strong>;</li>
+          <li>o conjunto/registro do hidrante (teste, condições gerais).</li>
+        </ul>
+        <Nota tipo="alerta">Se faltar algo (ex.: <strong>sem esguicho</strong>), a IA marca como <strong>pendente</strong> — registre mesmo assim.</Nota>
+      </PassoCard>
+
+      <PassoCard n={4} Icon={Hash} titulo="Envie o número do hidrante">
+        <p>Logo após o álbum, mande o <strong>número do hidrante</strong> como texto:</p>
+        <Comando>1</Comando>
+        <p className="mt-3">O número <strong>conclui aquele hidrante</strong> e a IA analisa o álbum. Siga para o próximo.</p>
+        <Nota>Aceita <Inline>1</Inline> ou <Inline>H01</Inline>. Não é preciso enviar "Fim".</Nota>
+      </PassoCard>
+
+      <PassoCard n={5} Icon={StopCircle} titulo="Encerre ao final do trabalho">
+        <p>Quando terminar todos os hidrantes, envie:</p>
+        <Comando>encerrar hidrante</Comando>
+      </PassoCard>
+
+      <div className="card p-5">
+        <p className="section-title mb-4">Exemplo de uma sessão de hidrantes</p>
+        <ol className="space-y-2.5">
+          <Linha cor="text-sky-600" Icon={Droplets} cmd="hidrante" desc="abre a Fase 3" />
+          <Linha cor="text-emerald-600" Icon={MapPin} cmd="EDP" desc="informa a unidade" />
+          <Linha cor="text-gray-400" Icon={Camera} cmd="álbum de fotos" desc="hidrante 1" plain />
+          <Linha cor="text-amber-600" Icon={Hash} cmd="1" desc="conclui o hidrante 1" />
+          <Linha cor="text-gray-400" Icon={Camera} cmd="álbum de fotos" desc="hidrante 2" plain />
+          <Linha cor="text-amber-600" Icon={Hash} cmd="2" desc="conclui o hidrante 2" />
+          <Linha cor="text-rose-600" Icon={StopCircle} cmd="encerrar hidrante" desc="fim do trabalho" />
+        </ol>
+      </div>
+
+      <div className="card p-5">
+        <p className="section-title mb-3 flex items-center gap-1.5 text-amber-600">
+          <AlertTriangle className="w-3.5 h-3.5" /> Regras importantes
+        </p>
+        <ul className="space-y-2.5 text-sm text-gray-700">
+          <Regra>Sempre envie <Inline>hidrante</Inline> <strong>antes</strong> de mandar fotos.</Regra>
+          <Regra>Informe a <strong>unidade</strong> antes do primeiro hidrante; o <strong>número</strong> conclui cada um.</Regra>
+          <Regra>Envie as fotos como <strong>álbum</strong> (selecionadas juntas), pelo <strong>chat direto</strong>.</Regra>
+          <Regra>Seu número precisa ter <strong>permissão de Fase 3</strong> no painel (Inspetores).</Regra>
+          <Regra>Nada é perdido: fotos sem unidade/número válido vão para a <strong>revisão</strong> no painel.</Regra>
+        </ul>
+      </div>
+    </div>
+  );
+}
+
 // ════════════════════════════════════════════════════════════════════════════
 // USER GUIDE (dashboard) — articles in an accordion
 // ════════════════════════════════════════════════════════════════════════════
@@ -501,13 +570,48 @@ const ARTIGOS: Artigo[] = [
   {
     id: "f2-permissoes",
     Icon: ShieldCheck,
-    titulo: "Permissões por fase (Fase 1 / Fase 2)",
+    titulo: "Permissões por fase (Fase 1 / Fase 2 / Fase 3)",
     resumo: "Quem pode trabalhar em cada fase.",
     conteudo: (
       <div className="space-y-2">
-        <LinhaArtigo Icon={ShieldCheck}>Na página <strong>Inspetores</strong>, cada pessoa recebe permissão de <strong>Fase 1</strong> (extintores) e/ou <strong>Fase 2</strong> (alarme).</LinhaArtigo>
+        <LinhaArtigo Icon={ShieldCheck}>Na página <strong>Inspetores</strong>, cada pessoa recebe permissão de <strong>Fase 1</strong> (extintores), <strong>Fase 2</strong> (alarme) e/ou <strong>Fase 3</strong> (hidrantes).</LinhaArtigo>
         <LinhaArtigo Icon={Users}>Use para a troca <strong>instalação → gestão</strong>: ao fim da obra, tire a Fase 2 da equipe instaladora e dê para a equipe de gestão.</LinhaArtigo>
         <Nota>Cada fase tem seus próprios comandos de início/fim no WhatsApp, então um inspetor de uma fase nunca dispara a outra — sem gasto de recursos à toa.</Nota>
+      </div>
+    ),
+  },
+  // ── Fase 3 (hidrantes) ────────────────────────────────────────────────────
+  {
+    id: "f3-visao-geral",
+    Icon: Droplets,
+    titulo: "Fase 3 · Hidrantes: como funciona",
+    resumo: "Inspeção mensal dos hidrantes, igual à Fase 1.",
+    conteudo: (
+      <div className="space-y-3">
+        <p>A Fase 3 funciona como a Fase 1, mas para <strong>hidrantes</strong>:</p>
+        <ol className="list-decimal pl-5 space-y-1.5">
+          <li>O <strong>inspetor</strong> envia as fotos de cada hidrante pelo WhatsApp (veja a aba "Para inspetores" → Fase 3).</li>
+          <li>A <strong>IA</strong> lê as fotos e preenche o checklist do hidrante (Esguicho, Mangueira, Chave Storz, etc.).</li>
+          <li>O hidrante passa a aguardar <strong>verificação humana</strong>.</li>
+          <li>O usuário revisa, corrige se necessário, e marca como <strong>verificado</strong>.</li>
+          <li>Gera-se a <strong>ficha de hidrantes</strong> por unidade, e inicia-se um novo ciclo a cada mês.</li>
+        </ol>
+        <Nota>Tudo da Fase 3 fica no menu lateral, na seção <strong>Fase 3 · Hidrantes</strong>.</Nota>
+      </div>
+    ),
+  },
+  {
+    id: "f3-unidades",
+    Icon: Droplets,
+    titulo: "Hidrantes: unidades, inventário e ficha",
+    resumo: "Cadastrar unidades, navegar e gerar a ficha.",
+    conteudo: (
+      <div className="space-y-2">
+        <LinhaArtigo Icon={MapPin}>Na página <strong>Hidrantes</strong>, o proprietário cadastra as <strong>unidades</strong> (nome + quantidade de hidrantes) e clica em <strong>Gerar inventário</strong> para criar os hidrantes (H01, H02…).</LinhaArtigo>
+        <LinhaArtigo Icon={Droplets}>Clique numa <strong>unidade</strong> para ver seus hidrantes; clique num <strong>hidrante</strong> para o detalhe: checklist, fotos e verificação.</LinhaArtigo>
+        <LinhaArtigo Icon={CheckCircle2}>No detalhe, use <strong>"Editar valores"</strong> para corrigir o checklist e <strong>"Verificação concluída"</strong> para confirmar.</LinhaArtigo>
+        <LinhaArtigo Icon={FileText}>A <strong>ficha de hidrantes</strong> por unidade pode ser pré-visualizada e baixada em PDF, no formato oficial (OK / RUIM / PENDENTE / ENCAMINHAR MANUTENÇÃO).</LinhaArtigo>
+        <Nota tipo="alerta">O <strong>novo mês</strong> redefine todos os hidrantes da unidade — gere as fichas <strong>antes</strong> de iniciar o novo ciclo.</Nota>
       </div>
     ),
   },

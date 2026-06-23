@@ -19,6 +19,8 @@ import regioesRouter         from "./routes/regioes";
 import alarmeRouter          from "./routes/alarme";
 import rdosRouter            from "./routes/rdos";
 import notificacoesRouter    from "./routes/notificacoes";
+import hidrantesRouter       from "./routes/hidrantes";
+import unidadesHidranteRouter from "./routes/unidadesHidrante";
 import { requireAuth, requireAdmin, requireOwner } from "./auth/middleware";
 import { logger } from "./logger";
 import { supabaseAdmin } from "./db-admin";
@@ -163,6 +165,10 @@ app.use("/rdos",            requireAuth, requireAdmin, rdosRouter);
 
 // Notifications: owner + member (health sub-route is owner-gated inside).
 app.use("/notificacoes",    requireAuth, requireAdmin, notificacoesRouter);
+
+// PHASE 3 — fire hydrants: owner + member (seed/novo-mes are owner-guarded inside).
+app.use("/hidrantes",          requireAuth, requireAdmin, hidrantesRouter);
+app.use("/unidades-hidrante",  requireAuth, requireAdmin, unidadesHidranteRouter);
 
 // Bind to 0.0.0.0 so the platform's proxy (Railway/Render) can reach the
 // container — binding to localhost/IPv6-only causes a 502 at the edge.

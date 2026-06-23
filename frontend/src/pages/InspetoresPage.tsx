@@ -6,11 +6,11 @@ import { toast } from "../components/Toast";
 import { formatarData } from "../lib/formatters";
 import {
   Plus, Pencil, UserMinus, UserCheck, HardHat,
-  Phone, AlertTriangle, Flame, Bell,
+  Phone, AlertTriangle, Flame, Bell, Droplets,
 } from "lucide-react";
 
-type FormData = { nome: string; telefone: string; unidade: string; pode_fase1: boolean; pode_fase2: boolean };
-const FORM_VAZIO: FormData = { nome: "", telefone: "", unidade: "", pode_fase1: true, pode_fase2: false };
+type FormData = { nome: string; telefone: string; unidade: string; pode_fase1: boolean; pode_fase2: boolean; pode_fase3: boolean };
+const FORM_VAZIO: FormData = { nome: "", telefone: "", unidade: "", pode_fase1: true, pode_fase2: false, pode_fase3: false };
 
 export function InspetoresPage() {
   const [inspetores, setInspetores]   = useState<Inspetor[]>([]);
@@ -55,6 +55,7 @@ export function InspetoresPage() {
       unidade: i.unidade ?? "",
       pode_fase1: i.pode_fase1 ?? true,
       pode_fase2: i.pode_fase2 ?? false,
+      pode_fase3: i.pode_fase3 ?? false,
     });
     setErroForm("");
     setModalAberto(true);
@@ -72,6 +73,7 @@ export function InspetoresPage() {
           unidade: form.unidade.trim(),
           pode_fase1: form.pode_fase1,
           pode_fase2: form.pode_fase2,
+          pode_fase3: form.pode_fase3,
         });
         toast("Inspetor atualizado.");
       } else {
@@ -81,6 +83,7 @@ export function InspetoresPage() {
           unidade: form.unidade.trim(),
           pode_fase1: form.pode_fase1,
           pode_fase2: form.pode_fase2,
+          pode_fase3: form.pode_fase3,
         });
         toast("Inspetor cadastrado.");
       }
@@ -207,10 +210,15 @@ export function InspetoresPage() {
                           <Bell className="w-3 h-3" /> Fase 2
                         </span>
                       )}
-                      {!(i.pode_fase1 ?? true) && !i.pode_fase2 && (
+                      {i.pode_fase3 && (
+                        <span className="badge-blue" title="Pode inspecionar hidrantes (Fase 3)">
+                          <Droplets className="w-3 h-3" /> Fase 3
+                        </span>
+                      )}
+                      {!(i.pode_fase1 ?? true) && !i.pode_fase2 && !i.pode_fase3 && (
                         <span className="badge-gray" title="Sem permissão de fase — mensagens são ignoradas">Sem fase</span>
                       )}
-                      {(i.em_sessao || i.em_sessao_fase2) && (
+                      {(i.em_sessao || i.em_sessao_fase2 || i.em_sessao_fase3) && (
                         <span className="badge-green" title="Sessão de trabalho aberta — mensagens estão sendo processadas">
                           <span className="w-1.5 h-1.5 rounded-full bg-green-600 animate-pulse" /> Em sessão
                         </span>
@@ -373,6 +381,22 @@ export function InspetoresPage() {
                   <span className="block text-xs text-gray-500 mt-0.5">
                     Registrar RDO e fotos de dispositivos. Use para a equipe de instalação
                     (90 dias) e, depois, para a equipe de gestão — basta alternar a permissão.
+                  </span>
+                </span>
+              </label>
+              <label className="flex items-start gap-3 rounded-lg border border-gray-200 p-3 cursor-pointer hover:bg-gray-50">
+                <input
+                  type="checkbox"
+                  className="mt-0.5"
+                  checked={form.pode_fase3}
+                  onChange={(e) => setForm({ ...form, pode_fase3: e.target.checked })}
+                />
+                <span className="flex-1">
+                  <span className="flex items-center gap-1.5 text-sm font-medium text-gray-900">
+                    <Droplets className="w-3.5 h-3.5 text-sky-600" /> Fase 3 — Hidrantes
+                  </span>
+                  <span className="block text-xs text-gray-500 mt-0.5">
+                    Enviar fotos de hidrantes para inspeção (análise por IA).
                   </span>
                 </span>
               </label>

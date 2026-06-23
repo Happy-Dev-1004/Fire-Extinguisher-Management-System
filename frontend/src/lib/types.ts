@@ -46,6 +46,60 @@ export interface CicloAtivo {
   iniciado_em:    string;
 }
 
+// ── Phase 3 · Hydrants ────────────────────────────────────────────────────────
+export type SituacaoHidrante = "atencao" | "pendente" | "ok" | "indeterminado";
+
+export interface UnidadeHidranteProgresso {
+  nome:                   string;
+  total_esperado:         number;
+  total_cadastrado:       number;
+  nao_inspecionado:       number;
+  aguardando_verificacao: number;
+  verificado:             number;
+  inspecionados:          number;
+  pct_inspecionado:       number;
+  pct_verificado:         number;
+}
+
+export interface Hidrante {
+  id:                    string;
+  numero:                string;
+  numero_int:            number | null;
+  unidade:               string;
+  setor:                 string | null;
+  // constants
+  esguicho:              string | null;
+  mangueira:             string | null;
+  chave_storz:           string | null;
+  // checklist (4-state)
+  c_esguicho:            string | null;
+  c_condicoes_caixa:     string | null;
+  c_condicoes_acesso:    string | null;
+  c_identificacao_piso:  string | null;
+  c_identificacao_placa: string | null;
+  c_mangueira:           string | null;
+  c_adaptador:           string | null;
+  c_chave_storz:         string | null;
+  c_teste:               string | null;
+  c_tampa_hidrante:      string | null;
+  status_geral:          string | null;
+  observacoes:           string | null;
+  inspetor:              string | null;
+  fotos:                 string[];
+  status_inspecao:       StatusInspecao;
+  verificado_em:         string | null;
+  inspecionado_em:       string | null;
+  situacao:              SituacaoHidrante;
+}
+
+export interface UnidadeHidrante {
+  id:              string;
+  nome:            string;
+  total_hidrantes: number;
+  ordem:           number;
+  created_at:      string;
+}
+
 export interface ExtintorRegiao {
   id:                 string;
   numero:             string;
@@ -141,8 +195,10 @@ export interface Inspetor {
   ativo: boolean;
   pode_fase1?: boolean;       // permission: Phase 1 (extintores)
   pode_fase2?: boolean;       // permission: Phase 2 (alarme — RDO + device photos)
+  pode_fase3?: boolean;       // permission: Phase 3 (hidrantes)
   em_sessao?: boolean;        // Phase 1 work session open
   em_sessao_fase2?: boolean;  // Phase 2 work session open
+  em_sessao_fase3?: boolean;  // Phase 3 work session open
   created_at: string;
   updated_at: string;
 }

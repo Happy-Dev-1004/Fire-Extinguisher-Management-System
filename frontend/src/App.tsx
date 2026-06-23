@@ -12,6 +12,9 @@ import { RegiaoDetailPage } from "./pages/RegiaoDetailPage";
 import { AjudaPage } from "./pages/AjudaPage";
 import { ExtintoresHubPage } from "./pages/ExtintoresHubPage";
 import { AlarmeHubPage } from "./pages/AlarmeHubPage";
+import { HidrantesPage } from "./pages/HidrantesPage";
+import { UnidadeHidranteDetailPage } from "./pages/UnidadeHidranteDetailPage";
+import { HidranteDetailPage } from "./pages/HidranteDetailPage";
 import { RequireAuth } from "./components/RequireAuth";
 import { RequireOwner } from "./components/RequireOwner";
 
@@ -40,6 +43,10 @@ export function App() {
               <Route path="/alarme" element={<AlarmeHubPage />} />
               <Route path="/alarme/fotos" element={<AlarmeHubPage />} />
               <Route path="/alarme/rdos" element={<AlarmeHubPage />} />
+              {/* Fase 3 — hidrantes: unit list → unit detail → hydrant detail */}
+              <Route path="/hidrantes" element={<HidrantesPage />} />
+              <Route path="/hidrantes/unidade/:unidade" element={<UnidadeHidranteDetailPage />} />
+              <Route path="/hidrantes/:id" element={<HidranteDetailPage />} />
               <Route path="/ajuda" element={<AjudaPage />} />
 
               {/* Owner-only routes — backend also enforces 403 */}

@@ -2,11 +2,11 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import {
-  Flame, Bell, Wrench, ArrowRight, Lock, AlertTriangle, Loader2,
+  Flame, Bell, Droplets, ArrowRight, AlertTriangle, Loader2,
   MapPin, Activity,
 } from "lucide-react";
-import { regioesApi, alarmeApi, type RelatorioProgresso } from "../lib/api";
-import type { RegiaoProgresso } from "../lib/types";
+import { regioesApi, alarmeApi, hidrantesApi, type RelatorioProgresso } from "../lib/api";
+import type { RegiaoProgresso, UnidadeHidranteProgresso } from "../lib/types";
 import { GaugeDonut } from "../components/GaugeDonut";
 import { SaudeCard } from "../components/SaudeCard";
 import { toast } from "../components/Toast";
@@ -25,15 +25,17 @@ export function DashboardPage() {
   const [regioes, setRegioes] = useState<RegiaoProgresso[] | null>(null);
   const [cicloMes, setCicloMes] = useState<string | null>(null);
   const [prog, setProg] = useState<RelatorioProgresso | null>(null);
+  const [unidadesHid, setUnidadesHid] = useState<UnidadeHidranteProgresso[] | null>(null);
   const [carregando, setCarregando] = useState(true);
 
   useEffect(() => {
-    Promise.allSettled([regioesApi.listar(), alarmeApi.progresso()])
-      .then(([r1, r2]) => {
+    Promise.allSettled([regioesApi.listar(), alarmeApi.progresso(), hidrantesApi.listar()])
+      .then(([r1, r2, r3]) => {
         if (r1.status === "fulfilled") { setRegioes(r1.value.regioes); setCicloMes(r1.value.ciclo?.mes_referencia ?? null); }
         else toast("Não foi possível carregar o progresso da Fase 1.", "erro");
         if (r2.status === "fulfilled") setProg(r2.value);
         else toast("Não foi possível carregar o progresso da Fase 2.", "erro");
+        if (r3.status === "fulfilled") setUnidadesHid(r3.value.unidades);
       })
       .finally(() => setCarregando(false));
   }, []);
@@ -57,6 +59,16 @@ export function DashboardPage() {
       pctInstalado: prog.geral.pct_instalado,
       faltam: prog.reconciliacao.total_faltam,
     };
+  })();
+
+  // ── Phase 3 rollup ──
+  const f3 = (() => {
+    const us = unidadesHid ?? [];
+    const totalEsperado = us.reduce((s, u) => s + u.total_esperado, 0);
+    const cadastrado = us.reduce((s, u) => s + u.total_cadastrado, 0);
+    const inspecionados = us.reduce((s, u) => s + u.inspecionados, 0);
+    const pctInsp = totalEsperado ? Math.round((inspecionados / totalEsperado) * 100) : 0;
+    return { unidades: us.length, totalEsperado, cadastrado, inspecionados, pctInsp };
   })();
 
   return (
@@ -99,7 +111,18 @@ export function DashboardPage() {
               linhaSecundaria={f2.faltam > 0 ? `${f2.faltam} pontos pendentes no projeto` : "Inventário completo"}
               legendaGauge="instalado"
             />
-            <FaseBloqueada />
+            <FaseCard
+              numero={3}
+              titulo="Hidrantes"
+              Icon={Droplets}
+              cor="#0284c7"
+              corBg="bg-sky-50 text-sky-600"
+              to="/hidrantes"
+              pct={f3.pctInsp}
+              linhaPrincipal={`${f3.cadastrado} de ${f3.totalEsperado} cadastrados`}
+              linhaSecundaria={f3.unidades > 0 ? `${f3.inspecionados} inspecionados · ${f3.unidades} unidade(s)` : "Cadastre as unidades em Hidrantes"}
+              legendaGauge="inspecionado"
+            />
           </div>
 
           {/* Detail row: Phase 1 per-region + Phase 2 BOM gaps */}
@@ -141,29 +164,6 @@ function FaseCard({
         </span>
       </div>
     </Link>
-  );
-}
-
-// ── Phase 3 (locked) ──
-function FaseBloqueada() {
-  return (
-    <div className="card p-5 flex items-center gap-4 border-dashed opacity-90">
-      <div className="w-[104px] h-[104px] rounded-full bg-gray-50 border-2 border-dashed border-gray-200 flex items-center justify-center shrink-0">
-        <Lock className="w-7 h-7 text-gray-300" />
-      </div>
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2">
-          <span className="w-7 h-7 rounded-lg bg-gray-100 text-gray-400 flex items-center justify-center shrink-0">
-            <Wrench className="w-4 h-4" />
-          </span>
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">Fase 3</p>
-        </div>
-        <p className="font-bold text-gray-500 mt-1.5">Instalação</p>
-        <p className="text-sm text-gray-400 mt-0.5">Em breve</p>
-        <p className="text-xs text-gray-400 mt-0.5">Disponível após a conclusão da Fase 2.</p>
-        <span className="inline-flex items-center gap-1 text-xs font-medium text-gray-300 mt-2">Bloqueada</span>
-      </div>
-    </div>
   );
 }
 

@@ -33,6 +33,7 @@ const InspetorBodySchema = z.object({
   // spent on the wrong phase. Default: Fase 1 on, Fase 2 off.
   pode_fase1: z.boolean().optional(),
   pode_fase2: z.boolean().optional(),
+  pode_fase3: z.boolean().optional(),
 });
 
 // ── GET /inspetores ───────────────────────────────────────────────────────────
@@ -41,7 +42,7 @@ const InspetorBodySchema = z.object({
 router.get("/", async (_req: Request, res: Response) => {
   const { data, error } = await supabaseAdmin
     .from("inspetores")
-    .select("id, nome, telefone, telefone_normalizado, unidade_contexto, ativo, pode_fase1, pode_fase2, em_sessao, sessao_atividade_em, em_sessao_fase2, sessao_fase2_atividade_em, created_at, updated_at")
+    .select("id, nome, telefone, telefone_normalizado, unidade_contexto, ativo, pode_fase1, pode_fase2, pode_fase3, em_sessao, sessao_atividade_em, em_sessao_fase2, sessao_fase2_atividade_em, em_sessao_fase3, sessao_fase3_atividade_em, created_at, updated_at")
     .order("nome");
 
   if (error) {
@@ -59,13 +60,16 @@ router.get("/", async (_req: Request, res: Response) => {
     return !!aberta && (!ultima || agora - ultima <= BACKSTOP_MS);
   };
   const inspetores = (data ?? []).map(
-    ({ unidade_contexto, sessao_atividade_em, em_sessao, sessao_fase2_atividade_em, em_sessao_fase2, ...rest }: any) => ({
+    ({ unidade_contexto, sessao_atividade_em, em_sessao, sessao_fase2_atividade_em, em_sessao_fase2,
+       sessao_fase3_atividade_em, em_sessao_fase3, ...rest }: any) => ({
       ...rest,
       unidade: unidade_contexto ?? "",
       pode_fase1: rest.pode_fase1 ?? true,
       pode_fase2: rest.pode_fase2 ?? false,
+      pode_fase3: rest.pode_fase3 ?? false,
       em_sessao: viva(em_sessao, sessao_atividade_em),
       em_sessao_fase2: viva(em_sessao_fase2, sessao_fase2_atividade_em),
+      em_sessao_fase3: viva(em_sessao_fase3, sessao_fase3_atividade_em),
     })
   );
 
@@ -80,7 +84,7 @@ router.post("/", async (req: Request, res: Response) => {
   if (!parsed.success) {
     return res.status(400).json({ erro: parsed.error.flatten().fieldErrors });
   }
-  const { nome, telefone, unidade, pode_fase1, pode_fase2 } = parsed.data;
+  const { nome, telefone, unidade, pode_fase1, pode_fase2, pode_fase3 } = parsed.data;
 
   let telefoneNormalizado: string;
   try {
@@ -113,8 +117,9 @@ router.post("/", async (req: Request, res: Response) => {
       ativo: true,
       pode_fase1: pode_fase1 ?? true,
       pode_fase2: pode_fase2 ?? false,
+      pode_fase3: pode_fase3 ?? false,
     })
-    .select("id, nome, telefone, telefone_normalizado, unidade_contexto, ativo, pode_fase1, pode_fase2, created_at, updated_at")
+    .select("id, nome, telefone, telefone_normalizado, unidade_contexto, ativo, pode_fase1, pode_fase2, pode_fase3, created_at, updated_at")
     .single();
 
   if (error) {
@@ -165,6 +170,7 @@ router.put("/:id", async (req: Request, res: Response) => {
   if (updates.unidade !== undefined)    patch.unidade_contexto = updates.unidade;
   if (updates.pode_fase1 !== undefined) patch.pode_fase1 = updates.pode_fase1;
   if (updates.pode_fase2 !== undefined) patch.pode_fase2 = updates.pode_fase2;
+  if (updates.pode_fase3 !== undefined) patch.pode_fase3 = updates.pode_fase3;
 
   if (updates.telefone !== undefined) {
     let novoNormalizado: string;
@@ -203,7 +209,7 @@ router.put("/:id", async (req: Request, res: Response) => {
     .from("inspetores")
     .update(patch)
     .eq("id", id)
-    .select("id, nome, telefone, telefone_normalizado, unidade_contexto, ativo, pode_fase1, pode_fase2, created_at, updated_at")
+    .select("id, nome, telefone, telefone_normalizado, unidade_contexto, ativo, pode_fase1, pode_fase2, pode_fase3, created_at, updated_at")
     .single();
 
   if (error) {

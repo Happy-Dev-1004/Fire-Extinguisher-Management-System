@@ -22,6 +22,9 @@ import type {
   RegiaoProgresso,
   CicloAtivo,
   ExtintorRegiao,
+  UnidadeHidranteProgresso,
+  Hidrante,
+  UnidadeHidrante,
 } from "./types";
 
 const BASE = import.meta.env.VITE_API_BASE as string ?? "/api";
@@ -155,10 +158,10 @@ export const inspetoresApi = {
   listar: () =>
     request<{ inspetores: import("./types").Inspetor[] }>("GET", "/inspetores"),
 
-  criar: (body: { nome: string; telefone: string; unidade: string; pode_fase1?: boolean; pode_fase2?: boolean }) =>
+  criar: (body: { nome: string; telefone: string; unidade: string; pode_fase1?: boolean; pode_fase2?: boolean; pode_fase3?: boolean }) =>
     request<import("./types").Inspetor>("POST", "/inspetores", body),
 
-  atualizar: (id: string, body: Partial<{ nome: string; telefone: string; unidade: string; ativo: boolean; pode_fase1: boolean; pode_fase2: boolean }>) =>
+  atualizar: (id: string, body: Partial<{ nome: string; telefone: string; unidade: string; ativo: boolean; pode_fase1: boolean; pode_fase2: boolean; pode_fase3: boolean }>) =>
     request<import("./types").Inspetor>("PUT", `/inspetores/${id}`, body),
 
   desativar: (id: string) =>
@@ -353,6 +356,61 @@ export const regioesApi = {
 
   seed: () =>
     request<{ inseridos: number }>("POST", "/regioes/seed"),
+};
+
+// ── /hidrantes (Phase 3) ────────────────────────────────────────────────────
+
+export const hidrantesApi = {
+  listar: () =>
+    request<{ unidades: UnidadeHidranteProgresso[]; ciclo: CicloAtivo | null }>("GET", "/hidrantes"),
+
+  hidrantes: (unidade: string) =>
+    request<{ unidade: string; hidrantes: Hidrante[] }>(
+      "GET", `/hidrantes/unidade/${encodeURIComponent(unidade)}`
+    ),
+
+  obter: (id: string) =>
+    request<Hidrante>("GET", `/hidrantes/${id}`),
+
+  editar: (id: string, campos: Partial<Hidrante>) =>
+    request<Hidrante>("PUT", `/hidrantes/${id}`, campos),
+
+  verificar: (id: string, verificado = true) =>
+    request<Hidrante>("POST", `/hidrantes/${id}/verificar`, { verificado }),
+
+  adicionarFotos: (id: string, fotos: string[]) =>
+    request<Hidrante>("POST", `/hidrantes/${id}/fotos`, { fotos }),
+
+  removerFoto: (id: string, url: string) =>
+    request<Hidrante>("DELETE", `/hidrantes/${id}/fotos`, { url }),
+
+  novoMes: (mes_referencia: string) =>
+    request<{ ciclo_id: string; mes_referencia: string }>("POST", "/hidrantes/novo-mes", { mes_referencia }),
+
+  seed: () =>
+    request<{ inseridos: number }>("POST", "/hidrantes/seed"),
+
+  pendentes: () =>
+    request<{ pendentes: any[] }>("GET", "/hidrantes/pendentes"),
+
+  // Unit ficha PDF (preview = light/photoless).
+  fichaPreview: (unidade: string) =>
+    previewBlobGet(`/hidrantes/ficha/${encodeURIComponent(unidade)}?preview=true`),
+  baixarFicha: (unidade: string) => {
+    const ts = new Date().toISOString().slice(0, 10);
+    return downloadBlob(`/hidrantes/ficha/${encodeURIComponent(unidade)}`, undefined, `hidrantes_${unidade.replace(/\s+/g, "_")}_${ts}.pdf`, "GET");
+  },
+};
+
+export const unidadesHidranteApi = {
+  listar: () =>
+    request<{ unidades: UnidadeHidrante[] }>("GET", "/unidades-hidrante"),
+  criar: (body: { nome: string; total_hidrantes: number; ordem?: number }) =>
+    request<UnidadeHidrante>("POST", "/unidades-hidrante", body),
+  editar: (id: string, body: Partial<{ nome: string; total_hidrantes: number; ordem: number }>) =>
+    request<UnidadeHidrante>("PUT", `/unidades-hidrante/${id}`, body),
+  remover: (id: string) =>
+    request<void>("DELETE", `/unidades-hidrante/${id}`),
 };
 
 // ── /alarme (Phase 2 — fire-alarm device photographic record) ──────────────────

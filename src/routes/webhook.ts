@@ -4,7 +4,9 @@ import { supabaseAdmin } from "../db-admin";
 import { logger } from "../logger";
 import { normalizar, variantesTelefone } from "../inspetores/normalizar";
 import { analisarLote, extrairNumeroTag, type LoteFotos } from "../analise/analisar";
+import { analisarLoteHidrante } from "../analise/analisarHidrante";
 import { resolverNomeRegiao } from "../regioes/regioes";
+import { resolverNomeUnidadeHidrante } from "../regioes/unidadesHidrante";
 import { processarRdo } from "../rdo/maquina";
 import { rdoDeps } from "../rdo/deps";
 import { processarFotoDispositivo } from "../alarme/fotosDispositivo";
@@ -83,6 +85,7 @@ async function buscarLoteAberto<T = any>(
 export interface Permissoes {
   pode_fase1: boolean;
   pode_fase2: boolean;
+  pode_fase3: boolean;
 }
 
 // Resolves the active inspector for a phone and returns their per-phase
@@ -95,7 +98,7 @@ export async function getPermissoes(phone: string): Promise<Permissoes | null> {
 
   const { data, error } = await supabaseAdmin
     .from("inspetores")
-    .select("id, pode_fase1, pode_fase2")
+    .select("id, pode_fase1, pode_fase2, pode_fase3")
     .in("telefone_normalizado", variantes)
     .eq("ativo", true)
     .limit(1);
@@ -106,11 +109,12 @@ export async function getPermissoes(phone: string): Promise<Permissoes | null> {
   }
   const row = data?.[0] as any;
   if (!row) return null;
-  // Back-compat: rows created before migration 0026 may lack the flags →
-  // treat as Phase 1 only (the historical behaviour), never Phase 2.
+  // Back-compat: rows created before the phase migrations may lack the flags →
+  // treat as Phase 1 only (the historical behaviour), never Phase 2/3.
   return {
     pode_fase1: row.pode_fase1 ?? true,
     pode_fase2: row.pode_fase2 ?? false,
+    pode_fase3: row.pode_fase3 ?? false,
   };
 }
 
@@ -248,6 +252,55 @@ async function tocarSessaoFase2(phone: string): Promise<void> {
 // needs the session open so photos aren't wasted.
 const ABRIR_FASE2   = ["alarme", "iniciar alarme", "fase 2", "fase2", "iniciar fase 2"];
 const ENCERRAR_FASE2 = ["encerrar alarme", "finalizar alarme", "encerrar fase 2", "sair alarme", "parar alarme"];
+
+// ── Phase 3 (hidrantes) work-session gate ──────────────────────────────────────
+// Independent of Phases 1 and 2: opened with "hidrante", closed with
+// "encerrar hidrante". Photos sent in a Phase 3 session are analysed as HYDRANTS.
+async function emSessaoFase3(phone: string): Promise<boolean> {
+  const variantes = variantesTelefone(phone);
+  if (variantes.length === 0) return false;
+  const { data } = await supabaseAdmin
+    .from("inspetores")
+    .select("em_sessao_fase3, sessao_fase3_atividade_em")
+    .in("telefone_normalizado", variantes)
+    .eq("ativo", true)
+    .limit(1);
+  const row = data?.[0] as any;
+  if (!row || !row.em_sessao_fase3) return false;
+  const ultima = row.sessao_fase3_atividade_em ? new Date(row.sessao_fase3_atividade_em).getTime() : 0;
+  if (ultima && Date.now() - ultima > SESSAO_BACKSTOP_MS) {
+    await definirSessaoFase3(phone, false);
+    log.info({ phone }, "sessão Fase 3 encerrada automaticamente por inatividade (backstop 3h)");
+    return false;
+  }
+  return true;
+}
+
+async function definirSessaoFase3(phone: string, aberta: boolean): Promise<void> {
+  const variantes = variantesTelefone(phone);
+  if (variantes.length === 0) return;
+  const agora = new Date().toISOString();
+  await supabaseAdmin
+    .from("inspetores")
+    .update({
+      em_sessao_fase3: aberta,
+      ...(aberta ? { sessao_fase3_iniciada_em: agora } : {}),
+      sessao_fase3_atividade_em: agora,
+    })
+    .in("telefone_normalizado", variantes);
+}
+
+async function tocarSessaoFase3(phone: string): Promise<void> {
+  const variantes = variantesTelefone(phone);
+  if (variantes.length === 0) return;
+  await supabaseAdmin
+    .from("inspetores")
+    .update({ sessao_fase3_atividade_em: new Date().toISOString() })
+    .in("telefone_normalizado", variantes);
+}
+
+const ABRIR_FASE3   = ["hidrante", "hidrantes", "iniciar hidrante", "fase 3", "fase3", "iniciar fase 3"];
+const ENCERRAR_FASE3 = ["encerrar hidrante", "encerrar hidrantes", "finalizar hidrante", "encerrar fase 3", "sair hidrante", "parar hidrante"];
 
 router.post("/", (req: Request, res: Response) => {
   // Always respond 200 immediately so Z-API stops retrying
@@ -409,8 +462,74 @@ async function processWebhook(body: any): Promise<void> {
     }
   }
 
+  // ── Phase 3 (hidrantes) ────────────────────────────────────────────────────
+  // Same album flow as Phase 1, but gated on pode_fase3 + its own session, and
+  // batches are tagged fase='hidrante' so they reach the hydrant analyser.
+  if (permissoes.pode_fase3) {
+    if (isText && textBody && ABRIR_FASE3.includes(textBody)) {
+      await definirSessaoFase3(phone, true);
+      log.info({ phone }, "sessão FASE 3 (hidrantes) ABERTA");
+      const info = await getInspetorInfo(phone);
+      void registrarNotificacao({
+        tipo: "sessao",
+        titulo: `${info.nome} iniciou inspeção de hidrantes`,
+        mensagem: info.regiao ? `Unidade: ${info.regiao}` : undefined,
+        metadata: { fase: 3, inspetor: info.nome },
+      });
+      await sendWhatsAppMessage(phone,
+        "🚰 *Modo Hidrantes (Fase 3) iniciado.*\n" +
+        "Informe a *unidade*, envie o *álbum de fotos* de cada hidrante e depois o *número* (ex.: 1).\n" +
+        "Escreva *encerrar hidrante* quando terminar.");
+      return;
+    }
+    if (isText && textBody && ENCERRAR_FASE3.includes(textBody)) {
+      await handleFinalizarLote(phone);
+      await definirSessaoFase3(phone, false);
+      log.info({ phone }, "sessão FASE 3 (hidrantes) ENCERRADA");
+      await sendWhatsAppMessage(phone, "✅ Modo Hidrantes (Fase 3) encerrado.");
+      return;
+    }
+
+    // Inside an active Phase 3 session, handle unit context, number-label and
+    // photos exactly like Phase 1 but tagged for the hydrant analyser.
+    if (await emSessaoFase3(phone)) {
+      await tocarSessaoFase3(phone);
+
+      // Unit context (the inspector announces the hydrant unit before photos).
+      if (isText && rawTextBody) {
+        const semPrefixo = rawTextBody.replace(/^unidade\s*[:\-]\s*/i, "").trim();
+        const unidade = await resolverNomeUnidadeHidrante(semPrefixo);
+        if (unidade) {
+          await supabaseAdmin
+            .from("inspetores")
+            .update({ unidade_contexto: unidade, regiao_contexto: null })
+            .in("telefone_normalizado", variantesTelefone(phone));
+          log.info({ phone, unidade }, "unidade de hidrante definida pelo inspetor");
+          return;
+        }
+        // A bare number closes the current hydrant batch (same as Phase 1).
+        const numeroTag = extrairNumeroTag(rawTextBody);
+        if (numeroTag) {
+          const rotulado = await rotularEArmar(phone, numeroTag);
+          if (rotulado) log.info({ phone, numero: numeroTag }, "número de hidrante recebido — lote rotulado");
+          else          log.warn({ phone, numero: numeroTag }, "número de hidrante mas nenhum lote aberto");
+          return;
+        }
+      }
+
+      if (isImage && imageUrl) {
+        if (caption) await handleImageWithCaption(phone, caption, imageUrl, "hidrante");
+        else         await handleImageSemLegenda(phone, imageUrl, "hidrante");
+        return;
+      }
+      // Other messages in the Phase 3 session are ignored (no fall-through to P1).
+      log.info({ phone }, "mensagem ignorada na sessão de hidrantes");
+      return;
+    }
+  }
+
   // From here down is PHASE 1 (extintores). Block it entirely for inspectors who
-  // only have Phase 2 — their photos must never reach OpenAI analysis.
+  // only have Phase 2/3 — their photos must never reach the extinguisher analyser.
   if (!permissoes.pode_fase1) {
     log.info({ phone }, "mensagem ignorada — inspetor sem permissão de Fase 1");
     return;
@@ -565,14 +684,15 @@ async function getInspetorInfo(phone: string): Promise<{ nome: string; regiao: s
 async function handleImageWithCaption(
   phone: string,
   caption: string,
-  imageUrl: string
+  imageUrl: string,
+  fase: string = "extintor"
 ): Promise<void> {
   const unidade_contexto = await getUnidadeContexto(phone);
 
   // Close any open batch for this phone first
   const { data: loteAberto } = await buscarLoteAberto<any>(
     phone,
-    "id, legenda, fotos, phone, unidade_contexto"
+    "id, legenda, fotos, phone, unidade_contexto, fase"
   );
 
   if (loteAberto) {
@@ -582,7 +702,7 @@ async function handleImageWithCaption(
       .eq("id", loteAberto.id);
 
     log.info(
-      { phone, loteId: loteAberto.id, extintor: loteAberto.legenda, qtdFotos: loteAberto.fotos.length },
+      { phone, loteId: loteAberto.id, legenda: loteAberto.legenda, qtdFotos: loteAberto.fotos.length },
       "lote anterior finalizado — nova legenda recebida"
     );
 
@@ -597,6 +717,7 @@ async function handleImageWithCaption(
       legenda: caption,
       fotos: [imageUrl],
       status: "aberto",
+      fase,
       started_at: new Date().toISOString(),
       ...(unidade_contexto ? { unidade_contexto } : {}),
     })
@@ -617,7 +738,7 @@ async function handleImageWithCaption(
 async function handleFinalizarLote(phone: string): Promise<void> {
   const { data: loteAberto, error } = await buscarLoteAberto<any>(
     phone,
-    "id, legenda, fotos, phone, unidade_contexto"
+    "id, legenda, fotos, phone, unidade_contexto, fase"
   );
 
   if (error) {
@@ -643,9 +764,13 @@ async function handleFinalizarLote(phone: string): Promise<void> {
   triggerAnalise({ ...loteAberto, status: "pronto" });
 }
 
-function triggerAnalise(lote: LoteFotos): void {
-  log.info({ loteId: lote.id, extintor: lote.legenda }, "disparando análise de IA em segundo plano");
-  analisarLote(lote).catch((err: Error) =>
+// Dispatches a finalised batch to the right analyser based on its phase tag.
+// fase='hidrante' (Phase 3) → hydrant analysis; anything else → extinguishers.
+function triggerAnalise(lote: LoteFotos & { fase?: string }): void {
+  const ehHidrante = lote.fase === "hidrante";
+  log.info({ loteId: lote.id, legenda: lote.legenda, fase: lote.fase ?? "extintor" }, "disparando análise de IA em segundo plano");
+  const tarefa = ehHidrante ? analisarLoteHidrante(lote) : analisarLote(lote);
+  tarefa.catch((err: Error) =>
     log.error({ loteId: lote.id, err: err.message }, "erro na análise do lote")
   );
 }
@@ -656,7 +781,8 @@ function triggerAnalise(lote: LoteFotos): void {
 // labels and closes it. So an album of N photos all land in the same batch.
 async function handleImageSemLegenda(
   phone: string,
-  imageUrl: string
+  imageUrl: string,
+  fase: string = "extintor"
 ): Promise<void> {
   const { data: loteAberto, error: fetchError } = await buscarLoteAberto<{
     id: string;
@@ -671,15 +797,17 @@ async function handleImageSemLegenda(
   }
 
   if (!loteAberto) {
-    // First photo of an extinguisher with no open batch — open one (no timer).
+    // First photo with no open batch — open one (no timer). The placeholder
+    // legenda differs by phase so logs read naturally.
     const unidade_contexto = await getUnidadeContexto(phone);
     const { data: novoLote, error: insertError } = await supabase
       .from("lotes_fotos")
       .insert({
         phone,
-        legenda: "Extintor",
+        legenda: fase === "hidrante" ? "Hidrante" : "Extintor",
         fotos: [imageUrl],
         status: "aberto",
+        fase,
         started_at: new Date().toISOString(),
         ...(unidade_contexto ? { unidade_contexto } : {}),
       })
@@ -754,7 +882,7 @@ async function rotularEArmar(phone: string, numero: string): Promise<boolean> {
 async function finalizarLoteRotulado(phone: string): Promise<void> {
   const { data: lote } = await buscarLoteAberto<any>(
     phone,
-    "id, legenda, numero, fotos, phone, unidade_contexto, rotulado_em"
+    "id, legenda, numero, fotos, phone, unidade_contexto, rotulado_em, fase"
   );
   if (!lote || !lote.rotulado_em) return; // not labeled → nothing to finalise
 
@@ -784,7 +912,7 @@ export async function varrerLotesAbandonados(): Promise<void> {
   // absent, so we must not request them or the query errors out entirely.
   const { data: lotes, error } = await supabase
     .from("lotes_fotos")
-    .select("id, phone, legenda, numero, fotos, status, started_at, created_at, unidade_contexto, rotulado_em")
+    .select("id, phone, legenda, numero, fotos, status, started_at, created_at, unidade_contexto, rotulado_em, fase")
     .eq("status", "aberto");
 
   if (error) {

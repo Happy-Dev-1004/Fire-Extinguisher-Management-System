@@ -1,0 +1,10 @@
+ALTER TABLE lotes_fotos DROP COLUMN IF EXISTS fase;
+DROP FUNCTION IF EXISTS iniciar_novo_ciclo_hidrante(TEXT, UUID);
+DROP FUNCTION IF EXISTS aplicar_inspecao_hidrante(TEXT, INTEGER, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT[]);
+DROP FUNCTION IF EXISTS seed_hidrantes();
+DROP TRIGGER IF EXISTS hidrantes_updated_at ON hidrantes;
+DROP FUNCTION IF EXISTS hidrantes_touch_updated_at();
+DROP TABLE IF EXISTS inspecoes_pendentes_hidrante;
+DROP TABLE IF EXISTS hidrantes;
+DROP TABLE IF EXISTS ciclos_hidrante;
+DROP TABLE IF EXISTS unidades_hidrante;
