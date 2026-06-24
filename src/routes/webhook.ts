@@ -6,7 +6,7 @@ import { normalizar, variantesTelefone } from "../inspetores/normalizar";
 import { analisarLote, extrairNumeroTag, type LoteFotos } from "../analise/analisar";
 import { analisarLoteHidrante } from "../analise/analisarHidrante";
 import { resolverNomeRegiao } from "../regioes/regioes";
-import { resolverNomeUnidadeHidrante } from "../regioes/unidadesHidrante";
+import { classificarUnidadeHidrante, listarUnidadesHidrante } from "../regioes/unidadesHidrante";
 import { processarRdo } from "../rdo/maquina";
 import { rdoDeps } from "../rdo/deps";
 import { processarFotoDispositivo } from "../alarme/fotosDispositivo";
@@ -497,17 +497,8 @@ async function processWebhook(body: any): Promise<void> {
 
       // Unit context (the inspector announces the hydrant unit before photos).
       if (isText && rawTextBody) {
-        const semPrefixo = rawTextBody.replace(/^unidade\s*[:\-]\s*/i, "").trim();
-        const unidade = await resolverNomeUnidadeHidrante(semPrefixo);
-        if (unidade) {
-          await supabaseAdmin
-            .from("inspetores")
-            .update({ unidade_contexto: unidade, regiao_contexto: null })
-            .in("telefone_normalizado", variantesTelefone(phone));
-          log.info({ phone, unidade }, "unidade de hidrante definida pelo inspetor");
-          return;
-        }
         // A bare number closes the current hydrant batch (same as Phase 1).
+        // Checked FIRST so "31" is never mistaken for a failed unit name.
         const numeroTag = extrairNumeroTag(rawTextBody);
         if (numeroTag) {
           const rotulado = await rotularEArmar(phone, numeroTag);
@@ -515,6 +506,40 @@ async function processWebhook(body: any): Promise<void> {
           else          log.warn({ phone, numero: numeroTag }, "número de hidrante mas nenhum lote aberto");
           return;
         }
+
+        // Otherwise treat the text as a unit announcement. Classify it so we can
+        // tell apart an exact match, an AMBIGUOUS one (e.g. "Ilhéus" → both
+        // "Fábrica Ilhéus" and "CW Ilhéus"), and an unknown one — and reply on
+        // WhatsApp BEFORE photos arrive instead of silently failing at the end.
+        const semPrefixo = rawTextBody.replace(/^unidade\s*[:\-]\s*/i, "").trim();
+        const classe = await classificarUnidadeHidrante(semPrefixo);
+        if (classe.tipo === "exata") {
+          await supabaseAdmin
+            .from("inspetores")
+            .update({ unidade_contexto: classe.nome, regiao_contexto: null })
+            .in("telefone_normalizado", variantesTelefone(phone));
+          log.info({ phone, unidade: classe.nome }, "unidade de hidrante definida pelo inspetor");
+          await sendWhatsAppMessage(phone, `✅ Unidade definida: *${classe.nome}*. Envie as fotos do hidrante e depois o número.`);
+          return;
+        }
+        if (classe.tipo === "ambigua") {
+          log.info({ phone, texto: semPrefixo, candidatos: classe.candidatos }, "unidade de hidrante ambígua");
+          await sendWhatsAppMessage(
+            phone,
+            `⚠️ "*${semPrefixo}*" corresponde a mais de uma unidade. Qual delas?\n` +
+              classe.candidatos.map((c) => `• ${c}`).join("\n"),
+          );
+          return;
+        }
+        // Unknown text: list the valid units so the inspector can correct it.
+        const todas = (await listarUnidadesHidrante()).map((u) => u.nome);
+        log.info({ phone, texto: semPrefixo }, "unidade de hidrante não reconhecida");
+        await sendWhatsAppMessage(
+          phone,
+          `⚠️ Unidade "*${semPrefixo}*" não reconhecida.` +
+            (todas.length ? `\nUnidades válidas:\n${todas.map((c) => `• ${c}`).join("\n")}` : ""),
+        );
+        return;
       }
 
       if (isImage && imageUrl) {
