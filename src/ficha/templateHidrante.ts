@@ -129,8 +129,12 @@ export function renderHtmlHidrante(dados: DadosFichaHidrante): string {
   .col-item  { width: 130px; text-align: left; font-size: 8pt; }
   .col-check { width: 22px; text-align: center; font-size: 11pt; }
   .col-obs   { width: 120px; text-align: center; font-size: 7.5pt; }
-  .th-rot { height: 70px; padding: 0; }
-  .th-rot .rot-wrap { height: 70px; display: flex; align-items: center; justify-content: center; }
+  /* Rotated column headers. Height must clear the LONGEST label
+     ("ENCAMINHAR MANUTENÇÃO" ≈ 115px tall at 6pt) so the vertical text fits on a
+     single line inside the cell. overflow:hidden is only a safety net — the
+     height is sized so nothing is actually clipped. */
+  .th-rot { height: 120px; padding: 0; overflow: hidden; }
+  .th-rot .rot-wrap { height: 120px; display: flex; align-items: center; justify-content: center; overflow: hidden; }
   .th-rot .rot-wrap span { writing-mode: vertical-rl; transform: rotate(180deg); white-space: nowrap; font-size: 6pt; font-weight: bold; line-height: 1; }
   .fotos-col { flex: 1; border-left: 2px solid #000; display: flex; flex-wrap: nowrap; align-items: stretch; gap: 0; }
   .fotos-col img.foto { flex: 1; width: 25%; min-width: 0; height: auto; max-height: 175px; object-fit: cover; border-right: 1px solid #999; }
