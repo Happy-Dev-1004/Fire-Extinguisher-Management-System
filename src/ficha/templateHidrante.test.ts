@@ -34,7 +34,10 @@ describe("renderHtmlHidrante", () => {
     expect(html).toContain(">OK<");
     expect(html).toContain(">RUIM<");
     expect(html).toContain(">PENDENTE<");
-    expect(html).toContain("ENCAMINHAR MANUTENÇÃO");
+    // "ENCAMINHAR MANUTENÇÃO" renders as two stacked vertical lines (two spans),
+    // matching the original form — assert the actual split markup, not the
+    // contiguous label (which would also match the CSS comment).
+    expect(html).toContain(">ENCAMINHAR</span><span>MANUTENÇÃO<");
   });
 
   it("checks the matching column and shows the observação", () => {

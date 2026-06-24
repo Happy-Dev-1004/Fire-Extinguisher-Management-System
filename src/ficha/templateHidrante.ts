@@ -89,7 +89,7 @@ function renderHidrante(h: HidranteFicha, index: number): string {
             <th class="col-check th-rot"><div class="rot-wrap"><span>OK</span></div></th>
             <th class="col-check th-rot"><div class="rot-wrap"><span>RUIM</span></div></th>
             <th class="col-check th-rot"><div class="rot-wrap"><span>PENDENTE</span></div></th>
-            <th class="col-check th-rot"><div class="rot-wrap"><span>ENCAMINHAR MANUTENÇÃO</span></div></th>
+            <th class="col-check th-rot th-rot2"><div class="rot-wrap"><span>ENCAMINHAR</span><span>MANUTENÇÃO</span></div></th>
             <th class="col-obs">OBSERVAÇÕES</th>
           </tr>
         </thead>
@@ -129,13 +129,15 @@ export function renderHtmlHidrante(dados: DadosFichaHidrante): string {
   .col-item  { width: 130px; text-align: left; font-size: 8pt; }
   .col-check { width: 22px; text-align: center; font-size: 11pt; }
   .col-obs   { width: 120px; text-align: center; font-size: 7.5pt; }
-  /* Rotated column headers. Height must clear the LONGEST label
-     ("ENCAMINHAR MANUTENÇÃO" ≈ 115px tall at 6pt) so the vertical text fits on a
-     single line inside the cell. overflow:hidden is only a safety net — the
-     height is sized so nothing is actually clipped. */
-  .th-rot { height: 120px; padding: 0; overflow: hidden; }
-  .th-rot .rot-wrap { height: 120px; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+  /* Rotated column headers. Single-word labels (OK / RUIM / PENDENTE) are one
+     vertical line; "ENCAMINHAR MANUTENÇÃO" is split into two stacked vertical
+     lines (.th-rot2), matching the original form. Height clears the longest
+     single word so nothing is clipped. */
+  .th-rot { height: 78px; padding: 0; overflow: hidden; }
+  .th-rot .rot-wrap { height: 78px; display: flex; align-items: center; justify-content: center; gap: 1px; overflow: hidden; }
   .th-rot .rot-wrap span { writing-mode: vertical-rl; transform: rotate(180deg); white-space: nowrap; font-size: 6pt; font-weight: bold; line-height: 1; }
+  /* The two-line header is slightly wider to hold both vertical lines. */
+  .th-rot2 { width: 28px; }
   .fotos-col { flex: 1; border-left: 2px solid #000; display: flex; flex-wrap: nowrap; align-items: stretch; gap: 0; }
   .fotos-col img.foto { flex: 1; width: 25%; min-width: 0; height: auto; max-height: 175px; object-fit: cover; border-right: 1px solid #999; }
   .fotos-col img.foto:last-child { border-right: none; }
