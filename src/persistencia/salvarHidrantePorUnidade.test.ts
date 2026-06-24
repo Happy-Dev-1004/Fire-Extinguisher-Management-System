@@ -13,12 +13,18 @@ vi.mock("../regioes/unidadesHidrante", () => ({
 
 import { salvarHidrantePorUnidade } from "./salvarHidrantePorUnidade";
 
-// Captures inserts into inspecoes_pendentes_hidrante.
-function wireParkCapture() {
+// Captures inserts into inspecoes_pendentes_hidrante and stubs the hidrantes
+// label-lookup select. `slots` are the unit's stored display numbers used by the
+// label fallback (resolverNumeroIntPorRotulo).
+function wireParkCapture(slots: { numero: string; numero_int: number }[] = []) {
   const parked: any[] = [];
   fromFn.mockImplementation((table: string) => {
     if (table === "inspecoes_pendentes_hidrante") {
       return { insert: (row: any) => { parked.push(row); return Promise.resolve({ error: null }); } };
+    }
+    if (table === "hidrantes") {
+      // .select("numero, numero_int").eq("unidade", X) → { data }
+      return { select: () => ({ eq: () => Promise.resolve({ data: slots }) }) };
     }
     return {};
   });
@@ -84,5 +90,27 @@ describe("salvarHidrantePorUnidade", () => {
     });
     expect(r.tipo).toBe("aplicado");
     if (r.tipo === "aplicado") expect(r.numero).toBe(1);
+  });
+
+  it("resolves a custom display label (CW Ilhéus 'H11-1') to its numero_int", async () => {
+    resolverFn.mockResolvedValue("CW Ilhéus");
+    totalFn.mockResolvedValue(20);
+    rpcFn.mockResolvedValue({ data: "slot-uuid", error: null });
+    // "H11-1" parses to integer 11, which is in range 1..20 — but slot 11's
+    // printed numero IS "H11-1", so the straight integer is correct here. Use
+    // "H11-2" (parses to a malformed 11-2 → integer fails) to exercise the
+    // label fallback → numero_int 12.
+    wireParkCapture([
+      { numero: "H11-1", numero_int: 11 },
+      { numero: "H11-2", numero_int: 12 },
+    ]);
+    const r = await salvarHidrantePorUnidade({
+      resultado: baseResultado, loteId: "l1", fotos: ["u"], unidadeContexto: "CW Ilhéus", numeroLegenda: "H11-2",
+    });
+    expect(r.tipo).toBe("aplicado");
+    if (r.tipo === "aplicado") expect(r.numero).toBe(12);
+    expect(rpcFn).toHaveBeenCalledWith("aplicar_inspecao_hidrante", expect.objectContaining({
+      p_unidade: "CW Ilhéus", p_numero_int: 12,
+    }));
   });
 });

@@ -29,12 +29,32 @@ function parseInteiro(s: string | null | undefined): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+// Normalises a hydrant label for matching: lowercases, strips a leading "h",
+// and collapses separators. "H11-1" → "111", " h11 - 1 " → "111".
+function normalizarRotulo(s: string | null | undefined): string {
+  if (!s) return "";
+  return s.trim().toLowerCase().replace(/^h/, "").replace(/[\s_-]+/g, "");
+}
+
+// Resolves the slot's numero_int by matching the inspector's label against the
+// unit's stored display numbers (`numero`). Handles custom numbering like CW
+// Ilhéus ("H11-1", "H11-2") where the printed label isn't a plain integer.
+async function resolverNumeroIntPorRotulo(unidade: string, rotulo: string): Promise<number | null> {
+  const alvo = normalizarRotulo(rotulo);
+  if (!alvo) return null;
+  const { data } = await supabase
+    .from("hidrantes").select("numero, numero_int").eq("unidade", unidade);
+  const hit = (data as { numero: string; numero_int: number }[] | null)
+    ?.find((h) => normalizarRotulo(h.numero) === alvo);
+  return hit?.numero_int ?? null;
+}
+
 export async function salvarHidrantePorUnidade(input: SalvarHidranteInput): Promise<SalvarHidranteResultado> {
   const { resultado, loteId, fotos, unidadeContexto, numeroLegenda } = input;
 
   const unidade = await resolverNomeUnidadeHidrante(unidadeContexto);
   const numStr = numeroLegenda ?? resultado.numero_hidrante;
-  const numeroInt = parseInteiro(numStr);
+  let numeroInt = parseInteiro(numStr);
 
   async function parkPendente(motivo: string): Promise<SalvarHidranteResultado> {
     await supabase.from("inspecoes_pendentes_hidrante").insert({
@@ -49,11 +69,22 @@ export async function salvarHidrantePorUnidade(input: SalvarHidranteInput): Prom
     return { tipo: "pendente", motivo };
   }
 
-  if (!unidade)        return parkPendente("Unidade não reconhecida — informe uma unidade de hidrante válida.");
-  if (numeroInt === null) return parkPendente(`Número "${numStr}" não é um número de hidrante válido.`);
+  if (!unidade) return parkPendente("Unidade não reconhecida — informe uma unidade de hidrante válida.");
+
   const total = await totalDaUnidadeHidrante(unidade);
-  if (total !== null && (numeroInt < 1 || numeroInt > total)) {
-    return parkPendente(`Número ${numeroInt} fora do intervalo 1..${total} da unidade ${unidade}.`);
+
+  // A plain integer label (H01) maps straight to numero_int. Otherwise — or when
+  // that integer falls out of range — fall back to matching the printed display
+  // label (e.g. CW Ilhéus "H11-1" → numero_int 11). Only park if neither resolves.
+  if (numeroInt === null || (total !== null && (numeroInt < 1 || numeroInt > total))) {
+    const porRotulo = await resolverNumeroIntPorRotulo(unidade, numStr ?? "");
+    if (porRotulo !== null) {
+      numeroInt = porRotulo;
+    } else if (numeroInt === null) {
+      return parkPendente(`Número "${numStr}" não é um número de hidrante válido.`);
+    } else {
+      return parkPendente(`Número ${numeroInt} fora do intervalo 1..${total} da unidade ${unidade}.`);
+    }
   }
 
   const { data: slotId, error } = await supabase.rpc("aplicar_inspecao_hidrante", {
