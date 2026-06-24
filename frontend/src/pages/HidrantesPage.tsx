@@ -1,11 +1,11 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { hidrantesApi, unidadesHidranteApi } from "../lib/api";
-import type { UnidadeHidranteProgresso, UnidadeHidrante, CicloAtivo } from "../lib/types";
+import { hidrantesApi } from "../lib/api";
+import type { UnidadeHidranteProgresso, CicloAtivo } from "../lib/types";
 import { useAuth } from "../hooks/useAuth";
 import { toast } from "../components/Toast";
 import { Modal } from "../components/Modal";
-import { Droplets, ArrowRight, Loader2, CalendarDays, RefreshCw, PlusCircle, ShieldCheck, Clock, Circle, Settings2, Trash2, Plus } from "lucide-react";
+import { Droplets, ArrowRight, Loader2, CalendarDays, RefreshCw, PlusCircle, ShieldCheck, Clock, Circle } from "lucide-react";
 
 const MESES = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
 function mesAtual(): string {
@@ -25,15 +25,7 @@ export function HidrantesPage({ embedded = false }: { embedded?: boolean } = {})
   const [mes, setMes]           = useState(mesAtual);
   const [processando, setProcessando] = useState(false);
 
-  // Owner-managed unit registry
-  const [unidadesReg, setUnidadesReg] = useState<UnidadeHidrante[]>([]);
-  const [novoNome, setNovoNome]   = useState("");
-  const [novoTotal, setNovoTotal] = useState("");
-  const [salvandoUnidade, setSalvandoUnidade] = useState(false);
-  const [removendoUnidade, setRemovendoUnidade] = useState<string | null>(null);
-
   useEffect(() => { void carregar(); }, []);
-  useEffect(() => { if (isOwner) void carregarUnidades(); }, [isOwner]);
 
   async function carregar() {
     setCarregando(true);
@@ -45,49 +37,6 @@ export function HidrantesPage({ embedded = false }: { embedded?: boolean } = {})
       toast(e instanceof Error ? e.message : "Erro ao carregar unidades.", "erro");
     } finally {
       setCarregando(false);
-    }
-  }
-
-  async function carregarUnidades() {
-    try {
-      const r = await unidadesHidranteApi.listar();
-      setUnidadesReg(r.unidades);
-    } catch (e) {
-      toast(e instanceof Error ? e.message : "Erro ao carregar registro de unidades.", "erro");
-    }
-  }
-
-  async function criarUnidade() {
-    const nome = novoNome.trim();
-    const total = parseInt(novoTotal, 10);
-    if (!nome || !Number.isFinite(total) || total <= 0) {
-      toast("Informe o nome e a quantidade de hidrantes.", "erro");
-      return;
-    }
-    setSalvandoUnidade(true);
-    try {
-      await unidadesHidranteApi.criar({ nome, total_hidrantes: total });
-      toast(`Unidade "${nome}" criada.`, "sucesso");
-      setNovoNome(""); setNovoTotal("");
-      await carregarUnidades();
-    } catch (e) {
-      toast(e instanceof Error ? e.message : "Erro ao criar unidade.", "erro");
-    } finally {
-      setSalvandoUnidade(false);
-    }
-  }
-
-  async function removerUnidade(u: UnidadeHidrante) {
-    if (!window.confirm(`Remover a unidade "${u.nome}"? Esta ação não pode ser desfeita.`)) return;
-    setRemovendoUnidade(u.id);
-    try {
-      await unidadesHidranteApi.remover(u.id);
-      toast(`Unidade "${u.nome}" removida.`, "sucesso");
-      await carregarUnidades();
-    } catch (e) {
-      toast(e instanceof Error ? e.message : "Erro ao remover unidade.", "erro");
-    } finally {
-      setRemovendoUnidade(null);
     }
   }
 
@@ -151,59 +100,6 @@ export function HidrantesPage({ embedded = false }: { embedded?: boolean } = {})
           )}
         </div>
       </div>
-
-      {/* Owner: unit registry management */}
-      {isOwner && (
-        <div className="card p-5">
-          <p className="section-title flex items-center gap-1.5 mb-3">
-            <Settings2 className="w-3.5 h-3.5" /> Unidades
-          </p>
-          <p className="text-xs text-gray-400 mb-4">
-            Defina as unidades e a quantidade de hidrantes antes de gerar o inventário.
-          </p>
-
-          {unidadesReg.length > 0 && (
-            <div className="divide-y divide-gray-100 mb-4">
-              {unidadesReg.map((u) => (
-                <div key={u.id} className="flex items-center justify-between gap-3 py-2.5">
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold text-gray-900 truncate">{u.nome}</p>
-                    <p className="text-xs text-gray-400">{u.total_hidrantes} hidrantes</p>
-                  </div>
-                  <button
-                    onClick={() => removerUnidade(u)}
-                    disabled={removendoUnidade === u.id}
-                    title="Remover unidade"
-                    className="btn-ghost btn-sm text-red-600 hover:text-red-700"
-                  >
-                    {removendoUnidade === u.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-
-          <div className="flex flex-col sm:flex-row gap-2">
-            <input
-              className="input flex-1"
-              placeholder="Nome da unidade"
-              value={novoNome}
-              onChange={(e) => setNovoNome(e.target.value)}
-            />
-            <input
-              className="input sm:w-40"
-              type="number"
-              min={1}
-              placeholder="Nº de hidrantes"
-              value={novoTotal}
-              onChange={(e) => setNovoTotal(e.target.value)}
-            />
-            <button onClick={criarUnidade} disabled={salvandoUnidade} className="btn-primary btn-sm">
-              {salvandoUnidade ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />} Adicionar
-            </button>
-          </div>
-        </div>
-      )}
 
       {/* Cycle + totals banner */}
       <div className="card p-4 flex flex-wrap items-center gap-4">
