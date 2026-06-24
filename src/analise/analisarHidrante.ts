@@ -8,7 +8,7 @@ import { logger } from "../logger";
 import { RespostaHidranteSchema, type RespostaHidrante } from "./schemaHidrante";
 import { SYSTEM_PROMPT_HIDRANTE, buildUserMessageHidrante } from "./promptHidrante";
 import { extrairNumeroTag, type LoteFotos } from "./analisar";
-import { salvarHidrantePorUnidade } from "../persistencia/salvarHidrantePorUnidade";
+import { salvarHidrantePorUnidade, buscarConstantesHidrante } from "../persistencia/salvarHidrantePorUnidade";
 import { sendWhatsAppMessage } from "../notificacao/zapi";
 import { variantesTelefone } from "../inspetores/normalizar";
 import { getSecret } from "../segredos/getSecret";
@@ -57,6 +57,22 @@ export async function analisarLoteHidrante(lote: LoteFotos): Promise<RespostaHid
     return null;
   }
 
+  // Resolve the unit + slot constants BEFORE the AI call so we can tell the model
+  // what this specific hydrant should have (e.g. 2 nozzles, 4 hoses, 2 wrenches).
+  // Verifying against a known expectation is far more reliable than identifying
+  // the small accessories blind. Best-effort: if it can't be resolved, the prompt
+  // just omits the expectation block.
+  const legendaTagPre = extrairNumeroTag(lote.legenda);
+  let unidadePre = (lote.unidade_contexto ?? "").trim() || null;
+  if (!unidadePre) unidadePre = await getUnidadeInspetor(lote.phone);
+  let esperado: { esguicho?: string | null; mangueira?: string | null; chave_storz?: string | null } | undefined;
+  try {
+    const c = await buscarConstantesHidrante(unidadePre, legendaTagPre ?? lote.legenda);
+    if (c) esperado = { esguicho: c.esguicho, mangueira: c.mangueira, chave_storz: c.chave_storz };
+  } catch (err: any) {
+    log.warn({ err: err.message }, "não foi possível buscar constantes do hidrante (seguindo sem expectativa)");
+  }
+
   let rawResposta: string;
   try {
     const completion = await (await getOpenAI()).chat.completions.create({
@@ -65,7 +81,7 @@ export async function analisarLoteHidrante(lote: LoteFotos): Promise<RespostaHid
       max_tokens: 1500,
       messages: [
         { role: "system", content: SYSTEM_PROMPT_HIDRANTE },
-        { role: "user",   content: buildUserMessageHidrante(lote.legenda, lote.fotos) },
+        { role: "user",   content: buildUserMessageHidrante(lote.legenda, lote.fotos, esperado) },
       ],
     });
     rawResposta = completion.choices[0]?.message?.content ?? "";
@@ -101,21 +117,18 @@ export async function analisarLoteHidrante(lote: LoteFotos): Promise<RespostaHid
   let resultado = validacao.data;
 
   // The number the inspector typed (caption) is authoritative — overrides the AI.
-  const legendaTag = extrairNumeroTag(lote.legenda);
+  // Reuse the values resolved before the AI call (legendaTagPre / unidadePre).
+  const legendaTag = legendaTagPre;
   if (legendaTag && legendaTag !== resultado.numero_hidrante) {
     resultado = { ...resultado, numero_hidrante: legendaTag };
   }
-
-  // Unit resolution: batch context → inspector's registered unit.
-  let unidadeContexto = (lote.unidade_contexto ?? "").trim() || null;
-  if (!unidadeContexto) unidadeContexto = await getUnidadeInspetor(lote.phone);
 
   try {
     const r = await salvarHidrantePorUnidade({
       resultado,
       loteId: lote.id,
       fotos: lote.fotos,
-      unidadeContexto,
+      unidadeContexto: unidadePre,
       numeroLegenda: legendaTag,
     });
 

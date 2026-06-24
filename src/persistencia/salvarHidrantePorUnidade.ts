@@ -49,6 +49,44 @@ async function resolverNumeroIntPorRotulo(unidade: string, rotulo: string): Prom
   return hit?.numero_int ?? null;
 }
 
+export interface ConstantesHidrante {
+  setor: string | null;
+  esguicho: string | null;     // expected nozzle count, e.g. "2"
+  mangueira: string | null;    // expected hose count, e.g. "4"
+  chave_storz: string | null;  // expected Storz-wrench count, e.g. "2"
+}
+
+// Looks up a slot's registered CONSTANTS (expected accessory counts + sector)
+// so the analyser can tell the AI what to expect for this specific hydrant —
+// turning "identify this part" into "verify the 2 expected nozzles are present".
+// Matches by plain integer first, then by printed label (CW Ilhéus "H11-2").
+// Returns null when the unit/number can't be resolved to a slot.
+export async function buscarConstantesHidrante(
+  unidade: string | null | undefined,
+  numeroLabel: string | null | undefined,
+): Promise<ConstantesHidrante | null> {
+  if (!unidade || !numeroLabel) return null;
+  const nome = await resolverNomeUnidadeHidrante(unidade);
+  if (!nome) return null;
+
+  let numeroInt = parseInteiro(numeroLabel);
+  const total = await totalDaUnidadeHidrante(nome);
+  if (numeroInt === null || (total !== null && (numeroInt < 1 || numeroInt > total))) {
+    numeroInt = await resolverNumeroIntPorRotulo(nome, numeroLabel);
+  }
+  if (numeroInt === null) return null;
+
+  const { data } = await supabase
+    .from("hidrantes")
+    .select("setor, esguicho, mangueira, chave_storz")
+    .eq("unidade", nome)
+    .eq("numero_int", numeroInt)
+    .maybeSingle();
+  if (!data) return null;
+  const d = data as ConstantesHidrante;
+  return { setor: d.setor, esguicho: d.esguicho, mangueira: d.mangueira, chave_storz: d.chave_storz };
+}
+
 export async function salvarHidrantePorUnidade(input: SalvarHidranteInput): Promise<SalvarHidranteResultado> {
   const { resultado, loteId, fotos, unidadeContexto, numeroLegenda } = input;
 
