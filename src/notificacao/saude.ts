@@ -83,6 +83,12 @@ async function marcarAlerta(chave: string, detalhe: Record<string, unknown> = {}
   );
 }
 
+// Clears an alert's state so the NEXT occurrence alerts immediately (no leftover
+// cooldown). Called when a service recovers — e.g. Z-API reconnects.
+async function limparAlerta(chave: string): Promise<void> {
+  await supabaseAdmin.from("alertas_estado").delete().eq("chave", chave);
+}
+
 // ── Critical failure interception (called from the API call sites) ─────────────
 
 // True when an OpenAI error means "out of credit / key dead" (vs a transient blip).
@@ -120,6 +126,26 @@ export async function alertarFalhaZApi(status: number): Promise<void> {
     metadata: { servico: "zapi", status },
   });
   await marcarAlerta("zapi_falha", { status });
+}
+
+// Fires when the Z-API instance is reachable but the WhatsApp phone is NOT
+// linked (status 200 with connected:false). This is the silent outage that took
+// the whole system down: no photo/message reaches the webhook, across ALL phases.
+// HTTP 401/403 (token dead) is handled separately by alertarFalhaZApi.
+export async function alertarZApiDesconectado(): Promise<void> {
+  if (await jaAlertou("zapi_desconectado", COOLDOWN_CRITICO)) return;
+  await registrarNotificacao({
+    tipo: "saude",
+    severidade: "critico",
+    escopo: "owner",
+    titulo: "Z-API desconectado — WhatsApp fora do ar",
+    mensagem:
+      "O número de WhatsApp foi desconectado da Z-API. Nenhuma foto ou mensagem dos inspetores " +
+      "está chegando (todas as fases). Reconecte em app.z-api.io: escaneie o QR Code no celular " +
+      "(WhatsApp → Aparelhos conectados → Conectar um aparelho).",
+    metadata: { servico: "zapi", motivo: "desconectado" },
+  });
+  await marcarAlerta("zapi_desconectado", { motivo: "desconectado" });
 }
 
 // ── Periodic checks (run by the hourly job) ────────────────────────────────────
@@ -174,9 +200,14 @@ async function checarStatusZApi(): Promise<{ conectado: boolean | null }> {
       { headers: { "Client-Token": clientToken }, signal: AbortSignal.timeout(10_000) }
     );
     if (res.status === 401 || res.status === 403) { await alertarFalhaZApi(res.status); return { conectado: false }; }
-    if (!res.ok) return { conectado: null };
+    if (!res.ok) return { conectado: null }; // transient/unknown — don't alert
     const body: any = await res.json().catch(() => ({}));
-    return { conectado: body?.connected === true || body?.smartphoneConnected === true };
+    const conectado = body?.connected === true || body?.smartphoneConnected === true;
+    // Instance reachable (200) but the WhatsApp phone is unlinked → silent outage.
+    // Alert the owner; clear it on recovery so a future drop re-alerts at once.
+    if (conectado) await limparAlerta("zapi_desconectado");
+    else           await alertarZApiDesconectado();
+    return { conectado };
   } catch {
     return { conectado: null };
   }
@@ -203,8 +234,11 @@ export async function snapshotSaude(): Promise<SaudeSnapshot> {
     checarStatusZApi(),
   ]);
   const { data: estados } = await supabaseAdmin
-    .from("alertas_estado").select("chave, ultimo_disparo").in("chave", ["openai_falha", "zapi_falha"]);
+    .from("alertas_estado").select("chave, ultimo_disparo").in("chave", ["openai_falha", "zapi_falha", "zapi_desconectado"]);
   const falha = (k: string) => (estados ?? []).find((e: any) => e.chave === k)?.ultimo_disparo ?? null;
+  // Z-API "last failure" = whichever of the two failure modes fired most recently.
+  const zapiFalha = [falha("zapi_falha"), falha("zapi_desconectado")]
+    .filter(Boolean).sort().pop() ?? null;
   const dias = renova ? Math.ceil((new Date(renova + "T00:00:00Z").getTime() - Date.now()) / 86_400_000) : null;
   return {
     openai: {
@@ -217,7 +251,7 @@ export async function snapshotSaude(): Promise<SaudeSnapshot> {
       renova_em: renova,
       dias_para_renovar: dias,
       conectado: status.conectado,
-      ultima_falha: falha("zapi_falha"),
+      ultima_falha: zapiFalha,
     },
   };
 }

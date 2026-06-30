@@ -191,9 +191,12 @@ app.listen(Number(PORT), "0.0.0.0", () => {
     );
   }, 30_000);
 
-  // Hourly system-health check: OpenAI monthly-token threshold + Z-API status and
-  // renewal-date warnings. De-duplicated inside (won't re-alert every hour). Runs
-  // once on startup, then every hour.
+  // System-health check every 15 min: Z-API connection (a disconnect takes the
+  // WHOLE system down, so we want to catch it fast), OpenAI monthly-token
+  // threshold, and Z-API renewal-date warnings. All alerts are de-duplicated
+  // inside (token/expiry warnings have 24h cooldowns; connection alerts 6h), so
+  // the tighter cadence only speeds up outage detection — it never spams. Runs
+  // once on startup, then every 15 minutes.
   rodarChecagemSaude().catch((err) =>
     logger.warn({ err: err.message }, "falha na checagem de saúde inicial")
   );
@@ -201,5 +204,5 @@ app.listen(Number(PORT), "0.0.0.0", () => {
     rodarChecagemSaude().catch((err) =>
       logger.warn({ err: err.message }, "falha na checagem de saúde periódica")
     );
-  }, 60 * 60 * 1000);
+  }, 15 * 60 * 1000);
 });
