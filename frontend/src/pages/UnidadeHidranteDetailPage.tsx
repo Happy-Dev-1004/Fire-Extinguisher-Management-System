@@ -3,9 +3,10 @@ import { useParams, Link, useNavigate } from "react-router-dom";
 import { hidrantesApi } from "../lib/api";
 import type { Hidrante, StatusInspecao, SituacaoHidrante } from "../lib/types";
 import { toast } from "../components/Toast";
+import { Modal } from "../components/Modal";
 import {
   ArrowLeft, Loader2, ShieldCheck, Clock, Circle, Search, Filter,
-  ChevronRight, AlertTriangle, CheckCircle2, HelpCircle, Droplets, Check,
+  ChevronRight, AlertTriangle, CheckCircle2, HelpCircle, Droplets, Check, Plus, Trash2,
 } from "lucide-react";
 
 // ── Situação (matches the Hidrantes page presentation) ────────────────────────
@@ -40,7 +41,63 @@ export function UnidadeHidranteDetailPage() {
   const [busca, setBusca]   = useState("");
   const [verificando, setVerificando] = useState<string | null>(null);
 
+  // Add-hydrant modal
+  const [modalNovo, setModalNovo] = useState(false);
+  const [salvando, setSalvando]   = useState(false);
+  const [form, setForm] = useState({ numero_int: "", numero: "", setor: "", esguicho: "", mangueira: "", chave_storz: "" });
+  const [removendoId, setRemovendoId] = useState<string | null>(null);
+
   useEffect(() => { void carregar(); }, [unidade]);
+
+  async function abrirNovo() {
+    setForm({ numero_int: "", numero: "", setor: "", esguicho: "", mangueira: "", chave_storz: "" });
+    setModalNovo(true);
+    try {
+      const { proximo } = await hidrantesApi.proximoNumero(nomeUnidade);
+      setForm((f) => ({ ...f, numero_int: String(proximo), numero: "H" + String(proximo).padStart(2, "0") }));
+    } catch { /* keep blank — server still defaults */ }
+  }
+
+  async function criarHidrante() {
+    setSalvando(true);
+    try {
+      const numero_int = form.numero_int.trim() ? parseInt(form.numero_int, 10) : undefined;
+      if (form.numero_int.trim() && (!Number.isFinite(numero_int!) || numero_int! <= 0)) {
+        toast("Número inválido.", "erro"); setSalvando(false); return;
+      }
+      await hidrantesApi.criar({
+        unidade: nomeUnidade,
+        numero_int,
+        numero: form.numero.trim() || undefined,
+        setor: form.setor.trim() || undefined,
+        esguicho: form.esguicho.trim() || undefined,
+        mangueira: form.mangueira.trim() || undefined,
+        chave_storz: form.chave_storz.trim() || undefined,
+      });
+      toast(`Hidrante ${form.numero || form.numero_int || "novo"} adicionado.`, "sucesso");
+      setModalNovo(false);
+      await carregar();
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Erro ao adicionar hidrante.", "erro");
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  async function removerHidrante(h: Hidrante, ev: React.MouseEvent) {
+    ev.stopPropagation();
+    if (!window.confirm(`Remover o hidrante ${h.numero} de ${nomeUnidade}? Esta ação não pode ser desfeita.`)) return;
+    setRemovendoId(h.id);
+    try {
+      await hidrantesApi.remover(h.id);
+      toast(`Hidrante ${h.numero} removido.`, "sucesso");
+      setHidrantes((prev) => prev.filter((x) => x.id !== h.id));
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Erro ao remover hidrante.", "erro");
+    } finally {
+      setRemovendoId(null);
+    }
+  }
 
   async function carregar() {
     setCarregando(true);
@@ -88,9 +145,14 @@ export function UnidadeHidranteDetailPage() {
         <Link to="/hidrantes" className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 mb-2">
           <ArrowLeft className="w-4 h-4" /> Unidades
         </Link>
-        <div className="flex items-center gap-2">
-          <Droplets className="w-5 h-5 text-gray-400" />
-          <h1 className="page-title">{nomeUnidade}</h1>
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-2">
+            <Droplets className="w-5 h-5 text-gray-400" />
+            <h1 className="page-title">{nomeUnidade}</h1>
+          </div>
+          <button onClick={abrirNovo} className="btn-primary btn-sm">
+            <Plus className="w-3.5 h-3.5" /> Novo hidrante
+          </button>
         </div>
         <p className="text-sm text-gray-500 mt-0.5">{hidrantes.length} hidrantes · clique para ver detalhes, editar e verificar.</p>
       </div>
@@ -165,7 +227,19 @@ export function UnidadeHidranteDetailPage() {
                             <span className={st.cls}><st.Icon className="w-3 h-3" />{st.label}</span>
                           )}
                         </td>
-                        <td className="table-td"><ChevronRight className="w-4 h-4 text-gray-300" /></td>
+                        <td className="table-td">
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={(ev) => removerHidrante(h, ev)}
+                              disabled={removendoId === h.id}
+                              title="Remover hidrante"
+                              className="btn-ghost btn-sm text-red-600 hover:text-red-700 p-1"
+                            >
+                              {removendoId === h.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                            </button>
+                            <ChevronRight className="w-4 h-4 text-gray-300" />
+                          </div>
+                        </td>
                       </tr>
                     );
                   })}
@@ -184,8 +258,8 @@ export function UnidadeHidranteDetailPage() {
               const meta = SITUACAO_META[sit];
               const st = STATUS_META[h.status_inspecao];
               return (
-                <button key={h.id} onClick={() => navigate(`/hidrantes/${h.id}`)}
-                  className={`w-full text-left card p-4 flex items-start gap-3 ${meta.rowClass} ${meta.borderClass}`}>
+                <div key={h.id} onClick={() => navigate(`/hidrantes/${h.id}`)}
+                  className={`w-full text-left card p-4 flex items-start gap-3 cursor-pointer ${meta.rowClass} ${meta.borderClass}`}>
                   <div className="flex-1 min-w-0 space-y-1.5">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-sm font-bold text-gray-900">Hidrante {h.numero}</span>
@@ -196,13 +270,64 @@ export function UnidadeHidranteDetailPage() {
                     </div>
                     <span className={`${st.cls} text-[10px]`}><st.Icon className="w-3 h-3" />{st.label}</span>
                   </div>
+                  <button
+                    onClick={(ev) => removerHidrante(h, ev)}
+                    disabled={removendoId === h.id}
+                    title="Remover hidrante"
+                    className="btn-ghost btn-sm text-red-600 hover:text-red-700 p-1 shrink-0"
+                  >
+                    {removendoId === h.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                  </button>
                   <ChevronRight className="w-4 h-4 text-gray-300 shrink-0 mt-0.5" />
-                </button>
+                </div>
               );
             })}
           </div>
         </>
       )}
+
+      {/* Add-hydrant modal */}
+      <Modal open={modalNovo} titulo={`Novo hidrante — ${nomeUnidade}`} onClose={() => { if (!salvando) setModalNovo(false); }} largura="max-w-md">
+        <div className="space-y-4">
+          <p className="text-xs text-gray-400">
+            Adicione um hidrante manualmente (instalado posteriormente ou correção do cadastro). Os itens do checklist são preenchidos depois, na inspeção.
+          </p>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="label">Número (interno) *</label>
+              <input className="input" type="number" min={1} value={form.numero_int}
+                onChange={(ev) => setForm((f) => ({ ...f, numero_int: ev.target.value }))} placeholder="auto" />
+            </div>
+            <div>
+              <label className="label">Rótulo exibido</label>
+              <input className="input" value={form.numero}
+                onChange={(ev) => setForm((f) => ({ ...f, numero: ev.target.value }))} placeholder="Ex.: H01 ou H11-2" />
+            </div>
+            <div className="col-span-2">
+              <label className="label">Setor</label>
+              <input className="input" value={form.setor} onChange={(ev) => setForm((f) => ({ ...f, setor: ev.target.value }))} placeholder="Ex.: Entrada Fábrica" />
+            </div>
+            <div>
+              <label className="label">Esguichos</label>
+              <input className="input" value={form.esguicho} onChange={(ev) => setForm((f) => ({ ...f, esguicho: ev.target.value }))} placeholder="Ex.: 2" />
+            </div>
+            <div>
+              <label className="label">Mangueiras</label>
+              <input className="input" value={form.mangueira} onChange={(ev) => setForm((f) => ({ ...f, mangueira: ev.target.value }))} placeholder="Ex.: 4" />
+            </div>
+            <div className="col-span-2">
+              <label className="label">Chaves Storz</label>
+              <input className="input" value={form.chave_storz} onChange={(ev) => setForm((f) => ({ ...f, chave_storz: ev.target.value }))} placeholder="Ex.: 2" />
+            </div>
+          </div>
+          <div className="flex gap-3 pt-1">
+            <button onClick={() => setModalNovo(false)} disabled={salvando} className="btn-secondary flex-1">Cancelar</button>
+            <button onClick={criarHidrante} disabled={salvando} className="btn-primary flex-1">
+              {salvando ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />} Adicionar
+            </button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

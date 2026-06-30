@@ -3,9 +3,10 @@ import { useParams, Link, useNavigate } from "react-router-dom";
 import { regioesApi } from "../lib/api";
 import type { ExtintorRegiao, StatusInspecao, Situacao } from "../lib/types";
 import { toast } from "../components/Toast";
+import { Modal } from "../components/Modal";
 import {
   ArrowLeft, Loader2, ShieldCheck, Clock, Circle, Search, Filter,
-  ChevronRight, XCircle, CheckCircle2, HelpCircle, MapPin,
+  ChevronRight, XCircle, CheckCircle2, HelpCircle, MapPin, Plus, Trash2,
 } from "lucide-react";
 
 // ── Situação (matches the Extintores page presentation) ───────────────────────
@@ -51,7 +52,63 @@ export function RegiaoDetailPage() {
   const [filtroStatus, setFiltroStatus] = useState<"todos" | StatusInspecao>("todos");
   const [busca, setBusca]   = useState("");
 
+  // Add-extinguisher modal
+  const [modalNovo, setModalNovo] = useState(false);
+  const [salvando, setSalvando]   = useState(false);
+  const [form, setForm] = useState({ numero_int: "", setor: "", tipo_carga: "", capacidade: "", vencimento_carga: "", vencimento_teste: "" });
+  const [removendoId, setRemovendoId] = useState<string | null>(null);
+
   useEffect(() => { void carregar(); }, [regiao]);
+
+  async function abrirNovo() {
+    setForm({ numero_int: "", setor: "", tipo_carga: "", capacidade: "", vencimento_carga: "", vencimento_teste: "" });
+    setModalNovo(true);
+    try {
+      const { proximo } = await regioesApi.proximoNumero(nomeRegiao);
+      setForm((f) => ({ ...f, numero_int: String(proximo) }));
+    } catch { /* keep blank — server still defaults */ }
+  }
+
+  async function criarExtintor() {
+    setSalvando(true);
+    try {
+      const numero_int = form.numero_int.trim() ? parseInt(form.numero_int, 10) : undefined;
+      if (form.numero_int.trim() && (!Number.isFinite(numero_int!) || numero_int! <= 0)) {
+        toast("Número inválido.", "erro"); setSalvando(false); return;
+      }
+      await regioesApi.criar({
+        regiao: nomeRegiao,
+        numero_int,
+        setor: form.setor.trim() || undefined,
+        tipo_carga: form.tipo_carga.trim() || undefined,
+        capacidade: form.capacidade.trim() || undefined,
+        vencimento_carga: form.vencimento_carga.trim() || undefined,
+        vencimento_teste: form.vencimento_teste.trim() || undefined,
+      });
+      toast(`Extintor nº ${form.numero_int || "novo"} adicionado.`, "sucesso");
+      setModalNovo(false);
+      await carregar();
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Erro ao adicionar extintor.", "erro");
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  async function removerExtintor(e: ExtintorRegiao, ev: React.MouseEvent) {
+    ev.stopPropagation();
+    if (!window.confirm(`Remover o extintor nº ${e.numero} de ${nomeRegiao}? Esta ação não pode ser desfeita.`)) return;
+    setRemovendoId(e.id);
+    try {
+      await regioesApi.remover(e.id);
+      toast(`Extintor nº ${e.numero} removido.`, "sucesso");
+      setExtintores((prev) => prev.filter((x) => x.id !== e.id));
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Erro ao remover extintor.", "erro");
+    } finally {
+      setRemovendoId(null);
+    }
+  }
 
   async function carregar() {
     setCarregando(true);
@@ -87,9 +144,14 @@ export function RegiaoDetailPage() {
         <Link to="/extintores" className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 mb-2">
           <ArrowLeft className="w-4 h-4" /> Regiões
         </Link>
-        <div className="flex items-center gap-2">
-          <MapPin className="w-5 h-5 text-gray-400" />
-          <h1 className="page-title">{nomeRegiao}</h1>
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-2">
+            <MapPin className="w-5 h-5 text-gray-400" />
+            <h1 className="page-title">{nomeRegiao}</h1>
+          </div>
+          <button onClick={abrirNovo} className="btn-primary btn-sm">
+            <Plus className="w-3.5 h-3.5" /> Novo extintor
+          </button>
         </div>
         <p className="text-sm text-gray-500 mt-0.5">{extintores.length} extintores · clique para ver detalhes, editar e verificar.</p>
       </div>
@@ -158,7 +220,19 @@ export function RegiaoDetailPage() {
                         <td className="table-td"><VencimentoCell valor={e.vencimento_teste} /></td>
                         <td className="table-td"><span className={st.cls}><st.Icon className="w-3 h-3" />{st.label}</span></td>
                         <td className="table-td"><span className={meta.badgeClass}><meta.Icon className="w-3 h-3" />{meta.label}</span></td>
-                        <td className="table-td"><ChevronRight className="w-4 h-4 text-gray-300" /></td>
+                        <td className="table-td">
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={(ev) => removerExtintor(e, ev)}
+                              disabled={removendoId === e.id}
+                              title="Remover extintor"
+                              className="btn-ghost btn-sm text-red-600 hover:text-red-700 p-1"
+                            >
+                              {removendoId === e.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                            </button>
+                            <ChevronRight className="w-4 h-4 text-gray-300" />
+                          </div>
+                        </td>
                       </tr>
                     );
                   })}
@@ -177,8 +251,8 @@ export function RegiaoDetailPage() {
               const meta = SITUACAO_META[sit];
               const st = STATUS_META[e.status_inspecao];
               return (
-                <button key={e.id} onClick={() => navigate(`/extintores/${e.id}`)}
-                  className={`w-full text-left card p-4 flex items-start gap-3 ${meta.rowClass} ${meta.borderClass}`}>
+                <div key={e.id} onClick={() => navigate(`/extintores/${e.id}`)}
+                  className={`w-full text-left card p-4 flex items-start gap-3 cursor-pointer ${meta.rowClass} ${meta.borderClass}`}>
                   <div className="flex-1 min-w-0 space-y-1.5">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-sm font-bold text-gray-900">Extintor {e.numero}</span>
@@ -190,13 +264,63 @@ export function RegiaoDetailPage() {
                     </div>
                     <span className={`${st.cls} text-[10px]`}><st.Icon className="w-3 h-3" />{st.label}</span>
                   </div>
+                  <button
+                    onClick={(ev) => removerExtintor(e, ev)}
+                    disabled={removendoId === e.id}
+                    title="Remover extintor"
+                    className="btn-ghost btn-sm text-red-600 hover:text-red-700 p-1 shrink-0"
+                  >
+                    {removendoId === e.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                  </button>
                   <ChevronRight className="w-4 h-4 text-gray-300 shrink-0 mt-0.5" />
-                </button>
+                </div>
               );
             })}
           </div>
         </>
       )}
+
+      {/* Add-extinguisher modal */}
+      <Modal open={modalNovo} titulo={`Novo extintor — ${nomeRegiao}`} onClose={() => { if (!salvando) setModalNovo(false); }} largura="max-w-md">
+        <div className="space-y-4">
+          <p className="text-xs text-gray-400">
+            Adicione um extintor manualmente (instalado posteriormente ou correção do cadastro). Os demais dados podem ser preenchidos depois, na edição.
+          </p>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="label">Número *</label>
+              <input className="input" type="number" min={1} value={form.numero_int}
+                onChange={(ev) => setForm((f) => ({ ...f, numero_int: ev.target.value }))} placeholder="auto" />
+            </div>
+            <div>
+              <label className="label">Setor</label>
+              <input className="input" value={form.setor} onChange={(ev) => setForm((f) => ({ ...f, setor: ev.target.value }))} />
+            </div>
+            <div>
+              <label className="label">Tipo de carga</label>
+              <input className="input" value={form.tipo_carga} onChange={(ev) => setForm((f) => ({ ...f, tipo_carga: ev.target.value }))} placeholder="Ex.: Pó ABC" />
+            </div>
+            <div>
+              <label className="label">Capacidade</label>
+              <input className="input" value={form.capacidade} onChange={(ev) => setForm((f) => ({ ...f, capacidade: ev.target.value }))} placeholder="Ex.: 6kg" />
+            </div>
+            <div>
+              <label className="label">Venc. carga</label>
+              <input className="input" value={form.vencimento_carga} onChange={(ev) => setForm((f) => ({ ...f, vencimento_carga: ev.target.value }))} placeholder="Ex.: 05/2027" />
+            </div>
+            <div>
+              <label className="label">Venc. teste</label>
+              <input className="input" value={form.vencimento_teste} onChange={(ev) => setForm((f) => ({ ...f, vencimento_teste: ev.target.value }))} placeholder="Ex.: 05/2030" />
+            </div>
+          </div>
+          <div className="flex gap-3 pt-1">
+            <button onClick={() => setModalNovo(false)} disabled={salvando} className="btn-secondary flex-1">Cancelar</button>
+            <button onClick={criarExtintor} disabled={salvando} className="btn-primary flex-1">
+              {salvando ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />} Adicionar
+            </button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

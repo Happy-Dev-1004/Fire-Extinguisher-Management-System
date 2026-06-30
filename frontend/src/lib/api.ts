@@ -339,6 +339,22 @@ export const regioesApi = {
   obter: (id: string) =>
     request<ExtintorRegiao>("GET", `/regioes/extintor/${id}`),
 
+  // Next free slot number for the "add extinguisher" form default.
+  proximoNumero: (regiao: string) =>
+    request<{ regiao: string; proximo: number }>(
+      "GET", `/regioes/${encodeURIComponent(regiao)}/proximo-numero`
+    ),
+
+  // Manually add an extinguisher to a region (ongoing maintenance / corrections).
+  criar: (body: {
+    regiao: string; numero_int?: number; setor?: string; tipo_carga?: string;
+    capacidade?: string; vencimento_carga?: string; vencimento_teste?: string;
+  }) => request<ExtintorRegiao>("POST", "/regioes/extintor", body),
+
+  // Permanently remove an extinguisher.
+  remover: (id: string) =>
+    request<void>("DELETE", `/regioes/extintor/${id}`),
+
   editar: (id: string, campos: Partial<ExtintorRegiao>) =>
     request<ExtintorRegiao>("PUT", `/regioes/extintor/${id}`, campos),
 
@@ -373,6 +389,22 @@ export const hidrantesApi = {
 
   obter: (id: string) =>
     request<Hidrante>("GET", `/hidrantes/${id}`),
+
+  // Next free slot number for the "add hydrant" form default.
+  proximoNumero: (unidade: string) =>
+    request<{ unidade: string; proximo: number }>(
+      "GET", `/hidrantes/unidade/${encodeURIComponent(unidade)}/proximo-numero`
+    ),
+
+  // Manually add a hydrant to a unit (ongoing maintenance / corrections).
+  criar: (body: {
+    unidade: string; numero_int?: number; numero?: string; setor?: string;
+    esguicho?: string; mangueira?: string; chave_storz?: string;
+  }) => request<Hidrante>("POST", "/hidrantes", body),
+
+  // Permanently remove a hydrant.
+  remover: (id: string) =>
+    request<void>("DELETE", `/hidrantes/${id}`),
 
   editar: (id: string, campos: Partial<Hidrante>) =>
     request<Hidrante>("PUT", `/hidrantes/${id}`, campos),
@@ -451,6 +483,16 @@ export interface DispositivoAlarme {
   fotos: string[];
 }
 
+export interface Central {
+  id: string;
+  numero: number;
+  nome: string;
+  area_cobertura: string | null;
+  modelo: string | null;
+  ativo: boolean;
+  created_at: string;
+}
+
 export interface DispositivoInstalado extends Omit<DispositivoAlarme, "central_id"> {
   central_id?: string;
   qtd_fotos: number;
@@ -492,6 +534,29 @@ export const alarmeApi = {
       "GET", `/alarme/dispositivos-instalados?${qs.toString()}`
     );
   },
+
+  // Control panels — needed to pick a central when adding a device.
+  centrais: () =>
+    request<{ centrais: Central[] }>("GET", "/alarme/centrais"),
+
+  // Manually add a fire-alarm device. central_id + tipo_dispositivo + setor are
+  // required; laço/endereço are optional (incremental data — filled in later).
+  criar: (body: {
+    central_id: string; tipo_dispositivo: string; setor: string;
+    laco?: number | null; endereco?: string | null; descricao?: string | null;
+    status_instalacao?: string; data_instalacao?: string | null; observacoes?: string | null;
+  }) => request<DispositivoAlarme>("POST", "/alarme/dispositivos", body),
+
+  // Edit a device's fields (partial).
+  atualizar: (id: string, campos: Partial<{
+    central_id: string; tipo_dispositivo: string; setor: string;
+    laco: number | null; endereco: string | null; descricao: string | null;
+    status_instalacao: string; data_instalacao: string | null; observacoes: string | null;
+  }>) => request<DispositivoAlarme>("PUT", `/alarme/dispositivos/${id}`, campos),
+
+  // Soft-delete (ativo=false) — the device is removed from lists but data kept.
+  remover: (id: string) =>
+    request<void>("DELETE", `/alarme/dispositivos/${id}`),
 
   adicionarFotos: (id: string, fotos: string[]) =>
     request<DispositivoAlarme>("POST", `/alarme/dispositivos/${id}/fotos`, { fotos }),

@@ -3,7 +3,10 @@
 //
 //   GET    /regioes                      — regions with progress counts
 //   GET    /regioes/:regiao/extintores   — extinguishers of a region + status
+//   GET    /regioes/:regiao/proximo-numero — next free slot number (add form)
 //   GET    /regioes/extintor/:id         — one extinguisher (full)
+//   POST   /regioes/extintor             — manually add an extinguisher to a region
+//   DELETE /regioes/extintor/:id         — permanently remove an extinguisher
 //   PUT    /regioes/extintor/:id         — edit an extinguisher's values
 //   POST   /regioes/extintor/:id/verificar   — mark Verificado (or un-verify)
 //   POST   /regioes/novo-mes             — archive + reset (OWNER only, guarded in handler)
@@ -107,6 +110,108 @@ router.get("/extintor/:id", async (req: Request, res: Response) => {
     unidade: e.regiao,
   });
   return res.json({ ...e, situacao });
+});
+
+// ── POST /regioes/extintor — manually add a new extinguisher to a region ──────
+// For ongoing maintenance: equipment installed later, or correcting the roster.
+// numero_int auto-suggests the next free slot but is editable; duplicates within
+// the region are rejected. Keeps regioes.total_extintores in sync (+1).
+const CriarSchema = z.object({
+  regiao:           z.string().min(1, "Região é obrigatória."),
+  numero_int:       z.number().int().positive().optional(),  // omitted → next free
+  setor:            z.string().optional(),
+  tipo_carga:       z.string().optional(),
+  capacidade:       z.string().optional(),
+  vencimento_carga: z.string().optional(),
+  vencimento_teste: z.string().optional(),
+});
+
+// Next free per-region slot number = max(numero_int) + 1 (1 when empty).
+async function proximoNumeroExtintor(regiao: string): Promise<number> {
+  const { data } = await supabase
+    .from("extintores").select("numero_int").eq("regiao", regiao)
+    .order("numero_int", { ascending: false }).limit(1);
+  const maior = (data?.[0] as any)?.numero_int;
+  return (typeof maior === "number" && maior > 0 ? maior : 0) + 1;
+}
+
+// GET /regioes/:regiao/proximo-numero — what the "add" form should default to.
+router.get("/:regiao/proximo-numero", async (req: Request, res: Response) => {
+  const regiao = decodeURIComponent(String(req.params.regiao));
+  return res.json({ regiao, proximo: await proximoNumeroExtintor(regiao) });
+});
+
+router.post("/extintor", async (req: Request, res: Response) => {
+  const parsed = CriarSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ erro: "Dados inválidos.", detalhes: parsed.error.flatten().fieldErrors });
+  }
+  const { regiao } = parsed.data;
+
+  // The region must exist (we keep its total in sync).
+  const { data: reg } = await supabaseAdmin
+    .from("regioes").select("nome, total_extintores").eq("nome", regiao).maybeSingle();
+  if (!reg) return res.status(404).json({ erro: `Região "${regiao}" não encontrada.` });
+
+  const numeroInt = parsed.data.numero_int ?? await proximoNumeroExtintor(regiao);
+
+  // Reject a duplicate slot number within the region.
+  const { data: existente } = await supabase
+    .from("extintores").select("id").eq("regiao", regiao).eq("numero_int", numeroInt).maybeSingle();
+  if (existente) {
+    return res.status(409).json({ erro: `Já existe o extintor nº ${numeroInt} na região ${regiao}.` });
+  }
+
+  const novo = {
+    numero:           String(numeroInt),
+    numero_int:       numeroInt,
+    regiao,
+    unidade:          regiao,         // legacy mirror column
+    setor:            parsed.data.setor ?? "",
+    tipo_carga:       parsed.data.tipo_carga ?? "",
+    capacidade:       parsed.data.capacidade ?? null,
+    vencimento_carga: parsed.data.vencimento_carga ?? null,
+    vencimento_teste: parsed.data.vencimento_teste ?? null,
+    status_inspecao:  "nao_inspecionado",
+    fotos:            [] as string[],
+  };
+  const { data, error } = await supabase.from("extintores").insert(novo).select().maybeSingle();
+  if (error) return res.status(400).json({ erro: error.message });
+
+  // Keep the region's expected total in sync (+1) so progress math stays right.
+  await supabaseAdmin
+    .from("regioes")
+    .update({ total_extintores: ((reg as any).total_extintores ?? 0) + 1 })
+    .eq("nome", regiao);
+
+  log.info({ regiao, numeroInt, by: req.admin?.email }, "extintor criado manualmente");
+  return res.status(201).json(data);
+});
+
+// ── DELETE /regioes/extintor/:id — permanently remove an extinguisher ─────────
+// Hard delete (manual data cleanup / equipment removed). Decrements the region
+// total so progress stays correct.
+router.delete("/extintor/:id", async (req: Request, res: Response) => {
+  const { data: ext } = await supabase
+    .from("extintores").select("id, regiao").eq("id", req.params.id).maybeSingle();
+  if (!ext) return res.status(404).json({ erro: "Extintor não encontrado." });
+
+  const { error } = await supabase.from("extintores").delete().eq("id", req.params.id);
+  if (error) return res.status(400).json({ erro: error.message });
+
+  // Decrement the region total (never below 0).
+  const regiao = (ext as any).regiao as string | null;
+  if (regiao) {
+    const { data: reg } = await supabaseAdmin
+      .from("regioes").select("total_extintores").eq("nome", regiao).maybeSingle();
+    if (reg) {
+      await supabaseAdmin.from("regioes")
+        .update({ total_extintores: Math.max(0, ((reg as any).total_extintores ?? 0) - 1) })
+        .eq("nome", regiao);
+    }
+  }
+  log.info({ id: req.params.id, regiao, by: req.admin?.email }, "extintor removido manualmente");
+  return res.status(204).end();
 });
 
 // ── PUT /regioes/extintor/:id — manual edit ───────────────────────────────────

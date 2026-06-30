@@ -5,6 +5,9 @@
 //   GET    /hidrantes/pendentes             — parked AI results (manual assign)
 //   GET    /hidrantes/busca                  — filter hydrants across units (paginated)
 //   GET    /hidrantes/unidade/:unidade      — hydrants of a unit (+ situação)
+//   GET    /hidrantes/unidade/:unidade/proximo-numero — next free slot (add form)
+//   POST   /hidrantes                        — manually add a hydrant to a unit
+//   DELETE /hidrantes/:id                    — permanently remove a hydrant
 //   GET    /hidrantes/:id                   — one hydrant (+ situação)
 //   PUT    /hidrantes/:id                   — manual edit
 //   POST   /hidrantes/:id/verificar         — mark verificado / un-verify
@@ -239,6 +242,101 @@ router.get("/busca", async (req: Request, res: Response) => {
   const pagina = Math.min(f.page, total_paginas);
   const resultados = linhas.slice((pagina - 1) * POR_PAGINA, pagina * POR_PAGINA);
   return res.json({ resultados, total, pagina, total_paginas, contagens });
+});
+
+// ── POST /hidrantes — manually add a new hydrant to a unit ───────────────────
+// For ongoing maintenance: hydrant installed later, or correcting the roster.
+// numero_int auto-suggests the next free slot but is editable; the display
+// `numero` defaults to "H<nn>" but can be a custom label (e.g. "H11-2").
+// Duplicates within the unit are rejected. Keeps unidades_hidrante.total in sync.
+const CriarHidranteSchema = z.object({
+  unidade:     z.string().min(1, "Unidade é obrigatória."),
+  numero_int:  z.number().int().positive().optional(),
+  numero:      z.string().optional(),  // display label; defaults to H<nn>
+  setor:       z.string().optional(),
+  esguicho:    z.string().optional(),
+  mangueira:   z.string().optional(),
+  chave_storz: z.string().optional(),
+});
+
+async function proximoNumeroHidrante(unidade: string): Promise<number> {
+  const { data } = await supabaseAdmin
+    .from("hidrantes").select("numero_int").eq("unidade", unidade)
+    .order("numero_int", { ascending: false }).limit(1);
+  const maior = (data?.[0] as any)?.numero_int;
+  return (typeof maior === "number" && maior > 0 ? maior : 0) + 1;
+}
+
+router.get("/unidade/:unidade/proximo-numero", async (req: Request, res: Response) => {
+  const unidade = decodeURIComponent(String(req.params.unidade));
+  return res.json({ unidade, proximo: await proximoNumeroHidrante(unidade) });
+});
+
+router.post("/", async (req: Request, res: Response) => {
+  const parsed = CriarHidranteSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ erro: "Dados inválidos.", detalhes: parsed.error.flatten().fieldErrors });
+  }
+  const { unidade } = parsed.data;
+
+  const { data: uni } = await supabaseAdmin
+    .from("unidades_hidrante").select("nome, total_hidrantes").eq("nome", unidade).maybeSingle();
+  if (!uni) return res.status(404).json({ erro: `Unidade "${unidade}" não encontrada.` });
+
+  const numeroInt = parsed.data.numero_int ?? await proximoNumeroHidrante(unidade);
+
+  const { data: existente } = await supabaseAdmin
+    .from("hidrantes").select("id").eq("unidade", unidade).eq("numero_int", numeroInt).maybeSingle();
+  if (existente) {
+    return res.status(409).json({ erro: `Já existe o hidrante nº ${numeroInt} na unidade ${unidade}.` });
+  }
+
+  const novo = {
+    numero:          parsed.data.numero?.trim() || ("H" + String(numeroInt).padStart(2, "0")),
+    numero_int:      numeroInt,
+    unidade,
+    setor:           parsed.data.setor ?? "",
+    esguicho:        parsed.data.esguicho ?? null,
+    mangueira:       parsed.data.mangueira ?? null,
+    chave_storz:     parsed.data.chave_storz ?? null,
+    status_inspecao: "nao_inspecionado",
+    fotos:           [] as string[],
+  };
+  const { data, error } = await supabaseAdmin.from("hidrantes").insert(novo).select().maybeSingle();
+  if (error) return res.status(400).json({ erro: error.message });
+
+  await supabaseAdmin
+    .from("unidades_hidrante")
+    .update({ total_hidrantes: ((uni as any).total_hidrantes ?? 0) + 1 })
+    .eq("nome", unidade);
+  limparCacheUnidadesHidrante();
+
+  log.info({ unidade, numeroInt, by: req.admin?.email }, "hidrante criado manualmente");
+  return res.status(201).json({ ...(data as any), situacao: calcularSituacaoHidrante(data as any) });
+});
+
+// ── DELETE /hidrantes/:id — permanently remove a hydrant ─────────────────────
+router.delete("/:id", async (req: Request, res: Response) => {
+  const { data: hid } = await supabaseAdmin
+    .from("hidrantes").select("id, unidade").eq("id", req.params.id).maybeSingle();
+  if (!hid) return res.status(404).json({ erro: "Hidrante não encontrado." });
+
+  const { error } = await supabaseAdmin.from("hidrantes").delete().eq("id", req.params.id);
+  if (error) return res.status(400).json({ erro: error.message });
+
+  const unidade = (hid as any).unidade as string | null;
+  if (unidade) {
+    const { data: uni } = await supabaseAdmin
+      .from("unidades_hidrante").select("total_hidrantes").eq("nome", unidade).maybeSingle();
+    if (uni) {
+      await supabaseAdmin.from("unidades_hidrante")
+        .update({ total_hidrantes: Math.max(0, ((uni as any).total_hidrantes ?? 0) - 1) })
+        .eq("nome", unidade);
+      limparCacheUnidadesHidrante();
+    }
+  }
+  log.info({ id: req.params.id, unidade, by: req.admin?.email }, "hidrante removido manualmente");
+  return res.status(204).end();
 });
 
 // ── GET /hidrantes/:id ───────────────────────────────────────────────────────

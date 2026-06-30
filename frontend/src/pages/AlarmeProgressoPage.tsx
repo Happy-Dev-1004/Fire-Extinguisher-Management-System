@@ -2,12 +2,14 @@ import { useEffect, useState, useCallback } from "react";
 import {
   alarmeApi,
   type RelatorioProgresso, type ContagemStatus, type GrupoCentral,
-  type DispositivoBusca, type PaginaBuscaAlarme, type FiltrosAlarme,
+  type DispositivoBusca, type PaginaBuscaAlarme, type FiltrosAlarme, type Central,
 } from "../lib/api";
 import { toast } from "../components/Toast";
+import { Modal } from "../components/Modal";
 import {
   Activity, AlertTriangle, Download, Loader2,
   ChevronDown, ChevronRight, Filter, CheckCircle2, FileDown,
+  Plus, Pencil, Trash2,
 } from "lucide-react";
 
 const STATUS_META: Record<string, { label: string; color: string; bar: string }> = {
@@ -207,11 +209,33 @@ function CentralCard({ c }: { c: GrupoCentral }) {
 }
 
 // ── Device search with filters + export ─────────────────────────────────────────
+// All device types (includes "outro", used only in the create/edit form).
+const TIPOS_FORM = [...TIPOS, { v: "outro", l: "Outro" }];
+
+interface DispForm {
+  central_id: string; tipo_dispositivo: string; setor: string;
+  laco: string; endereco: string; status_instalacao: string;
+  data_instalacao: string; descricao: string; observacoes: string;
+}
+const FORM_VAZIO: DispForm = {
+  central_id: "", tipo_dispositivo: "detector_fumaca", setor: "",
+  laco: "", endereco: "", status_instalacao: "pendente",
+  data_instalacao: "", descricao: "", observacoes: "",
+};
+
 function BuscaDispositivos() {
   const [f, setF] = useState<FiltrosAlarme>({});
   const [pagina, setPagina] = useState<PaginaBuscaAlarme | null>(null);
   const [carregando, setCarregando] = useState(false);
   const [exportando, setExportando] = useState(false);
+
+  // Centrais (for the device form picker) + add/edit/delete state.
+  const [centrais, setCentrais] = useState<Central[]>([]);
+  const [modal, setModal] = useState(false);
+  const [editId, setEditId] = useState<string | null>(null);   // null = creating
+  const [form, setForm] = useState<DispForm>(FORM_VAZIO);
+  const [salvando, setSalvando] = useState(false);
+  const [removendoId, setRemovendoId] = useState<string | null>(null);
 
   const buscar = useCallback(async (page = 1) => {
     setCarregando(true);
@@ -226,6 +250,9 @@ function BuscaDispositivos() {
   }, [f]);
 
   useEffect(() => { buscar(1); /* initial */ }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    alarmeApi.centrais().then((r) => setCentrais(r.centrais)).catch(() => {/* picker optional */});
+  }, []);
 
   const set = (k: keyof FiltrosAlarme, v: string) => setF((p) => ({ ...p, [k]: v || undefined }));
 
@@ -241,11 +268,88 @@ function BuscaDispositivos() {
     }
   };
 
+  function abrirNovo() {
+    setEditId(null);
+    setForm({ ...FORM_VAZIO, central_id: centrais[0]?.id ?? "" });
+    setModal(true);
+  }
+
+  async function abrirEditar(id: string) {
+    setEditId(id);
+    setModal(true);
+    setForm(FORM_VAZIO);
+    try {
+      const d = await alarmeApi.dispositivo(id);
+      setForm({
+        central_id: d.central_id ?? "",
+        tipo_dispositivo: d.tipo_dispositivo ?? "detector_fumaca",
+        setor: d.setor ?? "",
+        laco: d.laco != null ? String(d.laco) : "",
+        endereco: d.endereco ?? "",
+        status_instalacao: d.status_instalacao ?? "pendente",
+        data_instalacao: d.data_instalacao ?? "",
+        descricao: "", observacoes: "",
+      });
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Erro ao carregar dispositivo.", "erro");
+      setModal(false);
+    }
+  }
+
+  async function salvar() {
+    if (!form.central_id) { toast("Selecione a central.", "erro"); return; }
+    if (!form.setor.trim()) { toast("Informe o setor.", "erro"); return; }
+    const laco = form.laco.trim() ? parseInt(form.laco, 10) : null;
+    if (form.laco.trim() && (!Number.isFinite(laco!) || laco! <= 0)) { toast("Laço inválido.", "erro"); return; }
+    setSalvando(true);
+    try {
+      const corpo = {
+        central_id: form.central_id,
+        tipo_dispositivo: form.tipo_dispositivo,
+        setor: form.setor.trim(),
+        laco,
+        endereco: form.endereco.trim() || null,
+        status_instalacao: form.status_instalacao,
+        data_instalacao: form.data_instalacao.trim() || null,
+      };
+      if (editId) {
+        await alarmeApi.atualizar(editId, corpo);
+        toast("Dispositivo atualizado.", "sucesso");
+      } else {
+        await alarmeApi.criar(corpo);
+        toast("Dispositivo adicionado.", "sucesso");
+      }
+      setModal(false);
+      await buscar(pagina?.pagina ?? 1);
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Erro ao salvar dispositivo.", "erro");
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  async function remover(d: DispositivoBusca) {
+    if (!window.confirm(`Remover este dispositivo (${d.tipo_label}${d.endereco ? ` ${d.endereco}` : ""})? Ele sairá das listas e relatórios.`)) return;
+    setRemovendoId(d.id);
+    try {
+      await alarmeApi.remover(d.id);
+      toast("Dispositivo removido.", "sucesso");
+      await buscar(pagina?.pagina ?? 1);
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Erro ao remover.", "erro");
+    } finally {
+      setRemovendoId(null);
+    }
+  }
+
   return (
     <div className="card p-5 space-y-4">
       <div className="flex items-center gap-2">
         <Filter className="w-4 h-4 text-gray-500" />
         <h2 className="text-sm font-bold text-gray-900">Buscar dispositivos</h2>
+        <button onClick={abrirNovo} className="btn-primary btn-sm ml-auto">
+          <Plus className="w-3.5 h-3.5" /> Adicionar dispositivo
+        </button>
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
@@ -298,6 +402,7 @@ function BuscaDispositivos() {
                   <th className="px-2 py-2">Setor</th>
                   <th className="px-2 py-2">Status</th>
                   <th className="px-2 py-2 text-center">Fotos</th>
+                  <th className="px-2 py-2 text-right">Ações</th>
                 </tr>
               </thead>
               <tbody>
@@ -314,10 +419,20 @@ function BuscaDispositivos() {
                       </span>
                     </td>
                     <td className="px-2 py-2 text-center">{d.qtd_fotos}</td>
+                    <td className="px-2 py-2">
+                      <div className="flex items-center justify-end gap-1">
+                        <button onClick={() => abrirEditar(d.id)} title="Editar dispositivo" className="btn-ghost btn-sm p-1 text-gray-500 hover:text-gray-800">
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                        <button onClick={() => remover(d)} disabled={removendoId === d.id} title="Remover dispositivo" className="btn-ghost btn-sm p-1 text-red-600 hover:text-red-700">
+                          {removendoId === d.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                        </button>
+                      </div>
+                    </td>
                   </tr>
                 ))}
                 {pagina.resultados.length === 0 && (
-                  <tr><td colSpan={7} className="px-2 py-6 text-center text-gray-400">Nenhum dispositivo para os filtros.</td></tr>
+                  <tr><td colSpan={8} className="px-2 py-6 text-center text-gray-400">Nenhum dispositivo para os filtros.</td></tr>
                 )}
               </tbody>
             </table>
@@ -332,6 +447,59 @@ function BuscaDispositivos() {
           )}
         </>
       )}
+
+      {/* Device create/edit modal */}
+      <Modal open={modal} titulo={editId ? "Editar dispositivo" : "Adicionar dispositivo"} onClose={() => { if (!salvando) setModal(false); }} largura="max-w-lg">
+        <div className="space-y-4">
+          <p className="text-xs text-gray-400">
+            Central, tipo e setor são obrigatórios. Laço e endereço podem ser preenchidos depois (cadastro incremental).
+          </p>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="col-span-2">
+              <label className="label">Central *</label>
+              <select className="input" value={form.central_id} onChange={(e) => setForm((p) => ({ ...p, central_id: e.target.value }))}>
+                <option value="">— selecione —</option>
+                {centrais.map((c) => <option key={c.id} value={c.id}>Central {c.numero}{c.nome ? ` · ${c.nome}` : ""}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="label">Tipo *</label>
+              <select className="input" value={form.tipo_dispositivo} onChange={(e) => setForm((p) => ({ ...p, tipo_dispositivo: e.target.value }))}>
+                {TIPOS_FORM.map((t) => <option key={t.v} value={t.v}>{t.l}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="label">Status</label>
+              <select className="input" value={form.status_instalacao} onChange={(e) => setForm((p) => ({ ...p, status_instalacao: e.target.value }))}>
+                {STATUS_ORDER.map((s) => <option key={s} value={s}>{STATUS_META[s].label}</option>)}
+              </select>
+            </div>
+            <div className="col-span-2">
+              <label className="label">Setor *</label>
+              <input className="input" value={form.setor} onChange={(e) => setForm((p) => ({ ...p, setor: e.target.value }))} placeholder="Ex.: Caldeira" />
+            </div>
+            <div>
+              <label className="label">Laço</label>
+              <input className="input" type="number" min={1} value={form.laco} onChange={(e) => setForm((p) => ({ ...p, laco: e.target.value }))} placeholder="opcional" />
+            </div>
+            <div>
+              <label className="label">Endereço</label>
+              <input className="input" value={form.endereco} onChange={(e) => setForm((p) => ({ ...p, endereco: e.target.value }))} placeholder="Ex.: 101 (opcional)" />
+            </div>
+            <div className="col-span-2">
+              <label className="label">Data de instalação</label>
+              <input className="input" type="date" value={form.data_instalacao} onChange={(e) => setForm((p) => ({ ...p, data_instalacao: e.target.value }))} />
+            </div>
+          </div>
+          <div className="flex gap-3 pt-1">
+            <button onClick={() => setModal(false)} disabled={salvando} className="btn-secondary flex-1">Cancelar</button>
+            <button onClick={salvar} disabled={salvando} className="btn-primary flex-1">
+              {salvando ? <Loader2 className="w-4 h-4 animate-spin" /> : (editId ? <Pencil className="w-4 h-4" /> : <Plus className="w-4 h-4" />)}
+              {editId ? "Salvar" : "Adicionar"}
+            </button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }
