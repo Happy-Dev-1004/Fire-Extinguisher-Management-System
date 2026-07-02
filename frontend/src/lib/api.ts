@@ -582,6 +582,14 @@ export const alarmeApi = {
   definirCronograma: (body: { central_id: string; setor: string; data_prevista: string | null; observacoes?: string }) =>
     request<unknown>("PUT", "/alarme/cronograma", body),
 
+  // Official schedule PDF — inline preview (object URL) + download.
+  cronogramaPreview: () =>
+    previewBlobGet("/alarme/cronograma/pdf?preview=true"),
+  baixarCronograma: () => {
+    const ts = new Date().toISOString().slice(0, 10);
+    return downloadBlob(`/alarme/cronograma/pdf`, undefined, `cronograma_alarme_${ts}.pdf`, "GET");
+  },
+
   busca: (filtros: FiltrosAlarme) => {
     const qs = new URLSearchParams();
     for (const [k, v] of Object.entries(filtros)) {

@@ -3,6 +3,7 @@ import { alarmeApi, type AreaCronograma, type SituacaoCronograma } from "../lib/
 import { toast } from "../components/Toast";
 import {
   CalendarClock, Loader2, CheckCircle2, Clock, AlertTriangle, HelpCircle, Save,
+  FileText, Download, Eye, X,
 } from "lucide-react";
 
 const SIT_META: Record<SituacaoCronograma, { label: string; badge: string; Icon: React.ElementType }> = {
@@ -27,6 +28,11 @@ export function AlarmeCronogramaPage() {
   // Local edits to the date inputs, keyed by central_id|setor.
   const [rascunho, setRascunho] = useState<Record<string, string>>({});
 
+  // PDF export state
+  const [baixando, setBaixando]     = useState(false);
+  const [previewando, setPreviewando] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+
   const keyDe = (a: AreaCronograma) => `${a.central_id}|${a.setor}`;
 
   const carregar = useCallback(async () => {
@@ -43,6 +49,36 @@ export function AlarmeCronogramaPage() {
   }, []);
 
   useEffect(() => { void carregar(); }, [carregar]);
+  useEffect(() => () => { if (previewUrl) URL.revokeObjectURL(previewUrl); }, [previewUrl]);
+
+  async function baixarPDF() {
+    setBaixando(true);
+    try {
+      await alarmeApi.baixarCronograma();
+      toast("PDF do cronograma baixado.", "sucesso");
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Erro ao baixar o PDF.", "erro");
+    } finally {
+      setBaixando(false);
+    }
+  }
+
+  async function abrirPreview() {
+    setPreviewando(true);
+    try {
+      const url = await alarmeApi.cronogramaPreview();
+      setPreviewUrl(url);
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Erro ao gerar a pré-visualização.", "erro");
+    } finally {
+      setPreviewando(false);
+    }
+  }
+
+  function fecharPreview() {
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    setPreviewUrl(null);
+  }
 
   async function salvar(a: AreaCronograma) {
     const k = keyDe(a);
@@ -73,13 +109,23 @@ export function AlarmeCronogramaPage() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-          <CalendarClock className="w-6 h-6 text-brand-600" /> Cronograma de Execução
-        </h1>
-        <p className="text-sm text-gray-500 mt-0.5">
-          Defina a data de entrega por área e acompanhe o andamento da instalação (entregue = testado).
-        </p>
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+            <CalendarClock className="w-6 h-6 text-brand-600" /> Cronograma de Execução
+          </h1>
+          <p className="text-sm text-gray-500 mt-0.5">
+            Defina a data de entrega por área e acompanhe o andamento da instalação (entregue = testado).
+          </p>
+        </div>
+        <div className="flex gap-2 shrink-0">
+          <button onClick={abrirPreview} disabled={previewando || carregando} className="btn-secondary btn-sm" title="Pré-visualizar o PDF">
+            {previewando ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Eye className="w-3.5 h-3.5" />} Pré-visualizar
+          </button>
+          <button onClick={baixarPDF} disabled={baixando || carregando} className="btn-primary btn-sm" title="Baixar o cronograma em PDF">
+            {baixando ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileText className="w-3.5 h-3.5" />} Baixar PDF
+          </button>
+        </div>
       </div>
 
       {/* Rollup */}
@@ -162,6 +208,25 @@ export function AlarmeCronogramaPage() {
             </div>
           </div>
         ))
+      )}
+
+      {/* PDF preview overlay */}
+      {previewUrl && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex flex-col p-3 sm:p-6 animate-fade-in" onClick={fecharPreview}>
+          <div className="flex items-center justify-between mb-2 text-white">
+            <p className="text-sm font-medium">Pré-visualização — Cronograma de Execução</p>
+            <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
+              <button onClick={baixarPDF} className="btn-secondary btn-sm">
+                <Download className="w-3.5 h-3.5" /> Baixar PDF
+              </button>
+              <button onClick={fecharPreview} className="btn-secondary btn-sm">
+                <X className="w-3.5 h-3.5" /> Fechar
+              </button>
+            </div>
+          </div>
+          <iframe title="Pré-visualização do cronograma" src={previewUrl}
+            className="flex-1 w-full rounded-lg bg-white" onClick={(e) => e.stopPropagation()} />
+        </div>
       )}
     </div>
   );

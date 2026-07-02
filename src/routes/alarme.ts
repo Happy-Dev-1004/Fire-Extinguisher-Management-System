@@ -11,6 +11,7 @@
 //   POST   /alarme/seed                            — run idempotent device seed (OWNER)
 //   GET    /alarme/reconciliacao                  — BOM gap report
 //   GET    /alarme/cronograma                      — execution schedule per área (central+setor)
+//   GET    /alarme/cronograma/pdf                  — schedule as an official PDF (?preview)
 //   PUT    /alarme/cronograma                      — set/clear an área's target date
 
 import { Router, type Request, type Response } from "express";
@@ -24,6 +25,8 @@ import { relatorioArmazenamento } from "../alarme/armazenamento";
 import { agregarProgresso, type DispositivoProgresso } from "../alarme/progresso";
 import { buscarDispositivos, FiltrosAlarmeSchema } from "../alarme/buscaAlarme";
 import { dispositivosParaCsv, dispositivosParaPdf } from "../alarme/relatorioAlarme";
+import { montarCronograma } from "../alarme/cronograma";
+import { gerarCronogramaPdf } from "../ficha/gerarCronogramaPdf";
 
 const router = Router();
 const log = logger.child({ rota: "/alarme" });
@@ -487,69 +490,28 @@ router.get("/armazenamento", async (_req: Request, res: Response) => {
 //   GET /alarme/cronograma        — areas with progress + target date + status
 //   PUT /alarme/cronograma        — set/clear the target date for one area
 router.get("/cronograma", async (_req: Request, res: Response) => {
-  const { data: disp, error } = await supabaseAdmin
-    .from("dispositivos_alarme")
-    .select("central_id, setor, status_instalacao, centrais!inner(numero, nome)")
-    .eq("ativo", true);
-  if (error) return res.status(500).json({ erro: "Erro ao carregar dispositivos." });
-
-  const { data: datas } = await supabaseAdmin
-    .from("cronograma_alarme").select("central_id, setor, data_prevista, observacoes");
-  const dataDe = new Map<string, { data_prevista: string | null; observacoes: string | null }>();
-  for (const r of (datas ?? []) as any[]) {
-    dataDe.set(`${r.central_id}|${r.setor}`, { data_prevista: r.data_prevista ?? null, observacoes: r.observacoes ?? null });
+  try {
+    const areas = await montarCronograma();
+    return res.json({ areas });
+  } catch (err: any) {
+    log.error({ err: err.message }, "erro ao montar cronograma");
+    return res.status(500).json({ erro: "Erro ao carregar o cronograma." });
   }
+});
 
-  // Group devices by (central_id + setor).
-  type Grupo = {
-    central_id: string; central_numero: number | null; central_nome: string | null;
-    setor: string; total: number; pendente: number; instalado: number; enderecado: number; testado: number;
-  };
-  const grupos = new Map<string, Grupo>();
-  for (const d of (disp ?? []) as any[]) {
-    const setor = d.setor ?? "";
-    const key = `${d.central_id}|${setor}`;
-    const g = grupos.get(key) ?? {
-      central_id: d.central_id,
-      central_numero: d.centrais?.numero ?? null,
-      central_nome: d.centrais?.nome ?? null,
-      setor, total: 0, pendente: 0, instalado: 0, enderecado: 0, testado: 0,
-    };
-    g.total++;
-    const s = (d.status_instalacao ?? "pendente") as "pendente" | "instalado" | "enderecado" | "testado";
-    g[s]++;
-    grupos.set(key, g);
+// ── GET /alarme/cronograma/pdf — official schedule report (?preview=true) ─────
+router.get("/cronograma/pdf", async (req: Request, res: Response) => {
+  try {
+    const areas = await montarCronograma();
+    const pdf = await gerarCronogramaPdf(areas);
+    const ts = new Date().toISOString().slice(0, 10);
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `inline; filename="cronograma_alarme_${ts}.pdf"`);
+    return res.send(pdf);
+  } catch (err: any) {
+    log.error({ err: err.message }, "erro ao gerar PDF do cronograma");
+    return res.status(500).json({ erro: "Erro ao gerar o PDF do cronograma." });
   }
-
-  const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
-  const areas = Array.from(grupos.values()).map((g) => {
-    const concluidos = g.testado;                                  // "entregue" = testado
-    const pct = g.total > 0 ? Math.round((concluidos / g.total) * 100) : 0;
-    const faltam = g.total - concluidos;
-    const info = dataDe.get(`${g.central_id}|${g.setor}`) ?? { data_prevista: null, observacoes: null };
-    // Schedule status: concluído | no prazo | atrasado | sem data.
-    let situacao: "concluido" | "no_prazo" | "atrasado" | "sem_data";
-    if (faltam === 0) situacao = "concluido";
-    else if (!info.data_prevista) situacao = "sem_data";
-    else {
-      const alvo = new Date(info.data_prevista + "T00:00:00");
-      situacao = alvo < hoje ? "atrasado" : "no_prazo";
-    }
-    return {
-      central_id: g.central_id, central_numero: g.central_numero, central_nome: g.central_nome,
-      setor: g.setor, total: g.total,
-      pendente: g.pendente, instalado: g.instalado, enderecado: g.enderecado, testado: g.testado,
-      concluidos, faltam, pct,
-      data_prevista: info.data_prevista, observacoes: info.observacoes, situacao,
-    };
-  });
-  // Sort by central number, then by target date (undated last), then setor.
-  areas.sort((a, b) =>
-    (a.central_numero ?? 99) - (b.central_numero ?? 99) ||
-    (a.data_prevista ?? "9999").localeCompare(b.data_prevista ?? "9999") ||
-    a.setor.localeCompare(b.setor, "pt-BR"));
-
-  return res.json({ areas });
 });
 
 const CronogramaSchema = z.object({
