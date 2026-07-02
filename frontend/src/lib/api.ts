@@ -576,6 +576,12 @@ export const alarmeApi = {
   progresso: () =>
     request<RelatorioProgresso>("GET", "/alarme/progresso"),
 
+  // Execution schedule (cronograma) — one row per área (central + setor).
+  cronograma: () =>
+    request<{ areas: AreaCronograma[] }>("GET", "/alarme/cronograma"),
+  definirCronograma: (body: { central_id: string; setor: string; data_prevista: string | null; observacoes?: string }) =>
+    request<unknown>("PUT", "/alarme/cronograma", body),
+
   busca: (filtros: FiltrosAlarme) => {
     const qs = new URLSearchParams();
     for (const [k, v] of Object.entries(filtros)) {
@@ -608,6 +614,16 @@ export interface LinhaReconciliacao {
   tipo: string; label: string; cadastrados: number; esperado: number;
   faltam: number; excedente: number; completo: boolean;
 }
+export type SituacaoCronograma = "concluido" | "no_prazo" | "atrasado" | "sem_data";
+export interface AreaCronograma {
+  central_id: string; central_numero: number | null; central_nome: string | null;
+  setor: string; total: number;
+  pendente: number; instalado: number; enderecado: number; testado: number;
+  concluidos: number; faltam: number; pct: number;
+  data_prevista: string | null; observacoes: string | null;
+  situacao: SituacaoCronograma;
+}
+
 export interface RelatorioProgresso {
   geral: ContagemStatus;
   centrais: GrupoCentral[];

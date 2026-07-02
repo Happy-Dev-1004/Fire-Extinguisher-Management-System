@@ -1,19 +1,22 @@
 import { useLocation, useNavigate } from "react-router-dom";
-import { Activity, Camera, FileText } from "lucide-react";
+import { Activity, Camera, FileText, CalendarClock } from "lucide-react";
 import { AlarmeProgressoPage } from "./AlarmeProgressoPage";
 import { AlarmeFotosPage } from "./AlarmeFotosPage";
 import { AlarmeRdosPanel } from "./AlarmeRdosPanel";
+import { AlarmeCronogramaPage } from "./AlarmeCronogramaPage";
 
 // Fase 2 hub — one page, the alarm functions navigated by tabs ("tags"), the
 // same pattern validated in Phase 1's photo page. Each tab is reachable by a
 // distinct URL so the sidebar can deep-link straight into it:
-//   /alarme        → Progresso
-//   /alarme/fotos  → Registro fotográfico
-//   /alarme/rdos   → RDOs
+//   /alarme            → Progresso
+//   /alarme/cronograma → Cronograma de execução
+//   /alarme/fotos      → Registro fotográfico
+//   /alarme/rdos       → RDOs
 const ABAS = [
-  { path: "/alarme",       label: "Progresso",            Icon: Activity },
-  { path: "/alarme/fotos", label: "Registro fotográfico", Icon: Camera },
-  { path: "/alarme/rdos",  label: "RDOs",                 Icon: FileText },
+  { path: "/alarme",            label: "Progresso",            Icon: Activity },
+  { path: "/alarme/cronograma", label: "Cronograma",           Icon: CalendarClock },
+  { path: "/alarme/fotos",      label: "Registro fotográfico", Icon: Camera },
+  { path: "/alarme/rdos",       label: "RDOs",                 Icon: FileText },
 ];
 
 export function AlarmeHubPage() {
@@ -56,7 +59,9 @@ export function AlarmeHubPage() {
 
       {/* Active panel */}
       <div>
-        {ativo === "/alarme/fotos" ? (
+        {ativo === "/alarme/cronograma" ? (
+          <AlarmeCronogramaPage />
+        ) : ativo === "/alarme/fotos" ? (
           <AlarmeFotosPage embedded />
         ) : ativo === "/alarme/rdos" ? (
           <AlarmeRdosPanel />

@@ -41,6 +41,7 @@ export function App() {
               <Route path="/destinatarios" element={<DestinatariosPage />} />
               {/* Fase 2 hub — tabs (Progresso / Registro fotográfico / RDOs) keyed by path */}
               <Route path="/alarme" element={<AlarmeHubPage />} />
+              <Route path="/alarme/cronograma" element={<AlarmeHubPage />} />
               <Route path="/alarme/fotos" element={<AlarmeHubPage />} />
               <Route path="/alarme/rdos" element={<AlarmeHubPage />} />
               {/* Fase 3 hub — tabs (Inventário / Fichas / Busca) keyed by path.
