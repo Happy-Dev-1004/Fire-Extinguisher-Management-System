@@ -22,6 +22,11 @@
 ALTER TABLE dispositivos_alarme
   ADD COLUMN IF NOT EXISTS data_prevista_instalacao DATE;
 
+-- Ensure the partial unique index the upsert targets exists (it's created in
+-- 0022, but guarantee it here so this migration is self-sufficient).
+CREATE UNIQUE INDEX IF NOT EXISTS dispositivos_seed_key_uq
+  ON dispositivos_alarme (seed_key) WHERE seed_key IS NOT NULL;
+
 INSERT INTO dispositivos_alarme
   (central_id, laco, endereco, tipo_dispositivo, setor, descricao, seed_key,
    status_instalacao, cadastro_pendente)
@@ -427,7 +432,9 @@ FROM (VALUES
   (4, 1, '97', 'sirene', 'Caldeira - 1PV', 'Sirenes', 'csv|4|1|97')
 ) AS v(central_num, laco, endereco, tipo, setor, descricao, seed_key)
 JOIN centrais c ON c.numero = v.central_num
-ON CONFLICT (seed_key) DO UPDATE SET
+-- seed_key's unique index is PARTIAL (WHERE seed_key IS NOT NULL), so the
+-- ON CONFLICT target must restate that predicate to match it (else 42P10).
+ON CONFLICT (seed_key) WHERE seed_key IS NOT NULL DO UPDATE SET
   laco             = EXCLUDED.laco,
   endereco         = EXCLUDED.endereco,
   tipo_dispositivo = EXCLUDED.tipo_dispositivo,
