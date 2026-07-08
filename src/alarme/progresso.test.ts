@@ -82,7 +82,34 @@ describe("agregarProgresso", () => {
     expect(r.geral.total).toBe(0);
     expect(r.geral.pct_instalado).toBe(0);
     expect(r.centrais).toEqual([]);
+    expect(r.por_tipo).toEqual([]);
     // BOM still shows the full expected universe as gaps
     expect(r.reconciliacao.total_faltam).toBe(534);
+  });
+
+  it("breaks down INSTALLATION status per device type (por_tipo)", () => {
+    const devs = [
+      disp({ tipo_dispositivo: "sirene", status_instalacao: "instalado" }),
+      disp({ tipo_dispositivo: "sirene", status_instalacao: "testado" }),
+      disp({ tipo_dispositivo: "sirene", status_instalacao: "pendente" }),
+      disp({ tipo_dispositivo: "acionador", status_instalacao: "pendente" }),
+    ];
+    const r = agregarProgresso(devs, {});
+
+    // ordered by total desc → sirene (3) before acionador (1)
+    expect(r.por_tipo.map((t) => t.tipo)).toEqual(["sirene", "acionador"]);
+
+    const sir = r.por_tipo.find((t) => t.tipo === "sirene")!;
+    expect(sir.label).toBe("Sirene");
+    expect(sir.contagem.total).toBe(3);
+    expect(sir.contagem.instalado).toBe(1);
+    expect(sir.contagem.testado).toBe(1);
+    expect(sir.contagem.pendente).toBe(1);
+    // 2 of 3 are installed+ → 67%
+    expect(sir.contagem.pct_instalado).toBe(67);
+
+    const aci = r.por_tipo.find((t) => t.tipo === "acionador")!;
+    expect(aci.contagem.total).toBe(1);
+    expect(aci.contagem.pct_instalado).toBe(0); // still pendente
   });
 });

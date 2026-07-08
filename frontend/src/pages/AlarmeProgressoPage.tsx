@@ -8,8 +8,8 @@ import { toast } from "../components/Toast";
 import { Modal } from "../components/Modal";
 import {
   Activity, AlertTriangle, Download, Loader2,
-  ChevronDown, ChevronRight, Filter, CheckCircle2, FileDown,
-  Plus, Pencil, Trash2,
+  ChevronDown, ChevronRight, Filter, FileDown,
+  Plus, Pencil, Trash2, Wrench, Archive,
 } from "lucide-react";
 
 const STATUS_META: Record<string, { label: string; color: string; bar: string }> = {
@@ -87,8 +87,9 @@ export function AlarmeProgressoPage({ embedded = false }: { embedded?: boolean }
       ) : prog ? (
         <>
           <ResumoGeral prog={prog} />
-          <ReconciliacaoCard prog={prog} />
+          <InstalacaoPorTipo prog={prog} />
           <CentraisProgresso centrais={prog.centrais} />
+          <ReconciliacaoCard prog={prog} />
           <BuscaDispositivos />
         </>
       ) : (
@@ -129,20 +130,62 @@ function ResumoGeral({ prog }: { prog: RelatorioProgresso }) {
   );
 }
 
-// ── BOM gaps ──────────────────────────────────────────────────────────────────
+// ── Installation progress per device type (the headline: how many INSTALLED) ──
+function InstalacaoPorTipo({ prog }: { prog: RelatorioProgresso }) {
+  const tipos = prog.por_tipo.filter((t) => t.contagem.total > 0);
+  return (
+    <div className="card p-5">
+      <div className="flex items-center gap-2 mb-1">
+        <Wrench className="w-4 h-4 text-brand-600" />
+        <h2 className="text-sm font-bold text-gray-900">Instalação por tipo de dispositivo</h2>
+      </div>
+      <p className="text-xs text-gray-400 mb-3">
+        Quantos de cada tipo já foram <strong>instalados</strong> (instalado / endereçado / testado) do total cadastrado.
+      </p>
+      {tipos.length === 0 ? (
+        <p className="text-sm text-gray-500">Nenhum dispositivo cadastrado ainda.</p>
+      ) : (
+        <div className="space-y-2.5">
+          {tipos.map((t) => {
+            const c = t.contagem;
+            const instalados = c.instalado + c.enderecado + c.testado;
+            return (
+              <div key={t.tipo} className="flex items-center gap-3">
+                <span className="text-xs text-gray-600 w-44 shrink-0 truncate" title={t.label}>{t.label}</span>
+                <div className="flex-1 h-2.5 rounded-full bg-gray-100 overflow-hidden flex">
+                  <div className="bg-green-500 h-full" style={{ width: `${c.pct_testado}%` }} title={`Testado: ${c.testado}`} />
+                  <div className="bg-blue-500 h-full" style={{ width: `${Math.max(0, c.pct_instalado - c.pct_testado)}%` }} title={`Instalado/Endereçado: ${c.instalado + c.enderecado}`} />
+                </div>
+                <span className="text-xs text-gray-700 w-28 text-right shrink-0">
+                  {instalados}/{c.total} instalados
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Registered inventory vs project BOM (this is CADASTRO, NOT installation) ──
 function ReconciliacaoCard({ prog }: { prog: RelatorioProgresso }) {
   const rec = prog.reconciliacao;
   return (
     <div className="card p-5">
-      <div className="flex items-center gap-2 mb-3">
-        <AlertTriangle className="w-4 h-4 text-amber-600" />
-        <h2 className="text-sm font-bold text-gray-900">Lacunas do projeto (BOM)</h2>
+      <div className="flex items-center gap-2 mb-1">
+        <Archive className="w-4 h-4 text-gray-500" />
+        <h2 className="text-sm font-bold text-gray-900">Inventário cadastrado (BOM)</h2>
         {rec.completo ? (
           <span className="badge badge-green ml-auto">Completo</span>
         ) : (
           <span className="badge badge-gray ml-auto">{rec.total_faltam} faltando</span>
         )}
       </div>
+      <p className="text-xs text-gray-400 mb-3">
+        Quantos dispositivos estão <strong>cadastrados no sistema</strong> vs. o previsto no projeto.
+        Isto é o inventário — <strong>não</strong> indica instalação.
+      </p>
       <div className="space-y-2">
         {rec.linhas.filter((l) => l.esperado > 0).map((l) => {
           const pct = l.esperado > 0 ? Math.round((l.cadastrados / l.esperado) * 100) : 0;
@@ -150,12 +193,11 @@ function ReconciliacaoCard({ prog }: { prog: RelatorioProgresso }) {
             <div key={l.tipo} className="flex items-center gap-3">
               <span className="text-xs text-gray-600 w-44 shrink-0">{l.label}</span>
               <div className="flex-1 h-2.5 rounded-full bg-gray-100 overflow-hidden">
-                <div className={l.faltam > 0 ? "bg-amber-500 h-full" : "bg-green-500 h-full"} style={{ width: `${Math.min(100, pct)}%` }} />
+                <div className={l.faltam > 0 ? "bg-amber-500 h-full" : "bg-gray-400 h-full"} style={{ width: `${Math.min(100, pct)}%` }} />
               </div>
               <span className="text-xs text-gray-700 w-28 text-right shrink-0">
                 {l.cadastrados}/{l.esperado}
                 {l.faltam > 0 && <span className="text-amber-700"> · faltam {l.faltam}</span>}
-                {l.completo && <CheckCircle2 className="w-3 h-3 inline-block ml-1 text-green-600" />}
               </span>
             </div>
           );

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import {
-  Flame, Bell, Droplets, ArrowRight, AlertTriangle, Loader2,
+  Flame, Bell, Droplets, ArrowRight, Loader2,
   MapPin, Activity,
 } from "lucide-react";
 import { regioesApi, alarmeApi, hidrantesApi, type RelatorioProgresso } from "../lib/api";
@@ -50,14 +50,17 @@ export function DashboardPage() {
     return { regioes: rs.length, totalEsperado, cadastrado, inspecionados, pctInsp };
   })();
 
-  // ── Phase 2 rollup ──
+  // ── Phase 2 rollup (installation-focused) ──
   const f2 = (() => {
-    if (!prog) return { total: 0, esperado: 534, pctInstalado: 0, faltam: 534 };
+    if (!prog) return { total: 0, cadastrados: 0, instalados: 0, testados: 0, pctInstalado: 0, pendentes: 0 };
+    const g = prog.geral;
     return {
-      total: prog.geral.total,
-      esperado: prog.total_esperado,
-      pctInstalado: prog.geral.pct_instalado,
-      faltam: prog.reconciliacao.total_faltam,
+      total: g.total,                                          // devices registered
+      cadastrados: g.total,
+      instalados: g.instalado + g.enderecado + g.testado,       // physically installed+
+      testados: g.testado,
+      pctInstalado: g.pct_instalado,
+      pendentes: g.pendente,                                    // not yet installed
     };
   })();
 
@@ -107,8 +110,8 @@ export function DashboardPage() {
               corBg="bg-brand-50 text-brand-600"
               to="/alarme"
               pct={f2.pctInstalado}
-              linhaPrincipal={`${f2.total} de ${f2.esperado} dispositivos`}
-              linhaSecundaria={f2.faltam > 0 ? `${f2.faltam} pontos pendentes no projeto` : "Inventário completo"}
+              linhaPrincipal={`${f2.instalados} de ${f2.cadastrados} instalados`}
+              linhaSecundaria={`${f2.testados} testados · ${f2.pendentes} pendentes`}
               legendaGauge="instalado"
             />
             <FaseCard
@@ -128,7 +131,7 @@ export function DashboardPage() {
           {/* Detail row: Phase 1 per-region + Phase 2 BOM gaps */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <RegioesProgresso regioes={regioes ?? []} />
-            <BomGaps prog={prog} />
+            <AlarmeInstalacao prog={prog} />
           </div>
 
           {/* Phase 3 per-unit hydrant progress */}
@@ -239,40 +242,40 @@ function UnidadesHidranteProgresso({ unidades }: { unidades: UnidadeHidranteProg
 }
 
 // ── Phase 2: BOM gaps ──────────────────────────────────────────────────────────
-function BomGaps({ prog }: { prog: RelatorioProgresso | null }) {
-  const linhas = (prog?.reconciliacao.linhas ?? []).filter((l) => l.esperado > 0);
+// Phase 2 · installation progress per central (installed = instalado+ / total).
+function AlarmeInstalacao({ prog }: { prog: RelatorioProgresso | null }) {
+  const centrais = [...(prog?.centrais ?? [])].sort((a, b) => b.contagem.pct_instalado - a.contagem.pct_instalado);
   return (
     <div className="card p-5">
       <div className="flex items-center gap-2 mb-4">
         <span className="w-7 h-7 rounded-lg bg-brand-50 text-brand-600 flex items-center justify-center"><Activity className="w-4 h-4" /></span>
-        <h2 className="text-sm font-bold text-gray-900">Fase 2 · Lacunas do projeto</h2>
+        <h2 className="text-sm font-bold text-gray-900">Fase 2 · Instalação por central</h2>
         <Link to="/alarme" className="ml-auto text-xs text-brand-600 hover:underline">Ver tudo</Link>
       </div>
-      {linhas.length === 0 ? (
+      {centrais.length === 0 ? (
         <p className="text-sm text-gray-500">Sem dados de dispositivos.</p>
       ) : (
         <div className="space-y-2.5">
-          {linhas.map((l) => {
-            const pct = l.esperado > 0 ? Math.round((l.cadastrados / l.esperado) * 100) : 0;
+          {centrais.map((c) => {
+            const instalados = c.contagem.instalado + c.contagem.enderecado + c.contagem.testado;
+            const nome = c.central_numero != null ? `Central ${c.central_numero}` : "Sem central";
             return (
-              <div key={l.tipo} className="flex items-center gap-3">
-                <span className="text-xs text-gray-600 w-36 shrink-0 truncate" title={l.label}>{l.label}</span>
-                <div className="flex-1 h-2.5 rounded-full bg-gray-100 overflow-hidden">
-                  <div className={`h-full ${l.faltam > 0 ? "bg-amber-500" : "bg-green-500"}`} style={{ width: `${Math.min(100, pct)}%` }} />
+              <div key={nome} className="flex items-center gap-3">
+                <span className="text-xs text-gray-600 w-36 shrink-0 truncate" title={c.central_nome ?? nome}>{nome}</span>
+                <div className="flex-1 h-2.5 rounded-full bg-gray-100 overflow-hidden flex">
+                  <div className="h-full bg-green-500" style={{ width: `${Math.min(100, c.contagem.pct_testado)}%` }} />
+                  <div className="h-full bg-blue-500" style={{ width: `${Math.max(0, Math.min(100, c.contagem.pct_instalado) - Math.min(100, c.contagem.pct_testado))}%` }} />
                 </div>
                 <span className="text-xs text-gray-700 w-24 text-right shrink-0">
-                  {l.cadastrados}/{l.esperado}
-                  {l.faltam > 0 && <span className="text-amber-700"> · −{l.faltam}</span>}
+                  {instalados}/{c.contagem.total} · {c.contagem.pct_instalado}%
                 </span>
               </div>
             );
           })}
-          {prog && prog.reconciliacao.total_faltam > 0 && (
-            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 flex items-start gap-2 mt-3">
-              <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-              {prog.reconciliacao.total_faltam} dispositivos ainda não cadastrados — mapeamento em andamento.
-            </p>
-          )}
+          <p className="text-[11px] text-gray-400 flex items-center gap-3 pt-1">
+            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-500" /> testados</span>
+            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-500" /> instalados</span>
+          </p>
         </div>
       )}
     </div>

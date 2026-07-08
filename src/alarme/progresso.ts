@@ -7,6 +7,7 @@
 // "sem laço" bucket and never break the math.
 
 import { reconciliar, type Reconciliacao } from "./reconciliacao";
+import { TIPO_LABEL } from "./expectedBom";
 
 export const STATUS_INSTALACAO = ["pendente", "instalado", "enderecado", "testado"] as const;
 export type StatusInstalacao = (typeof STATUS_INSTALACAO)[number];
@@ -49,9 +50,18 @@ export interface GrupoCentral {
   lacos: GrupoLaco[];
 }
 
+export interface GrupoTipo {
+  tipo: string;              // device type key
+  label: string;            // pt-BR label
+  contagem: ContagemStatus; // installation status counts for this type
+}
+
 export interface RelatorioProgresso {
   geral: ContagemStatus;
   centrais: GrupoCentral[];
+  // Installation status broken down per device type (instalado/testado per tipo)
+  // — the headline "installed by type", distinct from the BOM registration gaps.
+  por_tipo: GrupoTipo[];
   reconciliacao: Reconciliacao;
   // Expected universe size from the BOM (the "513 points" target), so the UI can
   // show progress against the full scope even before all devices are registered.
@@ -89,8 +99,16 @@ export function agregarProgresso(
     { numero: number | null; nome: string | null; contagem: ContagemStatus; lacos: Map<string, GrupoLaco> }
   >();
 
+  // device type → installation status counts
+  const tiposMap = new Map<string, ContagemStatus>();
+
   for (const d of dispositivos) {
     acumular(geral, d.status_instalacao);
+
+    // per-type installation status
+    let ct = tiposMap.get(d.tipo_dispositivo);
+    if (!ct) { ct = novaContagem(); tiposMap.set(d.tipo_dispositivo, ct); }
+    acumular(ct, d.status_instalacao);
 
     const ckey = d.central_numero == null ? "sem" : String(d.central_numero);
     let central = centraisMap.get(ckey);
@@ -140,11 +158,20 @@ export function agregarProgresso(
       return a.central_numero - b.central_numero;
     });
 
+  const por_tipo: GrupoTipo[] = [...tiposMap.entries()]
+    .map(([tipo, contagem]) => {
+      finalizar(contagem);
+      return { tipo, label: TIPO_LABEL[tipo] ?? tipo, contagem };
+    })
+    // Most-present types first, then alphabetical for stability.
+    .sort((a, b) => b.contagem.total - a.contagem.total || a.label.localeCompare(b.label, "pt-BR"));
+
   const reconciliacao = reconciliar(contagensPorTipo);
 
   return {
     geral,
     centrais,
+    por_tipo,
     reconciliacao,
     total_esperado: reconciliacao.total_esperado,
   };

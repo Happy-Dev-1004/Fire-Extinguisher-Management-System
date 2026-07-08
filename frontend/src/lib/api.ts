@@ -632,9 +632,14 @@ export interface AreaCronograma {
   situacao: SituacaoCronograma;
 }
 
+export interface GrupoTipo {
+  tipo: string; label: string; contagem: ContagemStatus;
+}
+
 export interface RelatorioProgresso {
   geral: ContagemStatus;
   centrais: GrupoCentral[];
+  por_tipo: GrupoTipo[];
   reconciliacao: {
     linhas: LinhaReconciliacao[];
     total_cadastrados: number; total_esperado: number; total_faltam: number; completo: boolean;
