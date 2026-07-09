@@ -9,7 +9,8 @@ import { Modal } from "../components/Modal";
 import {
   Activity, AlertTriangle, Download, Loader2,
   ChevronDown, ChevronRight, Filter, FileDown,
-  Plus, Pencil, Trash2, Wrench, Archive,
+  Plus, Pencil, Trash2, Wrench,
+  CheckCircle2, Circle, Image as ImageIcon, X,
 } from "lucide-react";
 
 const STATUS_META: Record<string, { label: string; color: string; bar: string }> = {
@@ -89,7 +90,6 @@ export function AlarmeProgressoPage({ embedded = false }: { embedded?: boolean }
           <ResumoGeral prog={prog} />
           <InstalacaoPorTipo prog={prog} />
           <CentraisProgresso centrais={prog.centrais} />
-          <ReconciliacaoCard prog={prog} />
           <BuscaDispositivos />
         </>
       ) : (
@@ -168,45 +168,6 @@ function InstalacaoPorTipo({ prog }: { prog: RelatorioProgresso }) {
   );
 }
 
-// ── Registered inventory vs project BOM (this is CADASTRO, NOT installation) ──
-function ReconciliacaoCard({ prog }: { prog: RelatorioProgresso }) {
-  const rec = prog.reconciliacao;
-  return (
-    <div className="card p-5">
-      <div className="flex items-center gap-2 mb-1">
-        <Archive className="w-4 h-4 text-gray-500" />
-        <h2 className="text-sm font-bold text-gray-900">Inventário cadastrado (BOM)</h2>
-        {rec.completo ? (
-          <span className="badge badge-green ml-auto">Completo</span>
-        ) : (
-          <span className="badge badge-gray ml-auto">{rec.total_faltam} faltando</span>
-        )}
-      </div>
-      <p className="text-xs text-gray-400 mb-3">
-        Quantos dispositivos estão <strong>cadastrados no sistema</strong> vs. o previsto no projeto.
-        Isto é o inventário — <strong>não</strong> indica instalação.
-      </p>
-      <div className="space-y-2">
-        {rec.linhas.filter((l) => l.esperado > 0).map((l) => {
-          const pct = l.esperado > 0 ? Math.round((l.cadastrados / l.esperado) * 100) : 0;
-          return (
-            <div key={l.tipo} className="flex items-center gap-3">
-              <span className="text-xs text-gray-600 w-44 shrink-0">{l.label}</span>
-              <div className="flex-1 h-2.5 rounded-full bg-gray-100 overflow-hidden">
-                <div className={l.faltam > 0 ? "bg-amber-500 h-full" : "bg-gray-400 h-full"} style={{ width: `${Math.min(100, pct)}%` }} />
-              </div>
-              <span className="text-xs text-gray-700 w-28 text-right shrink-0">
-                {l.cadastrados}/{l.esperado}
-                {l.faltam > 0 && <span className="text-amber-700"> · faltam {l.faltam}</span>}
-              </span>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
 // ── Per central / per loop ──────────────────────────────────────────────────────
 function CentraisProgresso({ centrais }: { centrais: GrupoCentral[] }) {
   return (
@@ -279,6 +240,11 @@ function BuscaDispositivos() {
   const [salvando, setSalvando] = useState(false);
   const [removendoId, setRemovendoId] = useState<string | null>(null);
 
+  // Photo gallery state (view the install photos of a device).
+  const [galeria, setGaleria] = useState<{ device: DispositivoBusca; fotos: string[] } | null>(null);
+  const [carregandoFotos, setCarregandoFotos] = useState(false);
+  const [lightbox, setLightbox] = useState<string | null>(null);
+
   const buscar = useCallback(async (page = 1) => {
     setCarregando(true);
     try {
@@ -335,6 +301,21 @@ function BuscaDispositivos() {
     } catch (err) {
       toast(err instanceof Error ? err.message : "Erro ao carregar dispositivo.", "erro");
       setModal(false);
+    }
+  }
+
+  // Open the photo gallery for a device (fetches its stored install photos).
+  async function abrirGaleria(d: DispositivoBusca) {
+    setGaleria({ device: d, fotos: [] });
+    setCarregandoFotos(true);
+    try {
+      const full = await alarmeApi.dispositivo(d.id);
+      setGaleria({ device: d, fotos: full.fotos ?? [] });
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Erro ao carregar fotos.", "erro");
+      setGaleria(null);
+    } finally {
+      setCarregandoFotos(false);
     }
   }
 
@@ -413,6 +394,36 @@ function BuscaDispositivos() {
         </button>
       </div>
 
+      {/* Quick filters: installed vs not-installed vs with-photo */}
+      <div className="flex flex-wrap gap-2">
+        <button
+          onClick={() => { setF((p) => ({ ...p, status_instalacao: "pendente" })); buscar(1); }}
+          className={`px-3 py-1 rounded-full text-xs font-semibold border transition-all ${f.status_instalacao === "pendente" ? "bg-gray-900 text-white border-gray-900" : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"}`}
+        >
+          Não instalados
+        </button>
+        <button
+          onClick={() => { setF((p) => ({ ...p, status_instalacao: "instalado" })); buscar(1); }}
+          className={`px-3 py-1 rounded-full text-xs font-semibold border transition-all ${f.status_instalacao === "instalado" ? "bg-blue-600 text-white border-blue-600" : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"}`}
+        >
+          Instalados
+        </button>
+        <button
+          onClick={() => { setF((p) => ({ ...p, com_foto: "true" })); buscar(1); }}
+          className={`px-3 py-1 rounded-full text-xs font-semibold border transition-all ${f.com_foto === "true" ? "bg-green-600 text-white border-green-600" : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"}`}
+        >
+          Com foto
+        </button>
+        {(f.status_instalacao || f.com_foto) && (
+          <button
+            onClick={() => { setF((p) => ({ ...p, status_instalacao: undefined, com_foto: undefined })); buscar(1); }}
+            className="px-3 py-1 rounded-full text-xs font-semibold border border-gray-200 text-gray-500 hover:bg-gray-50"
+          >
+            Limpar
+          </button>
+        )}
+      </div>
+
       {pagina && (
         <>
           <div className="flex flex-wrap items-center gap-3 text-xs">
@@ -442,25 +453,45 @@ function BuscaDispositivos() {
                   <th className="px-2 py-2">Endereço</th>
                   <th className="px-2 py-2">Tipo</th>
                   <th className="px-2 py-2">Setor</th>
+                  <th className="px-2 py-2 text-center">Instalado?</th>
                   <th className="px-2 py-2">Status</th>
                   <th className="px-2 py-2 text-center">Fotos</th>
                   <th className="px-2 py-2 text-right">Ações</th>
                 </tr>
               </thead>
               <tbody>
-                {pagina.resultados.map((d: DispositivoBusca) => (
-                  <tr key={d.id} className="border-b border-gray-100">
+                {pagina.resultados.map((d: DispositivoBusca) => {
+                  const instalado = d.status_instalacao != null && d.status_instalacao !== "pendente";
+                  return (
+                  <tr key={d.id} className={`border-b border-gray-100 ${!instalado ? "bg-gray-50/40" : ""}`}>
                     <td className="px-2 py-2">{d.central_numero != null ? `C${d.central_numero}` : "—"}</td>
                     <td className="px-2 py-2">{d.laco ?? "—"}</td>
                     <td className="px-2 py-2">{d.endereco ?? <span className="text-amber-600">pendente</span>}</td>
                     <td className="px-2 py-2">{d.tipo_label}</td>
                     <td className="px-2 py-2 max-w-[140px] truncate">{d.setor ?? "—"}</td>
+                    <td className="px-2 py-2 text-center">
+                      {instalado
+                        ? <span title="Instalado" className="inline-flex items-center gap-1 text-green-700 font-medium"><CheckCircle2 className="w-4 h-4" /> Sim</span>
+                        : <span title="Ainda não instalado" className="inline-flex items-center gap-1 text-gray-400"><Circle className="w-4 h-4" /> Não</span>}
+                    </td>
                     <td className="px-2 py-2">
                       <span className={`badge ${d.status_instalacao === "testado" ? "badge-green" : d.status_instalacao === "pendente" ? "badge-gray" : "badge-brand"}`}>
                         {d.status_label}
                       </span>
                     </td>
-                    <td className="px-2 py-2 text-center">{d.qtd_fotos}</td>
+                    <td className="px-2 py-2 text-center">
+                      {d.qtd_fotos > 0 ? (
+                        <button
+                          onClick={() => abrirGaleria(d)}
+                          title="Ver fotos da instalação"
+                          className="inline-flex items-center gap-1 text-brand-600 hover:text-brand-800 font-medium"
+                        >
+                          <ImageIcon className="w-3.5 h-3.5" /> {d.qtd_fotos}
+                        </button>
+                      ) : (
+                        <span className="text-gray-300">—</span>
+                      )}
+                    </td>
                     <td className="px-2 py-2">
                       <div className="flex items-center justify-end gap-1">
                         <button onClick={() => abrirEditar(d.id)} title="Editar dispositivo" className="btn-ghost btn-sm p-1 text-gray-500 hover:text-gray-800">
@@ -472,9 +503,10 @@ function BuscaDispositivos() {
                       </div>
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
                 {pagina.resultados.length === 0 && (
-                  <tr><td colSpan={8} className="px-2 py-6 text-center text-gray-400">Nenhum dispositivo para os filtros.</td></tr>
+                  <tr><td colSpan={9} className="px-2 py-6 text-center text-gray-400">Nenhum dispositivo para os filtros.</td></tr>
                 )}
               </tbody>
             </table>
@@ -488,6 +520,36 @@ function BuscaDispositivos() {
             </div>
           )}
         </>
+      )}
+
+      {/* Device photo gallery */}
+      <Modal
+        open={galeria !== null}
+        titulo={galeria ? `Fotos — ${galeria.device.tipo_label}${galeria.device.endereco ? ` ${galeria.device.endereco}` : ""}${galeria.device.setor ? ` · ${galeria.device.setor}` : ""}` : "Fotos"}
+        onClose={() => setGaleria(null)}
+        largura="max-w-2xl"
+      >
+        {carregandoFotos ? (
+          <div className="flex items-center gap-2 py-8 text-gray-400 text-sm"><Loader2 className="w-4 h-4 animate-spin" /> Carregando fotos…</div>
+        ) : galeria && galeria.fotos.length > 0 ? (
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            {galeria.fotos.map((url, i) => (
+              <button key={i} onClick={() => setLightbox(url)} className="block aspect-square rounded-lg overflow-hidden bg-gray-100 hover:ring-2 hover:ring-brand-500">
+                <img src={url} alt={`Foto ${i + 1}`} className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.visibility = "hidden"; }} />
+              </button>
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-gray-400 py-6 text-center">Este dispositivo ainda não tem fotos de instalação.</p>
+        )}
+      </Modal>
+
+      {/* Full-screen lightbox for a single photo */}
+      {lightbox && (
+        <div className="fixed inset-0 z-[60] bg-black/80 flex items-center justify-center p-4" onClick={() => setLightbox(null)}>
+          <button className="absolute top-4 right-4 text-white/80 hover:text-white" onClick={() => setLightbox(null)}><X className="w-6 h-6" /></button>
+          <img src={lightbox} alt="Foto ampliada" className="max-h-[90vh] max-w-[90vw] object-contain rounded-lg" onClick={(e) => e.stopPropagation()} />
+        </div>
       )}
 
       {/* Device create/edit modal */}
