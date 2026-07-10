@@ -11,6 +11,43 @@ import type { Pergunta } from "./perguntas";
 
 const log = logger.child({ modulo: "rdo/deps" });
 
+// Counts, per device type, the alarm devices marked as installed on a given date
+// in the dashboard (dispositivos_alarme.data_instalacao = date). This replaces
+// the manual "quantos instalou hoje?" questions — the RDO now derives the numbers
+// from the real device registry, so they always match. Optionally scoped to a
+// central (the RDO's "central" field carries the panel number, e.g. "Central 3").
+export async function contarDispositivosInstaladosNoDia(
+  dataISO: string | null | undefined,
+  centralTexto?: string | null,
+): Promise<Record<string, number>> {
+  if (!dataISO) return {};
+  let centralId: string | undefined;
+  const m = String(centralTexto ?? "").match(/\b([1-9]\d?)\b/);
+  if (m) {
+    const { data: c } = await supabaseAdmin
+      .from("centrais").select("id").eq("numero", Number(m[1])).maybeSingle();
+    if (c) centralId = (c as any).id;
+  }
+
+  let q = supabaseAdmin
+    .from("dispositivos_alarme")
+    .select("tipo_dispositivo")
+    .eq("ativo", true)
+    .eq("data_instalacao", dataISO);
+  if (centralId) q = q.eq("central_id", centralId);
+
+  const { data, error } = await q;
+  if (error) {
+    log.warn({ err: error.message, dataISO }, "falha ao contar dispositivos instalados no dia");
+    return {};
+  }
+  const contagem: Record<string, number> = {};
+  for (const row of (data ?? []) as { tipo_dispositivo: string }[]) {
+    contagem[row.tipo_dispositivo] = (contagem[row.tipo_dispositivo] ?? 0) + 1;
+  }
+  return contagem;
+}
+
 export const rdoDeps: Deps = {
   async getSessao(tel) {
     const { data } = await supabaseAdmin
@@ -75,14 +112,23 @@ export const rdoDeps: Deps = {
   },
 
   async finalizarRdo(rdoId) {
+    // Derive "dispositivos instalados hoje" automatically from the dashboard,
+    // so the RDO count always matches the real device registry (no manual entry).
+    const { data: base } = await supabaseAdmin
+      .from("rdos").select("data, central").eq("id", rdoId).maybeSingle();
+    const dispositivos_instalados = await contarDispositivosInstaladosNoDia(
+      (base as any)?.data ?? null,
+      (base as any)?.central ?? null,
+    );
+
     const { data, error } = await supabaseAdmin
       .from("rdos")
-      .update({ status: "concluido", concluido_em: new Date().toISOString() })
+      .update({ status: "concluido", concluido_em: new Date().toISOString(), dispositivos_instalados })
       .eq("id", rdoId)
       .select("*")
       .single();
     if (error) throw new Error(`Erro ao finalizar RDO: ${error.message}`);
-    log.info({ rdoId }, "RDO concluído");
+    log.info({ rdoId, dispositivos_instalados }, "RDO concluído (dispositivos instalados calculados do painel)");
     const r = data as any;
     const dataBR = r.data ? String(r.data).split("-").reverse().join("/") : "—";
     void registrarNotificacao({

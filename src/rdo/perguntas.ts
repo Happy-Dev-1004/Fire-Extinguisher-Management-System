@@ -76,20 +76,8 @@ export const PERGUNTAS: Pergunta[] = [
     pergunta: "O que foi feito de *programação/endereçamento/testes*? (ou *pular*)" },
 
   // ── 5. Dispositivos instalados no dia ───────────────────────────────────────
-  { key: "di_fumaca",   tipo: "numero", destino: { jsonb: "dispositivos_instalados", chave: "detector_fumaca" },
-    pergunta: "🧯 *Dispositivos instalados HOJE*\n\nQuantos *detectores de fumaça*?" },
-  { key: "di_temp",     tipo: "numero", destino: { jsonb: "dispositivos_instalados", chave: "detector_temperatura" },
-    pergunta: "Quantos *detectores de temperatura*?" },
-  { key: "di_linear",   tipo: "numero", destino: { jsonb: "dispositivos_instalados", chave: "detector_linear" },
-    pergunta: "Quantos *detectores lineares*?" },
-  { key: "di_acionador",tipo: "numero", destino: { jsonb: "dispositivos_instalados", chave: "acionador" },
-    pergunta: "Quantos *acionadores manuais*?" },
-  { key: "di_sirene",   tipo: "numero", destino: { jsonb: "dispositivos_instalados", chave: "sirene" },
-    pergunta: "Quantas *sirenes*?" },
-  { key: "di_modulo",   tipo: "numero", destino: { jsonb: "dispositivos_instalados", chave: "modulo_supervisao" },
-    pergunta: "Quantos *módulos de supervisão*?" },
-  { key: "di_isolador", tipo: "numero", destino: { jsonb: "dispositivos_instalados", chave: "isolador" },
-    pergunta: "Quantos *isoladores*?" },
+  // (Contagem AUTOMÁTICA: ao concluir, o sistema conta os dispositivos marcados
+  //  como instalados nesta DATA no painel — o técnico não digita mais isto.)
 
   // ── 6. Segurança / integração ───────────────────────────────────────────────
   { key: "pt_numero",        tipo: "texto",   destino: { coluna: "pt_numero" }, obrigatoria: false,

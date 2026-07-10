@@ -88,7 +88,10 @@ describe("RDO state machine", () => {
     expect(rdo.responsavel).toBe("Resposta de teste");
     expect(rdo.periodo).toBe("diurno");
     expect(rdo.efetivo.eletricistas).toBe(2);
-    expect(rdo.dispositivos_instalados.detector_fumaca).toBe(2);
+    // "dispositivos instalados no dia" is no longer asked in the flow — it's
+    // derived from the dashboard at finalize time (see deps.finalizarRdo), so the
+    // guided conversation must NOT contain those questions anymore.
+    expect(PERGUNTAS.some((p) => p.destino.jsonb === "dispositivos_instalados")).toBe(false);
     expect(rdo.integracao_novos).toBe(true);
     const fim = fake.enviadas[PHONE].at(-1)!;
     expect(fim).toContain("RDO concluído");
