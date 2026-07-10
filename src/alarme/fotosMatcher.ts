@@ -59,10 +59,14 @@ export function extrairTipo(identificador: string): string | null {
   return null;
 }
 
-// Heuristic: does the identifier look like a loop address? Addresses are mostly
-// digits/dots/dashes with an optional leading L (laço). e.g. "L1.05", "1.05".
+// Heuristic: does the identifier look like a loop address? Addresses can be:
+//   - "laço.endereço": "L1.05", "1.05", "L1-05"
+//   - a bare address number: "26", "101" (many devices store just the number)
+// A single number is treated as an address so that answering the disambiguation
+// list (which shows "Setor — 26") with just "26" resolves.
 export function pareceEndereco(identificador: string): boolean {
-  return /^l?\s*\d{1,3}[.\-/]\d{1,3}$/i.test(identificador.trim());
+  const s = identificador.trim();
+  return /^l?\s*\d{1,3}[.\-/]\d{1,3}$/i.test(s) || /^l?\s*\d{1,4}$/i.test(s);
 }
 
 // Normalises an address for comparison: lowercase, strip a leading "L", unify
@@ -95,18 +99,46 @@ export function resolverDispositivo(
     // fall through: address-looking but unmatched → try setor+tipo below
   }
 
-  // 2) setor + tipo match.
+  // 2) setor (+ tipo, + trailing address number) match.
+  // The disambiguation list shows devices as "Setor — endereço" (e.g.
+  // "Armazém de Favas 1 — 26"). So a supervisor naturally replies with the whole
+  // thing: "Armazém de Favas 1 26" / "Armazém de Favas 1 - 26". We must accept it:
+  // split the words into a device-type keyword, a trailing ADDRESS number, and
+  // the remaining SECTOR words — then require the device to match all present.
   const tipo = extrairTipo(idTrim);
-  const palavras = tokens(idTrim).filter((t) => !PALAVRAS_TIPO[t]); // sector words
+  const semTipo = tokens(idTrim).filter((t) => !PALAVRAS_TIPO[t]);
+
+  // A purely-numeric token is treated as the address (e.g. "26"). The sector name
+  // itself can contain a number ("Armazém de Favas 1"), so we only peel off the
+  // LAST numeric token as the address and keep earlier ones as sector words.
+  let enderecoAlvo: string | null = null;
+  const palavras = [...semTipo];
+  for (let i = palavras.length - 1; i >= 0; i--) {
+    if (/^\d{1,4}$/.test(palavras[i])) { enderecoAlvo = palavras[i]; palavras.splice(i, 1); break; }
+  }
+
   let pool = candidatos;
   if (tipo) pool = pool.filter((c) => c.tipo_dispositivo === tipo);
   if (palavras.length > 0) {
     pool = pool.filter((c) => {
       if (!c.setor) return false;
       const setorTokens = new Set(tokens(c.setor));
-      // every sector word the supervisor typed must appear in the device's setor
+      // every remaining sector word the supervisor typed must appear in the setor
       return palavras.every((w) => setorTokens.has(w));
     });
+  }
+  // If an address number was given, keep only devices whose endereco matches it.
+  if (enderecoAlvo) {
+    const filtradoPorEnd = pool.filter(
+      (c) => c.endereco && normalizarEndereco(c.endereco) === normalizarEndereco(enderecoAlvo!)
+    );
+    // When the number is the ONLY term (no sector words, no type), it MUST be an
+    // address — if it matches nothing, that's "nenhum" (don't fall back to
+    // listing everything). When there ARE sector words, the number might be part
+    // of the sector name (e.g. "Armazém de Favas 1"), so only narrow if it hits.
+    const soNumero = palavras.length === 0 && !tipo;
+    if (filtradoPorEnd.length > 0) pool = filtradoPorEnd;
+    else if (soNumero) pool = [];
   }
 
   if (pool.length === 1) return { tipo: "unico", dispositivo: pool[0] };

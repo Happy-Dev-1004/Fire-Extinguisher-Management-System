@@ -76,3 +76,43 @@ describe("resolverDispositivo", () => {
     expect(r.tipo).toBe("nenhum");
   });
 });
+
+// Regression: real field case — sector "Armazém de Favas 1" whose devices store a
+// BARE numeric address ("26"). The disambiguation list shows "Armazém de Favas 1 —
+// 26"; the supervisor must be able to reply with the number or the whole label.
+describe("resolverDispositivo — bare numeric address (Armazém de Favas 1)", () => {
+  const favas = (id: string, endereco: string, tipo = "modulo_supervisao"): DispositivoCandidato => ({
+    id, central_id: "c3", central_numero: 3, laco: 1, endereco,
+    tipo_dispositivo: tipo, setor: "Armazém de Favas 1",
+  });
+  const P = [favas("d3", "3"), favas("d22", "22"), favas("d26", "26"), favas("d27", "27")];
+
+  it("resolves a bare address number ('26')", () => {
+    const r = resolverDispositivo("26", P);
+    expect(r.tipo).toBe("unico");
+    if (r.tipo === "unico") expect(r.dispositivo.id).toBe("d26");
+  });
+
+  it("resolves 'setor + número' as the list shows it ('Armazém de Favas 1 - 26')", () => {
+    const r = resolverDispositivo("Armazém de Favas 1 - 26", P);
+    expect(r.tipo).toBe("unico");
+    if (r.tipo === "unico") expect(r.dispositivo.id).toBe("d26");
+  });
+
+  it("resolves 'setor número' without separators ('Armazém de Favas 1 26')", () => {
+    const r = resolverDispositivo("Armazém de Favas 1 26", P);
+    expect(r.tipo).toBe("unico");
+    if (r.tipo === "unico") expect(r.dispositivo.id).toBe("d26");
+  });
+
+  it("still lists all when only the sector is given (no address)", () => {
+    const r = resolverDispositivo("Armazém de Favas 1", P);
+    expect(r.tipo).toBe("ambiguo");
+    if (r.tipo === "ambiguo") expect(r.candidatos).toHaveLength(4);
+  });
+
+  it("a bare number that matches nothing → nenhum (not a crash)", () => {
+    const r = resolverDispositivo("999", P);
+    expect(r.tipo).toBe("nenhum");
+  });
+});

@@ -216,8 +216,8 @@ export async function processarFotoDispositivo(deps: Deps, e: Entrada): Promise<
       });
       await deps.enviar(
         envio,
-        `❓ Encontrei ${r.candidatos.length} dispositivos para *${texto}*. ` +
-          "Seja mais específico (ex.: inclua o endereço):\n" +
+        `❓ Encontrei ${r.candidatos.length} dispositivos para *${texto}*.\n` +
+          "Responda com o *endereço* do dispositivo (o número após o traço):\n" +
           lista
       );
       return true;
