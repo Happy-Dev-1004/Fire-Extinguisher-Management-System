@@ -4,6 +4,7 @@ import {
   CheckCircle2, PlayCircle, StopCircle, ShieldCheck, Clock, Circle, FileText,
   Send, Users, CalendarDays, Flame, Search, Settings, AlertTriangle,
   Hash, Tag, Gauge, SignpostBig, Info, Bell, Activity, Image as ImageIcon, Droplets,
+  CalendarClock, Wrench, Plus,
 } from "lucide-react";
 
 type Aba = "inspetores" | "usuarios";
@@ -233,9 +234,10 @@ function GuiaInspetoresFase2() {
         <Comando>RDO</Comando>
         <p className="mt-3">
           O sistema faz <strong>uma pergunta de cada vez</strong> (data, responsável, período, efetivo,
-          dispositivos instalados, etc.). Basta responder cada uma. No final, envie as
+          atividades, etc.). Basta responder cada uma. No final, envie as
           <strong> fotos do dia</strong> e escreva <Inline>pronto</Inline> para concluir.
         </p>
+        <Nota>Você <strong>não</strong> precisa contar os dispositivos instalados no dia — o sistema conta sozinho, a partir dos dispositivos marcados como instalados no painel naquela data.</Nota>
         <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
           <div className="flex items-start gap-2.5 rounded-lg border px-3 py-2.5 border-gray-200 bg-gray-50/60 dark:border-gray-800 dark:bg-gray-800/40">
             <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5 text-gray-400" />
@@ -516,12 +518,12 @@ const ARTIGOS: Artigo[] = [
       <div className="space-y-3">
         <p>A Fase 2 acompanha a <strong>instalação do sistema de alarme de incêndio</strong> nas 4 centrais. O fluxo é:</p>
         <ol className="list-decimal pl-5 space-y-1.5">
-          <li>A equipe de alarme envia, pelo WhatsApp, o <strong>RDO</strong> e as <strong>fotos dos dispositivos</strong> (veja a aba "Para inspetores" → Fase 2).</li>
-          <li>Cada dispositivo fotografado passa a <strong>instalado</strong> e aparece no <strong>registro fotográfico</strong>.</li>
-          <li>O painel mostra o <strong>progresso</strong> por central e laço, e as <strong>lacunas</strong> do projeto (o que falta cadastrar).</li>
-          <li>Os <strong>RDOs</strong> ficam listados, com PDF, prévia, fotos e envio aos destinatários.</li>
+          <li>Os dispositivos são <strong>cadastrados</strong> (importados/adicionados) — todos começam como <strong>Pendente</strong> (não instalado).</li>
+          <li>Ao instalar, a equipe envia a <strong>foto do dispositivo</strong> pelo WhatsApp — ela é guardada e o dispositivo passa a <strong>instalado</strong> (ou marque o status na tela).</li>
+          <li>O painel mostra o <strong>progresso da instalação</strong> por central e por tipo, e você distingue <strong>instalados × não instalados</strong> na busca.</li>
+          <li>A equipe também envia o <strong>RDO</strong> (relatório diário), e o <strong>Cronograma</strong> acompanha os prazos de entrega por área.</li>
         </ol>
-        <Nota>Tudo da Fase 2 fica no menu lateral, na seção <strong>Fase 2 · Alarme de incêndio</strong> (Progresso, Registro fotográfico, RDOs).</Nota>
+        <Nota>Tudo da Fase 2 fica no menu lateral, na seção <strong>Fase 2 · Alarme de incêndio</strong> (Progresso, Cronograma, Registro fotográfico, RDOs).</Nota>
       </div>
     ),
   },
@@ -529,26 +531,29 @@ const ARTIGOS: Artigo[] = [
     id: "f2-progresso",
     Icon: Activity,
     titulo: "Progresso da instalação",
-    resumo: "Andamento por central e laço, e lacunas do projeto.",
+    resumo: "Andamento por central e por tipo, e como ver instalados × não instalados.",
     conteudo: (
       <div className="space-y-2">
-        <LinhaArtigo Icon={Activity}>Veja o andamento geral e <strong>por central e laço</strong>: quantos dispositivos estão pendente / instalado / endereçado / testado.</LinhaArtigo>
-        <LinhaArtigo Icon={AlertTriangle}>As <strong>lacunas do projeto</strong> mostram, por tipo (detector, acionador, sirene…), quanto já foi cadastrado e quanto falta.</LinhaArtigo>
-        <LinhaArtigo Icon={Search}>Use a <strong>busca</strong> com filtros (central, tipo, setor, status) e <strong>exporte</strong> em PDF ou CSV.</LinhaArtigo>
-        <Nota>Enquanto o mapeamento de endereços, módulos e isoladores não terminar, eles aparecem como <strong>pendentes</strong> — é o esperado.</Nota>
+        <LinhaArtigo Icon={Activity}>Cada dispositivo tem um <strong>status de instalação</strong>: <strong>Pendente → Instalado → Endereçado → Testado</strong>. <strong>Pendente = ainda não instalado</strong>; os demais já estão instalados.</LinhaArtigo>
+        <LinhaArtigo Icon={Activity}>Os cards <strong>"Instalação por central"</strong> e <strong>"Instalação por tipo"</strong> mostram quanto de cada um já foi <strong>instalado</strong> (não é cadastro — é instalação real).</LinhaArtigo>
+        <LinhaArtigo Icon={Search}>Em <strong>Buscar dispositivos</strong>, distinga instalados de não instalados de 3 formas: os <strong>filtros rápidos</strong> "Não instalados" / "Instalados" / "Com foto"; a coluna <strong>"Instalado?"</strong> (Sim/Não em cada linha); e os <strong>contadores</strong> Pendente/Instalado/Endereçado/Testado no topo.</LinhaArtigo>
+        <LinhaArtigo Icon={ImageIcon}>Na coluna <strong>"Fotos"</strong>, clique no número para <strong>ver as fotos da instalação</strong> daquele dispositivo (galeria + tela cheia).</LinhaArtigo>
+        <LinhaArtigo Icon={Search}>Combine com os filtros (central, tipo, setor) e <strong>exporte</strong> em PDF ou CSV — ex.: "não instalados da Central 3".</LinhaArtigo>
+        <Nota>Importar os dispositivos <strong>não</strong> marca nada como instalado: todo dispositivo cadastrado começa como <strong>Pendente</strong>. Ele só vira "instalado" quando a foto é enviada pelo WhatsApp <strong>ou</strong> quando alguém muda o status na tela.</Nota>
       </div>
     ),
   },
   {
     id: "f2-fotos",
     Icon: ImageIcon,
-    titulo: "Registro fotográfico dos dispositivos",
-    resumo: "Galeria por data, adicionar e remover fotos.",
+    titulo: "Fotos dos dispositivos: onde ver e como funcionam",
+    resumo: "Fotos comprovam a instalação — veja pela busca ou por data.",
     conteudo: (
       <div className="space-y-2">
-        <LinhaArtigo Icon={CalendarDays}>Em <strong>Registro fotográfico → Por data</strong>, escolha o dia para ver os dispositivos instalados/fotografados.</LinhaArtigo>
-        <LinhaArtigo Icon={Camera}>Clique num dispositivo para abrir a <strong>galeria</strong>. Lá você pode <strong>Adicionar fotos</strong> manualmente e <strong>remover</strong> qualquer foto.</LinhaArtigo>
-        <LinhaArtigo Icon={ImageIcon}>Fotos enviadas pelo WhatsApp sem identificar o dispositivo ficam na <strong>revisão</strong> para serem atribuídas.</LinhaArtigo>
+        <LinhaArtigo Icon={Camera}>A <strong>foto é a prova da instalação</strong>: quando o instalador envia a foto do dispositivo pelo WhatsApp, ela é <strong>guardada</strong> e o dispositivo passa automaticamente para <strong>instalado</strong> (com a data do dia).</LinhaArtigo>
+        <LinhaArtigo Icon={Search}>Para ver as fotos de um dispositivo específico: <strong>Progresso → Buscar dispositivos</strong>, e clique no número na coluna <strong>"Fotos"</strong> — abre a galeria daquele dispositivo.</LinhaArtigo>
+        <LinhaArtigo Icon={CalendarDays}>Para ver por dia: <strong>Registro fotográfico → Por data</strong> lista os dispositivos instalados/fotografados naquele dia. Clique num deles para <strong>Adicionar</strong> ou <strong>remover</strong> fotos manualmente.</LinhaArtigo>
+        <LinhaArtigo Icon={ImageIcon}>Fotos enviadas pelo WhatsApp <strong>sem identificar</strong> o dispositivo não são perdidas — ficam na <strong>revisão</strong> para serem atribuídas.</LinhaArtigo>
         <Nota>A aba <strong>Armazenamento</strong> mostra quanto espaço as fotos ocupam (nada é apagado automaticamente).</Nota>
       </div>
     ),
@@ -564,6 +569,34 @@ const ARTIGOS: Artigo[] = [
         <LinhaArtigo Icon={Send}><strong>Enviar</strong> manda o PDF aos destinatários da unidade <Inline>RDO</Inline> (cadastre-os em Destinatários) por WhatsApp e/ou e-mail.</LinhaArtigo>
         <LinhaArtigo Icon={CheckCircle2}><strong>Excluir</strong> remove o RDO das listas (mantido no histórico para auditoria).</LinhaArtigo>
         <Nota>A prévia é leve (sem fotos) para abrir rápido; o botão <strong>PDF</strong> baixa a versão completa com as fotos.</Nota>
+      </div>
+    ),
+  },
+  {
+    id: "f2-dispositivos",
+    Icon: Wrench,
+    titulo: "Adicionar, editar e marcar dispositivos como instalados",
+    resumo: "Gerenciar dispositivos e mudar o status na tela (sem WhatsApp).",
+    conteudo: (
+      <div className="space-y-2">
+        <LinhaArtigo Icon={Plus}>Em <strong>Progresso → Buscar dispositivos</strong>, use <strong>"Adicionar dispositivo"</strong> para cadastrar um novo (central, tipo e setor obrigatórios; laço e endereço podem vir depois).</LinhaArtigo>
+        <LinhaArtigo Icon={CheckCircle2}>Para <strong>marcar como instalado sem WhatsApp</strong>: clique no <strong>lápis (editar)</strong> do dispositivo e mude o campo <strong>Status</strong> (Pendente → Instalado / Endereçado / Testado). Salve.</LinhaArtigo>
+        <LinhaArtigo Icon={Camera}>Também dá para anexar/remover fotos manualmente pela galeria (Registro fotográfico → Por data).</LinhaArtigo>
+        <Nota>Há duas formas de um dispositivo virar "instalado": <strong>(1)</strong> a foto chega pelo WhatsApp (automático), ou <strong>(2)</strong> alguém muda o status aqui na tela. Enquanto o WhatsApp estiver fora do ar, use a forma manual.</Nota>
+      </div>
+    ),
+  },
+  {
+    id: "f2-cronograma",
+    Icon: CalendarClock,
+    titulo: "Cronograma de execução (datas por área)",
+    resumo: "Defina prazos por área e acompanhe no prazo × atrasado; exporte em PDF.",
+    conteudo: (
+      <div className="space-y-2">
+        <LinhaArtigo Icon={CalendarClock}>Em <strong>Alarme → Cronograma</strong>, defina uma <strong>data de entrega por área</strong> (central + setor). Digite a data e clique no <strong>disquete</strong> para salvar.</LinhaArtigo>
+        <LinhaArtigo Icon={Activity}>Cada área mostra o <strong>progresso de instalação</strong> e a <strong>situação</strong>: Concluído / No prazo / Atrasado / Sem data (as atrasadas ficam em vermelho).</LinhaArtigo>
+        <LinhaArtigo Icon={FileText}>Use <strong>"Baixar PDF"</strong> ou <strong>"Pré-visualizar"</strong> para gerar o cronograma no formato oficial e apresentar ao cliente.</LinhaArtigo>
+        <Nota>O progresso do cronograma vem dos dispositivos: "entregue" = <strong>testado</strong>. À medida que os dispositivos avançam de status, o cronograma se atualiza sozinho.</Nota>
       </div>
     ),
   },
