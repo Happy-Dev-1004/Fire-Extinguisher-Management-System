@@ -590,6 +590,30 @@ export const alarmeApi = {
     return downloadBlob(`/alarme/cronograma/pdf`, undefined, `cronograma_alarme_${ts}.pdf`, "GET");
   },
 
+  // Manutenção preventiva — visitas periódicas (checklist de 7 etapas).
+  manutencaoListar: () =>
+    request<{ visitas: VisitaManutencao[] }>("GET", "/alarme/manutencao"),
+  manutencaoObter: (id: string) =>
+    request<VisitaManutencao>("GET", `/alarme/manutencao/${id}`),
+  manutencaoCriar: (body: Partial<VisitaManutencao>) =>
+    request<VisitaManutencao>("POST", "/alarme/manutencao", body),
+  manutencaoEditar: (id: string, body: Partial<VisitaManutencao>) =>
+    request<VisitaManutencao>("PUT", `/alarme/manutencao/${id}`, body),
+  manutencaoVerificar: (id: string, verificado = true) =>
+    request<VisitaManutencao>("POST", `/alarme/manutencao/${id}/verificar`, { verificado }),
+  manutencaoAdicionarFotos: (id: string, fotos: string[]) =>
+    request<VisitaManutencao>("POST", `/alarme/manutencao/${id}/fotos`, { fotos }),
+  manutencaoRemoverFoto: (id: string, url: string) =>
+    request<VisitaManutencao>("DELETE", `/alarme/manutencao/${id}/fotos`, { url }),
+  manutencaoRemover: (id: string) =>
+    request<void>("DELETE", `/alarme/manutencao/${id}`),
+  manutencaoPreview: (id: string) =>
+    previewBlobGet(`/alarme/manutencao/${id}/pdf?preview=true`),
+  baixarManutencao: (id: string, central: number | null) => {
+    const ts = new Date().toISOString().slice(0, 10);
+    return downloadBlob(`/alarme/manutencao/${id}/pdf`, undefined, `manutencao_central${central ?? ""}_${ts}.pdf`, "GET");
+  },
+
   busca: (filtros: FiltrosAlarme) => {
     const qs = new URLSearchParams();
     for (const [k, v] of Object.entries(filtros)) {
@@ -622,6 +646,47 @@ export interface LinhaReconciliacao {
   tipo: string; label: string; cadastrados: number; esperado: number;
   faltam: number; excedente: number; completo: boolean;
 }
+// ── Manutenção preventiva do alarme (Fase 2) ─────────────────────────────────
+export type StatusVisita = "rascunho" | "aguardando_verificacao" | "verificado";
+export type SituacaoManutencao = "atencao" | "ok" | "indeterminado";
+export type StatusEtapa = "OK" | "NC" | "N.A" | "";
+
+export interface VisitaManutencao {
+  id: string;
+  central_id: string;
+  central_numero: number | null;
+  central_nome: string | null;
+  data_visita: string | null;
+  tecnicos: string | null;
+  responsavel: string | null;
+  e1_planejamento: StatusEtapa | null;
+  e2_preparacao: StatusEtapa | null;
+  e3_inspecao_visual: StatusEtapa | null;
+  e4_testes: StatusEtapa | null;
+  e5_verificacoes: StatusEtapa | null;
+  e6_ajustes: StatusEtapa | null;
+  e7_relatorio: StatusEtapa | null;
+  observacoes_etapas: Record<string, string>;
+  nao_conformidades: string | null;
+  recomendacoes: string | null;
+  observacoes: string | null;
+  fotos: string[];
+  status: StatusVisita;
+  verificado_em: string | null;
+  situacao: SituacaoManutencao;
+}
+
+// The 7 flowchart steps (label + key), mirrored on the frontend for the form.
+export const ETAPAS_MANUTENCAO: { chave: keyof VisitaManutencao; rotulo: string }[] = [
+  { chave: "e1_planejamento",    rotulo: "Planejamento da visita" },
+  { chave: "e2_preparacao",      rotulo: "Chegada e preparação" },
+  { chave: "e3_inspecao_visual", rotulo: "Inspeção visual" },
+  { chave: "e4_testes",          rotulo: "Testes funcionais" },
+  { chave: "e5_verificacoes",    rotulo: "Verificações técnicas" },
+  { chave: "e6_ajustes",         rotulo: "Ajustes e correções" },
+  { chave: "e7_relatorio",       rotulo: "Relatório e encerramento" },
+];
+
 export type SituacaoCronograma = "concluido" | "no_prazo" | "atrasado" | "sem_data";
 export interface AreaCronograma {
   central_id: string; central_numero: number | null; central_nome: string | null;

@@ -13,6 +13,7 @@
 //   GET    /alarme/cronograma                      — execution schedule per área (central+setor)
 //   GET    /alarme/cronograma/pdf                  — schedule as an official PDF (?preview)
 //   PUT    /alarme/cronograma                      — set/clear an área's target date
+//   /alarme/manutencao …                            — preventive-maintenance visits (CRUD + verificar + fotos + PDF)
 
 import { Router, type Request, type Response } from "express";
 import { z } from "zod";
@@ -27,6 +28,8 @@ import { buscarDispositivos, FiltrosAlarmeSchema } from "../alarme/buscaAlarme";
 import { dispositivosParaCsv, dispositivosParaPdf } from "../alarme/relatorioAlarme";
 import { montarCronograma } from "../alarme/cronograma";
 import { gerarCronogramaPdf } from "../ficha/gerarCronogramaPdf";
+import { ETAPAS_MANUTENCAO, calcularSituacaoManutencao } from "../alarme/manutencao";
+import { gerarManutencaoPdf, type VisitaManutencaoPdf } from "../ficha/gerarManutencaoPdf";
 
 const router = Router();
 const log = logger.child({ rota: "/alarme" });
@@ -536,6 +539,192 @@ router.put("/cronograma", async (req: Request, res: Response) => {
   if (error) return res.status(400).json({ erro: error.message });
   log.info({ central_id, setor, data_prevista: row.data_prevista, by: req.admin?.email }, "cronograma de área atualizado");
   return res.json(data);
+});
+
+// ── Manutenção preventiva do alarme (visitas periódicas) ─────────────────────
+// One visit = one central, with the 7-step flowchart checklist. Mirrors the
+// periodic-inspection model of Fases 1/3 (registro → verificação → PDF → envio).
+//   GET    /alarme/manutencao                 — list visits (+ situação, central)
+//   GET    /alarme/manutencao/:id             — one visit
+//   POST   /alarme/manutencao                 — create a visit
+//   PUT    /alarme/manutencao/:id             — edit a visit
+//   POST   /alarme/manutencao/:id/verificar   — mark verificado / undo
+//   POST   /alarme/manutencao/:id/fotos       — add photos (base64)
+//   DELETE /alarme/manutencao/:id/fotos       — remove one photo by url
+//   DELETE /alarme/manutencao/:id             — delete a visit
+//   GET    /alarme/manutencao/:id/pdf         — official report PDF (?preview)
+
+const ETAPA_ENUM = z.enum(["OK", "NC", "N.A", ""]).optional();
+const ManutencaoBodySchema = z.object({
+  central_id:        z.string().uuid().optional(),
+  data_visita:       z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+  tecnicos:          z.string().optional(),
+  responsavel:       z.string().optional(),
+  e1_planejamento:   ETAPA_ENUM,
+  e2_preparacao:     ETAPA_ENUM,
+  e3_inspecao_visual:ETAPA_ENUM,
+  e4_testes:         ETAPA_ENUM,
+  e5_verificacoes:   ETAPA_ENUM,
+  e6_ajustes:        ETAPA_ENUM,
+  e7_relatorio:      ETAPA_ENUM,
+  observacoes_etapas:z.record(z.string(), z.string()).optional(),
+  nao_conformidades: z.string().optional(),
+  recomendacoes:     z.string().optional(),
+  observacoes:       z.string().optional(),
+});
+
+// Shapes a DB row for the API: adds situação + the joined central number/name.
+function mapVisita(v: any) {
+  return {
+    ...v,
+    central_numero: v.centrais?.numero ?? null,
+    central_nome:   v.centrais?.nome ?? null,
+    situacao:       calcularSituacaoManutencao(v),
+  };
+}
+
+router.get("/manutencao", async (_req: Request, res: Response) => {
+  const { data, error } = await supabaseAdmin
+    .from("visitas_manutencao_alarme")
+    .select("*, centrais!inner(numero, nome)")
+    .order("data_visita", { ascending: false, nullsFirst: false })
+    .order("created_at", { ascending: false });
+  if (error) return res.status(500).json({ erro: error.message });
+  return res.json({ visitas: (data ?? []).map(mapVisita) });
+});
+
+router.get("/manutencao/:id", async (req: Request, res: Response) => {
+  const { data, error } = await supabaseAdmin
+    .from("visitas_manutencao_alarme").select("*, centrais!inner(numero, nome)")
+    .eq("id", req.params.id).maybeSingle();
+  if (error) return res.status(500).json({ erro: error.message });
+  if (!data) return res.status(404).json({ erro: "Visita não encontrada." });
+  return res.json(mapVisita(data));
+});
+
+router.post("/manutencao", async (req: Request, res: Response) => {
+  const parsed = ManutencaoBodySchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ erro: "Dados inválidos.", detalhes: parsed.error.flatten().fieldErrors });
+  if (!parsed.data.central_id) return res.status(400).json({ erro: "central_id é obrigatório." });
+
+  const preenchida = ETAPAS_MANUTENCAO.some((e) => (parsed.data as any)[e.chave]);
+  const novo = {
+    ...parsed.data,
+    status: preenchida ? "aguardando_verificacao" : "rascunho",
+    fotos: [] as string[],
+  };
+  const { data, error } = await supabaseAdmin
+    .from("visitas_manutencao_alarme").insert(novo).select("*, centrais!inner(numero, nome)").maybeSingle();
+  if (error) return res.status(400).json({ erro: error.message });
+  log.info({ id: (data as any)?.id, by: req.admin?.email }, "visita de manutenção criada");
+  return res.status(201).json(mapVisita(data));
+});
+
+router.put("/manutencao/:id", async (req: Request, res: Response) => {
+  const parsed = ManutencaoBodySchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ erro: "Dados inválidos.", detalhes: parsed.error.flatten().fieldErrors });
+  const updates: Record<string, unknown> = { ...parsed.data };
+
+  // Filling any step moves a rascunho to 'aguardando_verificacao'.
+  const { data: atual } = await supabaseAdmin
+    .from("visitas_manutencao_alarme").select("status").eq("id", req.params.id).maybeSingle();
+  const preencheuEtapa = ETAPAS_MANUTENCAO.some((e) => e.chave in parsed.data);
+  if (preencheuEtapa && (atual as any)?.status === "rascunho") updates.status = "aguardando_verificacao";
+
+  const { data, error } = await supabaseAdmin
+    .from("visitas_manutencao_alarme").update(updates).eq("id", req.params.id)
+    .select("*, centrais!inner(numero, nome)").maybeSingle();
+  if (error) return res.status(400).json({ erro: error.message });
+  if (!data) return res.status(404).json({ erro: "Visita não encontrada." });
+  log.info({ id: req.params.id, by: req.admin?.email }, "visita de manutenção editada");
+  return res.json(mapVisita(data));
+});
+
+router.post("/manutencao/:id/verificar", async (req: Request, res: Response) => {
+  const parsed = z.object({ verificado: z.boolean().default(true) }).safeParse(req.body ?? {});
+  const verificar = parsed.success ? parsed.data.verificado : true;
+  const updates = verificar
+    ? { status: "verificado", verificado_por: req.admin?.id ?? null, verificado_em: new Date().toISOString() }
+    : { status: "aguardando_verificacao", verificado_por: null, verificado_em: null };
+  const { data, error } = await supabaseAdmin
+    .from("visitas_manutencao_alarme").update(updates).eq("id", req.params.id)
+    .neq("status", "rascunho").select("*, centrais!inner(numero, nome)").maybeSingle();
+  if (error) return res.status(400).json({ erro: error.message });
+  if (!data) return res.status(409).json({ erro: "Visita ainda em rascunho — preencha o checklist antes de verificar." });
+  return res.json(mapVisita(data));
+});
+
+const FotosVisitaSchema = z.object({ fotos: z.array(z.string().min(1)).min(1).max(10) });
+router.post("/manutencao/:id/fotos", async (req: Request, res: Response) => {
+  const parsed = FotosVisitaSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ erro: "Envie de 1 a 10 imagens em base64." });
+  const id = String(req.params.id);
+  const { data: atual } = await supabaseAdmin
+    .from("visitas_manutencao_alarme").select("id, fotos").eq("id", id).maybeSingle();
+  if (!atual) return res.status(404).json({ erro: "Visita não encontrada." });
+
+  const novasUrls: string[] = [];
+  let i = 0;
+  for (const b64 of parsed.data.fotos) {
+    const url = await uploadFotoBase64(`manutencao/${id}`, b64, `${Date.now()}_${i++}`);
+    if (url) novasUrls.push(url);
+  }
+  if (novasUrls.length === 0) return res.status(502).json({ erro: "Falha ao enviar as imagens." });
+  const fotos = [...(((atual as any).fotos as string[]) ?? []), ...novasUrls];
+  const { data, error } = await supabaseAdmin
+    .from("visitas_manutencao_alarme").update({ fotos }).eq("id", id)
+    .select("*, centrais!inner(numero, nome)").maybeSingle();
+  if (error) return res.status(400).json({ erro: error.message });
+  return res.json(mapVisita(data));
+});
+
+router.delete("/manutencao/:id/fotos", async (req: Request, res: Response) => {
+  const parsed = z.object({ url: z.string().min(1) }).safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ erro: "Informe a 'url' da foto a remover." });
+  const id = String(req.params.id);
+  const { data: atual } = await supabaseAdmin
+    .from("visitas_manutencao_alarme").select("id, fotos").eq("id", id).maybeSingle();
+  if (!atual) return res.status(404).json({ erro: "Visita não encontrada." });
+  const fotos = (((atual as any).fotos as string[]) ?? []).filter((u) => u !== parsed.data.url);
+  const { data, error } = await supabaseAdmin
+    .from("visitas_manutencao_alarme").update({ fotos }).eq("id", id)
+    .select("*, centrais!inner(numero, nome)").maybeSingle();
+  if (error) return res.status(400).json({ erro: error.message });
+  return res.json(mapVisita(data));
+});
+
+router.delete("/manutencao/:id", async (req: Request, res: Response) => {
+  const { error } = await supabaseAdmin.from("visitas_manutencao_alarme").delete().eq("id", req.params.id);
+  if (error) return res.status(400).json({ erro: error.message });
+  log.info({ id: req.params.id, by: req.admin?.email }, "visita de manutenção removida");
+  return res.status(204).end();
+});
+
+router.get("/manutencao/:id/pdf", async (req: Request, res: Response) => {
+  const { data, error } = await supabaseAdmin
+    .from("visitas_manutencao_alarme").select("*, centrais!inner(numero, nome)")
+    .eq("id", req.params.id).maybeSingle();
+  if (error) return res.status(500).json({ erro: error.message });
+  if (!data) return res.status(404).json({ erro: "Visita não encontrada." });
+  const v = data as any;
+  const dados: VisitaManutencaoPdf = {
+    central_numero: v.centrais?.numero ?? null,
+    central_nome:   v.centrais?.nome ?? null,
+    data_visita:    v.data_visita ?? null,
+    tecnicos:       v.tecnicos ?? null,
+    responsavel:    v.responsavel ?? null,
+    etapas:         Object.fromEntries(ETAPAS_MANUTENCAO.map((e) => [e.chave, v[e.chave] ?? ""])) as any,
+    observacoes_etapas: v.observacoes_etapas ?? {},
+    nao_conformidades: v.nao_conformidades ?? null,
+    recomendacoes:  v.recomendacoes ?? null,
+    observacoes:    v.observacoes ?? null,
+    fotos:          Array.isArray(v.fotos) ? v.fotos : [],
+  };
+  const pdf = await gerarManutencaoPdf(dados, { semFotos: req.query.preview === "true" });
+  const ts = new Date().toISOString().slice(0, 10);
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `inline; filename="manutencao_central${dados.central_numero ?? ""}_${ts}.pdf"`);
+  return res.send(pdf);
 });
 
 export default router;

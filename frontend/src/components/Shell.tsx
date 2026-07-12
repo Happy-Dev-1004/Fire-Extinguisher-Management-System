@@ -7,7 +7,7 @@ import { NotificationBell } from "./NotificationBell";
 import {
   LayoutDashboard, Flame, HardHat, Send, Settings, Users,
   LogOut, Menu, X, ChevronRight, Shield, FileText, Search, HelpCircle, Camera, Activity,
-  Sun, Moon, Droplets, CalendarClock,
+  Sun, Moon, Droplets, CalendarClock, Wrench,
 } from "lucide-react";
 
 interface NavItem {
@@ -42,6 +42,7 @@ const NAV_GROUPS: NavGroup[] = [
     titulo: "Fase 2 · Alarme de incêndio",
     items: [
       { to: "/alarme",            label: "Progresso",            Icon: Activity },
+      { to: "/alarme/manutencao", label: "Manutenção",           Icon: Wrench },
       { to: "/alarme/cronograma", label: "Cronograma",           Icon: CalendarClock },
       { to: "/alarme/fotos",      label: "Registro fotográfico", Icon: Camera },
       { to: "/alarme/rdos",       label: "RDOs",                 Icon: FileText },
