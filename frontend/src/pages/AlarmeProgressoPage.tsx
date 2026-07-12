@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
+import { Link } from "react-router-dom";
 import {
   alarmeApi,
   type RelatorioProgresso, type ContagemStatus, type GrupoCentral,
@@ -186,14 +187,29 @@ function CentralCard({ c }: { c: GrupoCentral }) {
     : "Sem central definida";
   return (
     <div className="card p-4">
-      <button onClick={() => setAberto((v) => !v)} className="w-full flex items-center gap-3 text-left">
-        {aberto ? <ChevronDown className="w-4 h-4 text-gray-400" /> : <ChevronRight className="w-4 h-4 text-gray-400" />}
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold text-gray-900">{titulo}</p>
-          <p className="text-xs text-gray-400">{c.contagem.total} dispositivo(s)</p>
-        </div>
+      <div className="flex items-center gap-3">
+        <button onClick={() => setAberto((v) => !v)} className="shrink-0" title={aberto ? "Recolher laços" : "Ver laços"}>
+          {aberto ? <ChevronDown className="w-4 h-4 text-gray-400" /> : <ChevronRight className="w-4 h-4 text-gray-400" />}
+        </button>
+        {/* Clicking the central opens its device list (like Fases 1/3). */}
+        {c.central_numero != null ? (
+          <Link to={`/alarme/central/${c.central_numero}`} className="flex-1 min-w-0 group">
+            <p className="text-sm font-semibold text-gray-900 group-hover:text-brand-600 transition-colors">{titulo}</p>
+            <p className="text-xs text-gray-400">{c.contagem.total} dispositivo(s) · ver dispositivos</p>
+          </Link>
+        ) : (
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-gray-900">{titulo}</p>
+            <p className="text-xs text-gray-400">{c.contagem.total} dispositivo(s)</p>
+          </div>
+        )}
         <div className="w-40 sm:w-64 shrink-0"><BarraStatus c={c.contagem} /></div>
-      </button>
+        {c.central_numero != null && (
+          <Link to={`/alarme/central/${c.central_numero}`} className="shrink-0 text-gray-300 hover:text-brand-600" title="Ver dispositivos">
+            <ChevronRight className="w-4 h-4" />
+          </Link>
+        )}
+      </div>
       {aberto && (
         <div className="mt-4 pl-7 space-y-3 border-t border-gray-100 pt-3">
           {c.lacos.map((l) => (

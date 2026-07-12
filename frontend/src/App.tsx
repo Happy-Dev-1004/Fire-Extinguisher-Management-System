@@ -12,6 +12,7 @@ import { RegiaoDetailPage } from "./pages/RegiaoDetailPage";
 import { AjudaPage } from "./pages/AjudaPage";
 import { ExtintoresHubPage } from "./pages/ExtintoresHubPage";
 import { AlarmeHubPage } from "./pages/AlarmeHubPage";
+import { CentralDetailPage } from "./pages/CentralDetailPage";
 import { HidrantesHubPage } from "./pages/HidrantesHubPage";
 import { UnidadeHidranteDetailPage } from "./pages/UnidadeHidranteDetailPage";
 import { HidranteDetailPage } from "./pages/HidranteDetailPage";
@@ -45,6 +46,8 @@ export function App() {
               <Route path="/alarme/cronograma" element={<AlarmeHubPage />} />
               <Route path="/alarme/fotos" element={<AlarmeHubPage />} />
               <Route path="/alarme/rdos" element={<AlarmeHubPage />} />
+              {/* Standalone central device list (click-through from Progresso) */}
+              <Route path="/alarme/central/:numero" element={<CentralDetailPage />} />
               {/* Fase 3 hub — tabs (Inventário / Fichas / Busca) keyed by path.
                   Tab + unit routes must precede /hidrantes/:id so "fichas",
                   "busca", "unidade" aren't captured as an id. */}
