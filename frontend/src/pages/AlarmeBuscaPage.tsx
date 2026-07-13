@@ -219,47 +219,47 @@ export function AlarmeBuscaPage() {
             <div className="overflow-x-auto -mx-2">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="text-left text-xs text-gray-500 border-b border-gray-200">
-                    <th className="px-2 py-2">Central</th>
-                    <th className="px-2 py-2">Laço</th>
-                    <th className="px-2 py-2">Endereço</th>
-                    <th className="px-2 py-2">Tipo</th>
-                    <th className="px-2 py-2">Setor</th>
-                    <th className="px-2 py-2 text-center">Instalado?</th>
-                    <th className="px-2 py-2">Status</th>
-                    <th className="px-2 py-2 text-center">Fotos</th>
-                    <th className="px-2 py-2 text-right">Ações</th>
+                  <tr>
+                    <th className="table-th">Central</th>
+                    <th className="table-th">Laço</th>
+                    <th className="table-th">Endereço</th>
+                    <th className="table-th">Tipo</th>
+                    <th className="table-th">Setor</th>
+                    <th className="table-th text-center">Instalado?</th>
+                    <th className="table-th">Status</th>
+                    <th className="table-th text-center">Fotos</th>
+                    <th className="table-th text-right">Ações</th>
                   </tr>
                 </thead>
                 <tbody>
                   {pagina.resultados.map((d: DispositivoBusca) => {
                     const instalado = d.status_instalacao != null && d.status_instalacao !== "pendente";
                     return (
-                      <tr key={d.id} className={`border-b border-gray-100 ${!instalado ? "bg-gray-50/40" : ""}`}>
-                        <td className="px-2 py-2">{d.central_numero != null ? `C${d.central_numero}` : "—"}</td>
-                        <td className="px-2 py-2">{d.laco ?? "—"}</td>
-                        <td className="px-2 py-2">{d.endereco ?? <span className="text-amber-600">pendente</span>}</td>
-                        <td className="px-2 py-2">{d.tipo_label}</td>
-                        <td className="px-2 py-2 max-w-[140px] truncate">{d.setor ?? "—"}</td>
-                        <td className="px-2 py-2 text-center">
+                      <tr key={d.id} className={`table-row ${!instalado ? "bg-gray-50/60" : ""}`}>
+                        <td className="table-td">{d.central_numero != null ? `C${d.central_numero}` : "—"}</td>
+                        <td className="table-td">{d.laco ?? "—"}</td>
+                        <td className="table-td">{d.endereco ?? <span className="text-amber-600 dark:text-amber-400">pendente</span>}</td>
+                        <td className="table-td">{d.tipo_label}</td>
+                        <td className="table-td max-w-[140px] truncate">{d.setor ?? "—"}</td>
+                        <td className="table-td text-center">
                           {instalado
-                            ? <span title="Instalado" className="inline-flex items-center gap-1 text-green-700 font-medium"><CheckCircle2 className="w-4 h-4" /> Sim</span>
+                            ? <span title="Instalado" className="inline-flex items-center gap-1 text-green-700 dark:text-green-400 font-medium"><CheckCircle2 className="w-4 h-4" /> Sim</span>
                             : <span title="Ainda não instalado" className="inline-flex items-center gap-1 text-gray-400"><Circle className="w-4 h-4" /> Não</span>}
                         </td>
-                        <td className="px-2 py-2">
+                        <td className="table-td">
                           <span className={`badge ${d.status_instalacao === "testado" ? "badge-green" : d.status_instalacao === "pendente" ? "badge-gray" : "badge-brand"}`}>{d.status_label}</span>
                         </td>
-                        <td className="px-2 py-2 text-center">
+                        <td className="table-td text-center">
                           {d.qtd_fotos > 0 ? (
-                            <button onClick={() => abrirGaleria(d)} title="Ver fotos da instalação" className="inline-flex items-center gap-1 text-brand-600 hover:text-brand-800 font-medium">
+                            <button onClick={() => abrirGaleria(d)} title="Ver fotos da instalação" className="inline-flex items-center gap-1 text-brand-600 dark:text-brand-400 hover:text-brand-800 font-medium">
                               <ImageIcon className="w-3.5 h-3.5" /> {d.qtd_fotos}
                             </button>
                           ) : <span className="text-gray-300">—</span>}
                         </td>
-                        <td className="px-2 py-2">
+                        <td className="table-td">
                           <div className="flex items-center justify-end gap-1">
                             <button onClick={() => abrirEditar(d.id)} title="Editar dispositivo" className="btn-ghost btn-sm p-1 text-gray-500 hover:text-gray-800"><Pencil className="w-3.5 h-3.5" /></button>
-                            <button onClick={() => remover(d)} disabled={removendoId === d.id} title="Remover dispositivo" className="btn-ghost btn-sm p-1 text-red-600 hover:text-red-700">
+                            <button onClick={() => remover(d)} disabled={removendoId === d.id} title="Remover dispositivo" className="btn-ghost btn-sm p-1 text-red-600 hover:text-red-700 dark:text-red-400">
                               {removendoId === d.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
                             </button>
                           </div>
@@ -268,7 +268,7 @@ export function AlarmeBuscaPage() {
                     );
                   })}
                   {pagina.resultados.length === 0 && (
-                    <tr><td colSpan={9} className="px-2 py-6 text-center text-gray-400">Nenhum dispositivo para os filtros.</td></tr>
+                    <tr><td colSpan={9} className="table-td text-center text-gray-400">Nenhum dispositivo para os filtros.</td></tr>
                   )}
                 </tbody>
               </table>

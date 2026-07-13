@@ -225,39 +225,39 @@ export function CentralDetailPage() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="bg-gray-50 border-b border-gray-200 text-left text-xs text-gray-600">
-                  <th className="px-3 py-2">Instalado?</th>
-                  <th className="px-3 py-2">Laço</th>
-                  <th className="px-3 py-2">Endereço</th>
-                  <th className="px-3 py-2">Tipo</th>
-                  <th className="px-3 py-2">Setor</th>
-                  <th className="px-3 py-2">Status</th>
-                  <th className="px-3 py-2 text-center">Fotos</th>
-                  <th className="px-3 py-2 text-right">Ações</th>
+                <tr>
+                  <th className="table-th">Instalado?</th>
+                  <th className="table-th">Laço</th>
+                  <th className="table-th">Endereço</th>
+                  <th className="table-th">Tipo</th>
+                  <th className="table-th">Setor</th>
+                  <th className="table-th">Status</th>
+                  <th className="table-th text-center">Fotos</th>
+                  <th className="table-th text-right">Ações</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody>
                 {visivel.map((d) => (
-                  <tr key={d.id} className={!instalado(d) ? "bg-gray-50/40" : ""}>
-                    <td className="px-3 py-2">
+                  <tr key={d.id} className={`table-row ${!instalado(d) ? "bg-gray-50/60" : ""}`}>
+                    <td className="table-td">
                       {instalado(d)
-                        ? <span className="inline-flex items-center gap-1 text-green-700 text-xs font-medium"><CheckCircle2 className="w-3.5 h-3.5" /> Sim</span>
+                        ? <span className="inline-flex items-center gap-1 text-green-700 dark:text-green-400 text-xs font-medium"><CheckCircle2 className="w-3.5 h-3.5" /> Sim</span>
                         : <span className="inline-flex items-center gap-1 text-gray-400 text-xs"><Circle className="w-3.5 h-3.5" /> Não</span>}
                     </td>
-                    <td className="px-3 py-2">{d.laco ?? "—"}</td>
-                    <td className="px-3 py-2">{d.endereco ?? <span className="text-amber-600">pendente</span>}</td>
-                    <td className="px-3 py-2">{d.tipo_label}</td>
-                    <td className="px-3 py-2 max-w-[160px] truncate" title={d.setor ?? ""}>{d.setor ?? "—"}</td>
-                    <td className="px-3 py-2"><span className={`badge ${d.status_instalacao === "testado" ? "badge-green" : d.status_instalacao === "pendente" ? "badge-gray" : "badge-brand"}`}>{STATUS_LABEL[d.status_instalacao ?? "pendente"]}</span></td>
-                    <td className="px-3 py-2 text-center">
-                      <button onClick={() => abrirGaleria(d)} className="inline-flex items-center gap-1 text-brand-600 hover:text-brand-700 text-xs" title="Ver fotos">
+                    <td className="table-td">{d.laco ?? "—"}</td>
+                    <td className="table-td">{d.endereco ?? <span className="text-amber-600 dark:text-amber-400">pendente</span>}</td>
+                    <td className="table-td">{d.tipo_label}</td>
+                    <td className="table-td max-w-[160px] truncate" title={d.setor ?? ""}>{d.setor ?? "—"}</td>
+                    <td className="table-td"><span className={`badge ${d.status_instalacao === "testado" ? "badge-green" : d.status_instalacao === "pendente" ? "badge-gray" : "badge-brand"}`}>{STATUS_LABEL[d.status_instalacao ?? "pendente"]}</span></td>
+                    <td className="table-td text-center">
+                      <button onClick={() => abrirGaleria(d)} className="inline-flex items-center gap-1 text-brand-600 dark:text-brand-400 hover:text-brand-700 text-xs" title="Ver fotos">
                         <ImageIcon className="w-3.5 h-3.5" /> {d.qtd_fotos}
                       </button>
                     </td>
-                    <td className="px-3 py-2">
+                    <td className="table-td">
                       <div className="flex items-center justify-end gap-1">
                         <button onClick={() => abrirEditar(d.id)} className="btn-ghost btn-sm p-1 text-gray-500 hover:text-gray-800" title="Editar"><Pencil className="w-3.5 h-3.5" /></button>
-                        <button onClick={() => remover(d)} disabled={removendoId === d.id} className="btn-ghost btn-sm p-1 text-red-600 hover:text-red-700" title="Remover">
+                        <button onClick={() => remover(d)} disabled={removendoId === d.id} className="btn-ghost btn-sm p-1 text-red-600 hover:text-red-700 dark:text-red-400" title="Remover">
                           {removendoId === d.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
                         </button>
                       </div>

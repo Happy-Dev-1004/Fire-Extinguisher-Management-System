@@ -12,9 +12,9 @@ import {
 } from "lucide-react";
 
 const SIT_META: Record<SituacaoManutencao, { label: string; badge: string; Icon: React.ElementType }> = {
-  atencao:       { label: "Não-conformidade", badge: "bg-red-100 text-red-800",   Icon: AlertTriangle },
-  ok:            { label: "OK",               badge: "bg-green-100 text-green-800", Icon: CheckCircle2 },
-  indeterminado: { label: "Incompleta",       badge: "bg-gray-100 text-gray-500",  Icon: HelpCircle },
+  atencao:       { label: "Não-conformidade", badge: "bg-red-100 text-red-800 dark:bg-red-500/20 dark:text-red-300",       Icon: AlertTriangle },
+  ok:            { label: "OK",               badge: "bg-green-100 text-green-800 dark:bg-green-500/20 dark:text-green-300", Icon: CheckCircle2 },
+  indeterminado: { label: "Incompleta",       badge: "bg-gray-100 text-gray-500 dark:bg-gray-700/40 dark:text-gray-300",   Icon: HelpCircle },
 };
 const STATUS_LABEL: Record<string, string> = {
   rascunho: "Rascunho", aguardando_verificacao: "Aguardando verificação", verificado: "Verificado",

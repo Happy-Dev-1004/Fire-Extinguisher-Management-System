@@ -13,10 +13,10 @@ import { toast } from "../components/Toast";
 
 // ── situação metadata (checklist-derived, no expiry) ──────────────────────────
 const SIT_META: Record<SituacaoHidrante, { label: string; badge: string }> = {
-  atencao:       { label: "Atenção",       badge: "bg-red-100 text-red-800" },
-  pendente:      { label: "Pendente",      badge: "bg-amber-100 text-amber-800" },
-  ok:            { label: "OK",            badge: "bg-green-100 text-green-800" },
-  indeterminado: { label: "Indeterminado", badge: "bg-gray-100 text-gray-500" },
+  atencao:       { label: "Atenção",       badge: "bg-red-100 text-red-800 dark:bg-red-500/20 dark:text-red-300" },
+  pendente:      { label: "Pendente",      badge: "bg-amber-100 text-amber-800 dark:bg-amber-500/20 dark:text-amber-300" },
+  ok:            { label: "OK",            badge: "bg-green-100 text-green-800 dark:bg-green-500/20 dark:text-green-300" },
+  indeterminado: { label: "Indeterminado", badge: "bg-gray-100 text-gray-500 dark:bg-gray-700/40 dark:text-gray-300" },
 };
 const SIT_OPCOES: { value: SituacaoHidrante | ""; label: string }[] = [
   { value: "", label: "Todas as situações" },
@@ -278,12 +278,12 @@ export function BuscaHidrantePage({ embedded = false }: { embedded?: boolean } =
               <div className="hidden sm:block overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="bg-gray-50 border-b border-gray-200">
-                      <th className="text-left px-4 py-3 font-semibold text-gray-600 whitespace-nowrap">Número</th>
-                      <th className="text-left px-4 py-3 font-semibold text-gray-600 whitespace-nowrap">Unidade / Setor</th>
-                      <th className="text-left px-4 py-3 font-semibold text-gray-600 whitespace-nowrap">Situação</th>
-                      <th className="text-left px-4 py-3 font-semibold text-gray-600 whitespace-nowrap">Status</th>
-                      <th className="text-left px-4 py-3 font-semibold text-gray-600 whitespace-nowrap">Inspetor</th>
+                    <tr>
+                      <th className="table-th">Número</th>
+                      <th className="table-th">Unidade / Setor</th>
+                      <th className="table-th">Situação</th>
+                      <th className="table-th">Status</th>
+                      <th className="table-th">Inspetor</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
@@ -362,19 +362,19 @@ const STATUS_LABEL: Record<StatusInspecao, string> = {
 function Row({ h, navigate }: { h: Hidrante; navigate: ReturnType<typeof useNavigate> }) {
   return (
     <tr
-      className={`hover:bg-gray-50 cursor-pointer transition-colors ${
-        h.situacao === "atencao" ? "bg-red-50/40" : h.situacao === "pendente" ? "bg-amber-50/30" : ""
+      className={`table-row cursor-pointer ${
+        h.situacao === "atencao" ? "bg-red-50/60" : h.situacao === "pendente" ? "bg-amber-50/60" : ""
       }`}
       onClick={() => navigate(`/hidrantes/${h.id}`)}
     >
-      <td className="px-4 py-3 font-mono font-semibold text-gray-800">{h.numero}</td>
-      <td className="px-4 py-3">
+      <td className="table-td font-mono font-semibold text-gray-800">{h.numero}</td>
+      <td className="table-td">
         <span className="font-medium text-gray-800">{h.unidade}</span>
         {h.setor && <span className="text-gray-400 text-xs block">{h.setor}</span>}
       </td>
-      <td className="px-4 py-3"><SitBadge s={h.situacao} /></td>
-      <td className="px-4 py-3 text-gray-600">{STATUS_LABEL[h.status_inspecao]}</td>
-      <td className="px-4 py-3 text-gray-600">{h.inspetor ?? "—"}</td>
+      <td className="table-td"><SitBadge s={h.situacao} /></td>
+      <td className="table-td text-gray-600">{STATUS_LABEL[h.status_inspecao]}</td>
+      <td className="table-td text-gray-600">{h.inspetor ?? "—"}</td>
     </tr>
   );
 }

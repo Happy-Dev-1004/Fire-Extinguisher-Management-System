@@ -7,10 +7,10 @@ import {
 } from "lucide-react";
 
 const SIT_META: Record<SituacaoCronograma, { label: string; badge: string; Icon: React.ElementType }> = {
-  concluido: { label: "Concluído",   badge: "bg-green-100 text-green-800", Icon: CheckCircle2 },
-  no_prazo:  { label: "No prazo",    badge: "bg-blue-100 text-blue-800",   Icon: Clock },
-  atrasado:  { label: "Atrasado",    badge: "bg-red-100 text-red-800",     Icon: AlertTriangle },
-  sem_data:  { label: "Sem data",    badge: "bg-gray-100 text-gray-500",   Icon: HelpCircle },
+  concluido: { label: "Concluído",   badge: "bg-green-100 text-green-800 dark:bg-green-500/20 dark:text-green-300", Icon: CheckCircle2 },
+  no_prazo:  { label: "No prazo",    badge: "bg-blue-100 text-blue-800 dark:bg-blue-500/20 dark:text-blue-300",     Icon: Clock },
+  atrasado:  { label: "Atrasado",    badge: "bg-red-100 text-red-800 dark:bg-red-500/20 dark:text-red-300",         Icon: AlertTriangle },
+  sem_data:  { label: "Sem data",    badge: "bg-gray-100 text-gray-500 dark:bg-gray-700/40 dark:text-gray-300",     Icon: HelpCircle },
 };
 
 function fmtData(iso: string | null): string {
@@ -152,23 +152,23 @@ export function AlarmeCronogramaPage() {
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="bg-gray-50 border-b border-gray-200 text-left text-xs text-gray-600">
-                      <th className="px-3 py-2">Área (setor)</th>
-                      <th className="px-3 py-2">Progresso</th>
-                      <th className="px-3 py-2 whitespace-nowrap">Data de entrega</th>
-                      <th className="px-3 py-2">Situação</th>
-                      <th className="px-3 py-2 w-8"></th>
+                    <tr>
+                      <th className="table-th">Área (setor)</th>
+                      <th className="table-th">Progresso</th>
+                      <th className="table-th whitespace-nowrap">Data de entrega</th>
+                      <th className="table-th">Situação</th>
+                      <th className="table-th w-8"></th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-100">
+                  <tbody>
                     {lista.map((a) => {
                       const k = keyDe(a);
                       const meta = SIT_META[a.situacao];
                       const alterado = (rascunho[k] ?? "") !== (a.data_prevista ?? "");
                       return (
-                        <tr key={k} className={a.situacao === "atrasado" ? "bg-red-50/40" : ""}>
-                          <td className="px-3 py-2 font-medium text-gray-800 max-w-[240px]">{a.setor || "—"}</td>
-                          <td className="px-3 py-2 min-w-[160px]">
+                        <tr key={k} className={`table-row ${a.situacao === "atrasado" ? "bg-red-50/60" : ""}`}>
+                          <td className="table-td font-medium text-gray-800 max-w-[240px]">{a.setor || "—"}</td>
+                          <td className="table-td min-w-[160px]">
                             <div className="flex items-center gap-2">
                               <div className="flex-1 h-2 rounded-full bg-gray-100 overflow-hidden">
                                 <div className="h-full bg-green-500" style={{ width: `${a.pct}%` }} />
@@ -176,7 +176,7 @@ export function AlarmeCronogramaPage() {
                               <span className="text-xs text-gray-500 whitespace-nowrap">{a.concluidos}/{a.total}</span>
                             </div>
                           </td>
-                          <td className="px-3 py-2">
+                          <td className="table-td">
                             <input
                               type="date"
                               className="input py-1 text-sm w-[150px]"
@@ -184,7 +184,7 @@ export function AlarmeCronogramaPage() {
                               onChange={(e) => setRascunho((r) => ({ ...r, [k]: e.target.value }))}
                             />
                           </td>
-                          <td className="px-3 py-2">
+                          <td className="table-td">
                             <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${meta.badge}`}>
                               <meta.Icon className="w-3 h-3" /> {meta.label}
                             </span>
@@ -192,7 +192,7 @@ export function AlarmeCronogramaPage() {
                               <span className="block text-[10px] text-gray-400 mt-0.5">alvo: {fmtData(a.data_prevista)}</span>
                             )}
                           </td>
-                          <td className="px-3 py-2">
+                          <td className="table-td">
                             {alterado && (
                               <button onClick={() => salvar(a)} disabled={salvandoKey === k} title="Salvar data" className="btn-primary btn-sm p-1.5">
                                 {salvandoKey === k ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
