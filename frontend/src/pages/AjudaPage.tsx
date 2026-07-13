@@ -4,7 +4,7 @@ import {
   CheckCircle2, PlayCircle, StopCircle, ShieldCheck, Clock, Circle, FileText,
   Send, Users, CalendarDays, Flame, Search, Settings, AlertTriangle,
   Hash, Tag, Gauge, SignpostBig, Info, Bell, Activity, Image as ImageIcon, Droplets,
-  CalendarClock, Wrench, Plus,
+  CalendarClock, Wrench, Plus, ChevronRight, Trash2, Filter, Download,
 } from "lucide-react";
 
 type Aba = "inspetores" | "usuarios";
@@ -402,17 +402,23 @@ const ARTIGOS: Artigo[] = [
     id: "visao-geral",
     Icon: LayoutDashboard,
     titulo: "Visão geral: como o sistema funciona",
-    resumo: "O fluxo completo, do campo ao relatório.",
+    resumo: "As 3 fases, o fluxo do campo ao relatório, e o dashboard.",
     conteudo: (
       <div className="space-y-3">
-        <p>O sistema gerencia a inspeção mensal de todos os extintores, por região. O fluxo é:</p>
+        <p>O sistema gerencia a segurança contra incêndio em <strong>3 fases</strong>, cada uma na sua seção do menu lateral:</p>
         <ol className="list-decimal pl-5 space-y-1.5">
-          <li><strong>Inspetor</strong> envia fotos pelo WhatsApp (veja a aba "Para inspetores").</li>
-          <li>A <strong>IA</strong> lê as fotos e preenche os dados de cada extintor automaticamente.</li>
-          <li>O extintor passa a aguardar <strong>verificação humana</strong>.</li>
-          <li>O <strong>usuário</strong> revisa, corrige se necessário, e marca como <strong>verificado</strong>.</li>
-          <li>Ao fim do mês, gera-se o <strong>relatório</strong> e inicia-se um novo ciclo.</li>
+          <li><strong>Fase 1 · Extintores</strong> — inspeção mensal dos extintores por região (fotos pelo WhatsApp → IA preenche → verificação → ficha PDF).</li>
+          <li><strong>Fase 2 · Alarme</strong> — instalação do sistema de alarme (dispositivos, fotos, RDO, cronograma) e a <strong>manutenção preventiva</strong> depois de instalado.</li>
+          <li><strong>Fase 3 · Hidrantes</strong> — inspeção mensal dos hidrantes por unidade (mesmo formato da Fase 1).</li>
         </ol>
+        <p className="pt-1">O fluxo geral, comum às fases de inspeção (1 e 3):</p>
+        <ol className="list-decimal pl-5 space-y-1.5">
+          <li>O <strong>inspetor</strong> envia as fotos pelo WhatsApp (veja a aba "Para inspetores").</li>
+          <li>A <strong>IA</strong> lê as fotos e preenche o checklist automaticamente.</li>
+          <li>O item passa a aguardar <strong>verificação humana</strong>; o usuário revisa, corrige e marca como <strong>verificado</strong>.</li>
+          <li>Gera-se o <strong>relatório/ficha</strong> (PDF) e, ao fim do mês, inicia-se um novo ciclo.</li>
+        </ol>
+        <Nota>O <strong>Dashboard</strong> (primeiro item do menu) resume o andamento das 3 fases. O <strong>sino</strong> no topo mostra notificações (novas inspeções, RDOs, avisos do sistema).</Nota>
       </div>
     ),
   },
@@ -518,12 +524,13 @@ const ARTIGOS: Artigo[] = [
       <div className="space-y-3">
         <p>A Fase 2 acompanha a <strong>instalação do sistema de alarme de incêndio</strong> nas 4 centrais. O fluxo é:</p>
         <ol className="list-decimal pl-5 space-y-1.5">
-          <li>Os dispositivos são <strong>cadastrados</strong> (importados/adicionados) — todos começam como <strong>Pendente</strong> (não instalado).</li>
-          <li>Ao instalar, a equipe envia a <strong>foto do dispositivo</strong> pelo WhatsApp — ela é guardada e o dispositivo passa a <strong>instalado</strong> (ou marque o status na tela).</li>
-          <li>O painel mostra o <strong>progresso da instalação</strong> por central e por tipo, e você distingue <strong>instalados × não instalados</strong> na busca.</li>
-          <li>A equipe também envia o <strong>RDO</strong> (relatório diário), e o <strong>Cronograma</strong> acompanha os prazos de entrega por área.</li>
+          <li>Os dispositivos são <strong>cadastrados</strong> (importados ou adicionados à mão) — todos começam como <strong>Pendente</strong> (não instalado).</li>
+          <li>Ao instalar, a equipe envia a <strong>foto do dispositivo</strong> pelo WhatsApp — ela é guardada e o dispositivo passa a <strong>instalado</strong> (ou você muda o status na tela).</li>
+          <li>O painel mostra o <strong>progresso real da instalação</strong> por central e por tipo; você acompanha <strong>instalados × não instalados</strong> e vê as fotos.</li>
+          <li>A equipe envia o <strong>RDO</strong> (relatório diário de obra) pelo WhatsApp, e o <strong>Cronograma</strong> acompanha os prazos de entrega por área.</li>
+          <li>Concluída a instalação, a <strong>Manutenção Preventiva</strong> registra as visitas periódicas (checklist de 7 etapas) e emite o relatório técnico.</li>
         </ol>
-        <Nota>Tudo da Fase 2 fica no menu lateral, na seção <strong>Fase 2 · Alarme de incêndio</strong> (Progresso, Cronograma, Registro fotográfico, RDOs).</Nota>
+        <Nota>Tudo da Fase 2 fica no menu lateral, na seção <strong>Fase 2 · Alarme de incêndio</strong>: <strong>Progresso</strong>, <strong>Busca / Relatórios</strong>, <strong>Manutenção</strong>, <strong>Cronograma</strong>, <strong>Registro fotográfico</strong> e <strong>RDOs</strong>.</Nota>
       </div>
     ),
   },
@@ -535,10 +542,9 @@ const ARTIGOS: Artigo[] = [
     conteudo: (
       <div className="space-y-2">
         <LinhaArtigo Icon={Activity}>Cada dispositivo tem um <strong>status de instalação</strong>: <strong>Pendente → Instalado → Endereçado → Testado</strong>. <strong>Pendente = ainda não instalado</strong>; os demais já estão instalados.</LinhaArtigo>
-        <LinhaArtigo Icon={Activity}>Os cards <strong>"Instalação por central"</strong> e <strong>"Instalação por tipo"</strong> mostram quanto de cada um já foi <strong>instalado</strong> (não é cadastro — é instalação real).</LinhaArtigo>
-        <LinhaArtigo Icon={Search}>Em <strong>Buscar dispositivos</strong>, distinga instalados de não instalados de 3 formas: os <strong>filtros rápidos</strong> "Não instalados" / "Instalados" / "Com foto"; a coluna <strong>"Instalado?"</strong> (Sim/Não em cada linha); e os <strong>contadores</strong> Pendente/Instalado/Endereçado/Testado no topo.</LinhaArtigo>
-        <LinhaArtigo Icon={ImageIcon}>Na coluna <strong>"Fotos"</strong>, clique no número para <strong>ver as fotos da instalação</strong> daquele dispositivo (galeria + tela cheia).</LinhaArtigo>
-        <LinhaArtigo Icon={Search}>Combine com os filtros (central, tipo, setor) e <strong>exporte</strong> em PDF ou CSV — ex.: "não instalados da Central 3".</LinhaArtigo>
+        <LinhaArtigo Icon={Activity}>A <strong>Visão geral</strong> mostra o total instalado/testado; os cards <strong>"Instalação por central"</strong> e <strong>"Instalação por tipo"</strong> mostram quanto de cada um já foi <strong>instalado</strong> (não é cadastro — é instalação real).</LinhaArtigo>
+        <LinhaArtigo Icon={ChevronRight}>Em <strong>"Por central e laço"</strong>, <strong>clique numa central</strong> para abrir a lista dos dispositivos dela (com fotos, editar e cadastrar novo) — igual às Fases 1 e 3. A setinha ao lado ainda expande o detalhe por laço.</LinhaArtigo>
+        <LinhaArtigo Icon={Search}>Para pesquisar/filtrar em toda a obra, use a aba <strong>Busca / Relatórios</strong> (ver o artigo próprio).</LinhaArtigo>
         <Nota>Importar os dispositivos <strong>não</strong> marca nada como instalado: todo dispositivo cadastrado começa como <strong>Pendente</strong>. Ele só vira "instalado" quando a foto é enviada pelo WhatsApp <strong>ou</strong> quando alguém muda o status na tela.</Nota>
       </div>
     ),
@@ -551,10 +557,10 @@ const ARTIGOS: Artigo[] = [
     conteudo: (
       <div className="space-y-2">
         <LinhaArtigo Icon={Camera}>A <strong>foto é a prova da instalação</strong>: quando o instalador envia a foto do dispositivo pelo WhatsApp, ela é <strong>guardada</strong> e o dispositivo passa automaticamente para <strong>instalado</strong> (com a data do dia).</LinhaArtigo>
-        <LinhaArtigo Icon={Search}>Para ver as fotos de um dispositivo específico: <strong>Progresso → Buscar dispositivos</strong>, e clique no número na coluna <strong>"Fotos"</strong> — abre a galeria daquele dispositivo.</LinhaArtigo>
-        <LinhaArtigo Icon={CalendarDays}>Para ver por dia: <strong>Registro fotográfico → Por data</strong> lista os dispositivos instalados/fotografados naquele dia. Clique num deles para <strong>Adicionar</strong> ou <strong>remover</strong> fotos manualmente.</LinhaArtigo>
-        <LinhaArtigo Icon={ImageIcon}>Fotos enviadas pelo WhatsApp <strong>sem identificar</strong> o dispositivo não são perdidas — ficam na <strong>revisão</strong> para serem atribuídas.</LinhaArtigo>
-        <Nota>A aba <strong>Armazenamento</strong> mostra quanto espaço as fotos ocupam (nada é apagado automaticamente).</Nota>
+        <LinhaArtigo Icon={Search}>Para ver as fotos de um dispositivo específico: abra a <strong>central</strong> (em Progresso) ou a aba <strong>Busca / Relatórios</strong>, e clique no número na coluna <strong>"Fotos"</strong> — abre a galeria daquele dispositivo (com ampliar, adicionar e remover).</LinhaArtigo>
+        <LinhaArtigo Icon={CalendarDays}>Para ver por dia: <strong>Registro fotográfico → Por data</strong> lista os dispositivos instalados/fotografados naquele dia. Útil para conferir o que foi feito numa data específica.</LinhaArtigo>
+        <LinhaArtigo Icon={ImageIcon}>Fotos enviadas pelo WhatsApp <strong>sem identificar</strong> o dispositivo não são perdidas — ficam na <strong>revisão</strong> para serem atribuídas depois.</LinhaArtigo>
+        <Nota>A aba <strong>Registro fotográfico → Armazenamento</strong> mostra quanto espaço as fotos ocupam (nada é apagado automaticamente).</Nota>
       </div>
     ),
   },
@@ -579,10 +585,55 @@ const ARTIGOS: Artigo[] = [
     resumo: "Gerenciar dispositivos e mudar o status na tela (sem WhatsApp).",
     conteudo: (
       <div className="space-y-2">
-        <LinhaArtigo Icon={Plus}>Em <strong>Progresso → Buscar dispositivos</strong>, use <strong>"Adicionar dispositivo"</strong> para cadastrar um novo (central, tipo e setor obrigatórios; laço e endereço podem vir depois).</LinhaArtigo>
+        <LinhaArtigo Icon={Plus}>Para <strong>cadastrar um novo dispositivo</strong>: abra a <strong>central</strong> (em Progresso, clique na central) e use <strong>"Novo dispositivo"</strong> — a central já vem preenchida. Central, tipo e setor são obrigatórios; laço e endereço podem vir depois. (Também há "Adicionar dispositivo" na aba <strong>Busca / Relatórios</strong>.)</LinhaArtigo>
         <LinhaArtigo Icon={CheckCircle2}>Para <strong>marcar como instalado sem WhatsApp</strong>: clique no <strong>lápis (editar)</strong> do dispositivo e mude o campo <strong>Status</strong> (Pendente → Instalado / Endereçado / Testado). Salve.</LinhaArtigo>
-        <LinhaArtigo Icon={Camera}>Também dá para anexar/remover fotos manualmente pela galeria (Registro fotográfico → Por data).</LinhaArtigo>
+        <LinhaArtigo Icon={Trash2}>Para <strong>remover</strong> um dispositivo, use o ícone de lixeira na linha dele.</LinhaArtigo>
+        <LinhaArtigo Icon={Camera}>As fotos podem ser anexadas/removidas manualmente pela galeria (clique no número em "Fotos").</LinhaArtigo>
         <Nota>Há duas formas de um dispositivo virar "instalado": <strong>(1)</strong> a foto chega pelo WhatsApp (automático), ou <strong>(2)</strong> alguém muda o status aqui na tela. Enquanto o WhatsApp estiver fora do ar, use a forma manual.</Nota>
+      </div>
+    ),
+  },
+  {
+    id: "f2-central",
+    Icon: Activity,
+    titulo: "Abrir uma central e gerenciar seus dispositivos",
+    resumo: "Clique numa central para ver a lista de dispositivos dela.",
+    conteudo: (
+      <div className="space-y-2">
+        <LinhaArtigo Icon={ChevronRight}>Em <strong>Progresso → "Por central e laço"</strong>, <strong>clique no nome da central</strong> para abrir a página dela — com todos os dispositivos daquela central (igual clicar numa Região na Fase 1 ou numa Unidade na Fase 3).</LinhaArtigo>
+        <LinhaArtigo Icon={Search}>Na página da central: <strong>busque</strong> por endereço/setor/tipo e use os filtros <strong>Todos / Não instalados / Instalados</strong>. A coluna <strong>"Instalado?"</strong> mostra Sim/Não em cada linha.</LinhaArtigo>
+        <LinhaArtigo Icon={ImageIcon}>Clique no número em <strong>"Fotos"</strong> para ver/adicionar/remover as fotos de instalação do dispositivo.</LinhaArtigo>
+        <LinhaArtigo Icon={Plus}>Use <strong>"Novo dispositivo"</strong> (a central já vem preenchida), o <strong>lápis</strong> para editar/mudar o status, e a <strong>lixeira</strong> para remover.</LinhaArtigo>
+        <Nota>Esta é a forma mais direta de trabalhar por local: cada central mostra o que já foi instalado e o que ainda falta, com as fotos.</Nota>
+      </div>
+    ),
+  },
+  {
+    id: "f2-busca",
+    Icon: Filter,
+    titulo: "Busca / Relatórios: filtrar e exportar dispositivos",
+    resumo: "Pesquise em toda a obra e exporte em PDF/CSV.",
+    conteudo: (
+      <div className="space-y-2">
+        <LinhaArtigo Icon={Filter}>A aba <strong>Busca / Relatórios</strong> pesquisa os dispositivos de <strong>todas as centrais</strong> ao mesmo tempo, por <strong>central, tipo, setor e status</strong>.</LinhaArtigo>
+        <LinhaArtigo Icon={Search}>Filtros rápidos: <strong>Não instalados</strong>, <strong>Instalados</strong> e <strong>Com foto</strong>. A coluna <strong>"Instalado?"</strong> e os contadores no topo (Pendente/Instalado/Endereçado/Testado) mostram o panorama.</LinhaArtigo>
+        <LinhaArtigo Icon={Download}>Exporte o resultado em <strong>PDF</strong> ou <strong>CSV</strong> (ex.: a lista de "não instalados da Central 3" para levar a campo).</LinhaArtigo>
+        <LinhaArtigo Icon={Plus}>Também dá para <strong>adicionar</strong>, <strong>editar</strong>, <strong>remover</strong> dispositivos e <strong>ver as fotos</strong> por aqui — igual à página da central.</LinhaArtigo>
+      </div>
+    ),
+  },
+  {
+    id: "f2-manutencao",
+    Icon: Wrench,
+    titulo: "Manutenção Preventiva (visitas + relatório técnico)",
+    resumo: "Registre as visitas periódicas com o checklist de 7 etapas e emita o PDF.",
+    conteudo: (
+      <div className="space-y-2">
+        <LinhaArtigo Icon={Wrench}>Depois de instalar, a <strong>Manutenção</strong> acompanha as <strong>visitas preventivas periódicas</strong> do alarme. Cada visita cobre <strong>uma central</strong>.</LinhaArtigo>
+        <LinhaArtigo Icon={Plus}>Em <strong>Alarme → Manutenção → "Nova visita"</strong>: informe a central, data, técnicos e preencha o <strong>checklist de 7 etapas</strong> (Planejamento, Preparação, Inspeção visual, Testes funcionais, Verificações técnicas, Ajustes, Relatório). Cada etapa recebe <strong>OK / NC (não-conformidade) / N.A</strong> + observação.</LinhaArtigo>
+        <LinhaArtigo Icon={Camera}>Anexe <strong>fotos</strong> da visita e registre <strong>não-conformidades</strong> e <strong>recomendações</strong>. Salve.</LinhaArtigo>
+        <LinhaArtigo Icon={ShieldCheck}>Cada visita mostra uma <strong>situação</strong> (OK / Não-conformidade / Incompleta) e um <strong>status</strong> (Rascunho → Aguardando verificação → Verificado). Use <strong>Verificar</strong> para validar a visita.</LinhaArtigo>
+        <LinhaArtigo Icon={FileText}>Gere o <strong>"Relatório de Manutenção Preventiva"</strong> em PDF (pré-visualizar ou baixar) para apresentar ao cliente.</LinhaArtigo>
       </div>
     ),
   },
