@@ -42,6 +42,7 @@ const NAV_GROUPS: NavGroup[] = [
     titulo: "Fase 2 · Alarme de incêndio",
     items: [
       { to: "/alarme",            label: "Progresso",            Icon: Activity },
+      { to: "/alarme/busca",      label: "Busca / Relatórios",   Icon: Search },
       { to: "/alarme/manutencao", label: "Manutenção",           Icon: Wrench },
       { to: "/alarme/cronograma", label: "Cronograma",           Icon: CalendarClock },
       { to: "/alarme/fotos",      label: "Registro fotográfico", Icon: Camera },
