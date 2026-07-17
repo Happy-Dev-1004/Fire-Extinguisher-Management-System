@@ -579,7 +579,7 @@ export const alarmeApi = {
   // Execution schedule (cronograma) — one row per área (central + setor).
   cronograma: () =>
     request<{ areas: AreaCronograma[] }>("GET", "/alarme/cronograma"),
-  definirCronograma: (body: { central_id: string; setor: string; data_prevista: string | null; observacoes?: string }) =>
+  definirCronograma: (body: { central_id: string; setor: string; data_prevista?: string | null; observacoes?: string; sistema_antigo?: boolean | null }) =>
     request<unknown>("PUT", "/alarme/cronograma", body),
 
   // Official schedule PDF — inline preview (object URL) + download.
@@ -694,6 +694,7 @@ export interface AreaCronograma {
   pendente: number; instalado: number; enderecado: number; testado: number;
   concluidos: number; faltam: number; pct: number;
   data_prevista: string | null; observacoes: string | null;
+  sistema_antigo: boolean | null;
   situacao: SituacaoCronograma;
 }
 

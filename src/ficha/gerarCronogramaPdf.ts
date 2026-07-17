@@ -54,12 +54,15 @@ export function renderHtmlCronograma(areas: AreaCronograma[]): string {
   const concluidas = areas.filter((a) => a.situacao === "concluido").length;
   const atrasadas  = areas.filter((a) => a.situacao === "atrasado").length;
 
+  const sistemaAntigoTxt = (v: boolean | null) => v === true ? "Sim" : v === false ? "Não" : "—";
+
   const secoes = Array.from(porCentral.entries()).map(([central, lista]) => {
     const linhas = lista.map((a) => {
       const s = SIT[a.situacao];
       return `
       <tr>
         <td class="setor">${esc(a.setor) || "—"}</td>
+        <td class="c">${sistemaAntigoTxt(a.sistema_antigo)}</td>
         <td class="c">${a.concluidos}/${a.total}</td>
         <td class="prog">
           <div class="bar"><div class="fill" style="width:${a.pct}%"></div></div>
@@ -76,6 +79,7 @@ export function renderHtmlCronograma(areas: AreaCronograma[]): string {
         <thead>
           <tr>
             <th class="setor">ÁREA (SETOR)</th>
+            <th>SISTEMA<br/>ANTIGO?</th>
             <th>ENTREGUES</th>
             <th>PROGRESSO</th>
             <th>DATA DE ENTREGA</th>

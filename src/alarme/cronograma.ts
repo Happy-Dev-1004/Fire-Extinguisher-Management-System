@@ -21,6 +21,8 @@ export interface AreaCronograma {
   pct: number;
   data_prevista: string | null;
   observacoes: string | null;
+  // Área já possui equipamento no sistema antigo? true=Sim, false=Não, null=não respondido.
+  sistema_antigo: boolean | null;
   situacao: SituacaoCronograma;
 }
 
@@ -32,10 +34,14 @@ export async function montarCronograma(): Promise<AreaCronograma[]> {
   if (error) throw new Error(error.message);
 
   const { data: datas } = await supabaseAdmin
-    .from("cronograma_alarme").select("central_id, setor, data_prevista, observacoes");
-  const dataDe = new Map<string, { data_prevista: string | null; observacoes: string | null }>();
+    .from("cronograma_alarme").select("central_id, setor, data_prevista, observacoes, sistema_antigo");
+  const dataDe = new Map<string, { data_prevista: string | null; observacoes: string | null; sistema_antigo: boolean | null }>();
   for (const r of (datas ?? []) as any[]) {
-    dataDe.set(`${r.central_id}|${r.setor}`, { data_prevista: r.data_prevista ?? null, observacoes: r.observacoes ?? null });
+    dataDe.set(`${r.central_id}|${r.setor}`, {
+      data_prevista: r.data_prevista ?? null,
+      observacoes: r.observacoes ?? null,
+      sistema_antigo: r.sistema_antigo ?? null,
+    });
   }
 
   type Grupo = {
@@ -63,7 +69,7 @@ export async function montarCronograma(): Promise<AreaCronograma[]> {
     const concluidos = g.testado;
     const pct = g.total > 0 ? Math.round((concluidos / g.total) * 100) : 0;
     const faltam = g.total - concluidos;
-    const info = dataDe.get(`${g.central_id}|${g.setor}`) ?? { data_prevista: null, observacoes: null };
+    const info = dataDe.get(`${g.central_id}|${g.setor}`) ?? { data_prevista: null, observacoes: null, sistema_antigo: null };
     let situacao: SituacaoCronograma;
     if (faltam === 0) situacao = "concluido";
     else if (!info.data_prevista) situacao = "sem_data";
@@ -76,7 +82,8 @@ export async function montarCronograma(): Promise<AreaCronograma[]> {
       setor: g.setor, total: g.total,
       pendente: g.pendente, instalado: g.instalado, enderecado: g.enderecado, testado: g.testado,
       concluidos, faltam, pct,
-      data_prevista: info.data_prevista, observacoes: info.observacoes, situacao,
+      data_prevista: info.data_prevista, observacoes: info.observacoes,
+      sistema_antigo: info.sistema_antigo, situacao,
     };
   });
 

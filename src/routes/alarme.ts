@@ -522,6 +522,8 @@ const CronogramaSchema = z.object({
   setor:         z.string().min(1),
   data_prevista: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(), // ISO date or null to clear
   observacoes:   z.string().optional(),
+  // Área já possui equipamento no sistema antigo? true=Sim, false=Não, null=limpa.
+  sistema_antigo: z.boolean().nullable().optional(),
 });
 
 router.put("/cronograma", async (req: Request, res: Response) => {
@@ -529,11 +531,12 @@ router.put("/cronograma", async (req: Request, res: Response) => {
   if (!parsed.success) return res.status(400).json({ erro: "Dados inválidos.", detalhes: parsed.error.flatten().fieldErrors });
   const { central_id, setor } = parsed.data;
 
-  const row = {
-    central_id, setor,
-    data_prevista: parsed.data.data_prevista ?? null,
-    ...(parsed.data.observacoes !== undefined ? { observacoes: parsed.data.observacoes } : {}),
-  };
+  // Only overwrite the fields actually sent, so saving one (date OR the flag)
+  // never clears the other. central_id+setor identify the row.
+  const row: Record<string, unknown> = { central_id, setor };
+  if ("data_prevista" in parsed.data)  row.data_prevista  = parsed.data.data_prevista ?? null;
+  if (parsed.data.observacoes !== undefined)    row.observacoes    = parsed.data.observacoes;
+  if (parsed.data.sistema_antigo !== undefined) row.sistema_antigo = parsed.data.sistema_antigo;
   const { data, error } = await supabaseAdmin
     .from("cronograma_alarme").upsert(row, { onConflict: "central_id,setor" }).select().maybeSingle();
   if (error) return res.status(400).json({ erro: error.message });

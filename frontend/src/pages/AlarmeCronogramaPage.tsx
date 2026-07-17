@@ -95,6 +95,18 @@ export function AlarmeCronogramaPage() {
     }
   }
 
+  // "Sistema antigo?" saves immediately on change (Sim/Não/em branco).
+  async function salvarSistemaAntigo(a: AreaCronograma, valor: boolean | null) {
+    // optimistic update so the dropdown reflects the choice at once
+    setAreas((prev) => prev.map((x) => (x.central_id === a.central_id && x.setor === a.setor ? { ...x, sistema_antigo: valor } : x)));
+    try {
+      await alarmeApi.definirCronograma({ central_id: a.central_id, setor: a.setor, sistema_antigo: valor });
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Erro ao salvar.", "erro");
+      await carregar(); // revert on failure
+    }
+  }
+
   // Rollup counters for the header.
   const totalAreas = areas.length;
   const atrasadas = areas.filter((a) => a.situacao === "atrasado").length;
@@ -154,6 +166,7 @@ export function AlarmeCronogramaPage() {
                   <thead>
                     <tr>
                       <th className="table-th">Área (setor)</th>
+                      <th className="table-th whitespace-nowrap">Sistema antigo?</th>
                       <th className="table-th">Progresso</th>
                       <th className="table-th whitespace-nowrap">Data de entrega</th>
                       <th className="table-th">Situação</th>
@@ -168,6 +181,21 @@ export function AlarmeCronogramaPage() {
                       return (
                         <tr key={k} className={`table-row ${a.situacao === "atrasado" ? "bg-red-50/60" : ""}`}>
                           <td className="table-td font-medium text-gray-800 max-w-[240px]">{a.setor || "—"}</td>
+                          <td className="table-td">
+                            <select
+                              className="input py-1 text-sm w-[90px]"
+                              value={a.sistema_antigo === true ? "sim" : a.sistema_antigo === false ? "nao" : ""}
+                              onChange={(e) => {
+                                const v = e.target.value;
+                                salvarSistemaAntigo(a, v === "sim" ? true : v === "nao" ? false : null);
+                              }}
+                              title="Esta área já possui equipamento instalado no sistema antigo?"
+                            >
+                              <option value="">—</option>
+                              <option value="sim">Sim</option>
+                              <option value="nao">Não</option>
+                            </select>
+                          </td>
                           <td className="table-td min-w-[160px]">
                             <div className="flex items-center gap-2">
                               <div className="flex-1 h-2 rounded-full bg-gray-100 overflow-hidden">
