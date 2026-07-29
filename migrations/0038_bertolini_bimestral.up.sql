@@ -19,6 +19,12 @@
 ALTER TABLE regioes
   ADD COLUMN IF NOT EXISTS periodicidade TEXT NOT NULL DEFAULT 'mensal';
 
+-- Uma execução anterior (versão trimestral) pode ter gravado 'trimestral' em
+-- alguma região (o editor do Supabase persiste comando a comando, mesmo quando
+-- um passo posterior falha). Converte antes de criar a regra nova, senão o
+-- ADD CONSTRAINT falha com 23514 "violated by some row".
+UPDATE regioes SET periodicidade = 'bimestral' WHERE periodicidade = 'trimestral';
+
 ALTER TABLE regioes DROP CONSTRAINT IF EXISTS regioes_periodicidade_check;
 ALTER TABLE regioes
   ADD CONSTRAINT regioes_periodicidade_check CHECK (periodicidade IN ('mensal','bimestral'));
