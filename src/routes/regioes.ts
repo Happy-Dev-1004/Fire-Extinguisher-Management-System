@@ -30,9 +30,17 @@ const STATUS_VALIDOS = ["nao_inspecionado", "aguardando_verificacao", "verificad
 router.get("/", async (_req: Request, res: Response) => {
   const { data: regioes, error } = await supabaseAdmin
     .from("regioes")
-    .select("nome, total_extintores, ordem")
+    .select("nome, total_extintores, ordem, periodicidade")
     .order("ordem");
   if (error) return res.status(500).json({ erro: error.message });
+
+  // Active cycles. There can be several now: the global one (regiao IS NULL) plus
+  // per-region cycles (e.g. Bertolini, trimestral). Index by região for lookup.
+  const { data: ciclosAtivos } = await supabaseAdmin
+    .from("ciclos").select("id, mes_referencia, iniciado_em, regiao").eq("status", "ativo");
+  const cicloGlobal = (ciclosAtivos ?? []).find((c: any) => c.regiao == null) ?? null;
+  const cicloPorRegiao = new Map<string, any>();
+  for (const c of (ciclosAtivos ?? []) as any[]) if (c.regiao) cicloPorRegiao.set(c.regiao, c);
 
   // Status counts per region in one query.
   const { data: counts } = await supabase
@@ -53,6 +61,9 @@ router.get("/", async (_req: Request, res: Response) => {
   const resultado = (regioes ?? []).map((reg: any) => {
     const c = porRegiao.get(reg.nome) ?? { aguardando: 0, verificado: 0, nao: 0, total: 0 };
     const inspecionados = c.aguardando + c.verificado;
+    const periodicidade = reg.periodicidade ?? "mensal";
+    // A região usa o ciclo próprio se tiver um; senão, o ciclo global.
+    const cicloDaRegiao = cicloPorRegiao.get(reg.nome) ?? (periodicidade === "mensal" ? cicloGlobal : null);
     return {
       nome:             reg.nome,
       total_esperado:   reg.total_extintores,
@@ -63,12 +74,12 @@ router.get("/", async (_req: Request, res: Response) => {
       inspecionados,
       pct_inspecionado: reg.total_extintores ? Math.round((inspecionados / reg.total_extintores) * 100) : 0,
       pct_verificado:   reg.total_extintores ? Math.round((c.verificado / reg.total_extintores) * 100) : 0,
+      periodicidade,
+      ciclo_mes: cicloDaRegiao?.mes_referencia ?? null,
     };
   });
 
-  // Active cycle info (ciclos has RLS — read via service role).
-  const { data: ciclo } = await supabaseAdmin
-    .from("ciclos").select("id, mes_referencia, iniciado_em").eq("status", "ativo").maybeSingle();
+  const ciclo = cicloGlobal;
 
   return res.json({ regioes: resultado, ciclo: ciclo ?? null });
 });
@@ -350,23 +361,29 @@ router.delete("/extintor/:id/fotos", async (req: Request, res: Response) => {
 });
 
 // ── POST /regioes/novo-mes — archive + reset (OWNER only) ──────────────────────
-const NovoMesSchema = z.object({ mes_referencia: z.string().min(1) });
+// regiao opcional: sem ela → novo ciclo GLOBAL (regiões mensais); com ela →
+// novo ciclo só daquela região (ex.: Bertolini, trimestral).
+const NovoMesSchema = z.object({
+  mes_referencia: z.string().min(1),
+  regiao:         z.string().min(1).optional(),
+});
 
 router.post("/novo-mes", async (req: Request, res: Response) => {
   if (req.admin?.role !== "owner") {
-    return res.status(403).json({ erro: "Apenas o proprietário pode iniciar um novo mês." });
+    return res.status(403).json({ erro: "Apenas o proprietário pode iniciar um novo ciclo." });
   }
   const parsed = NovoMesSchema.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ erro: "mes_referencia é obrigatório (ex: Julho/2026)." });
+  if (!parsed.success) return res.status(400).json({ erro: "mes_referencia é obrigatório (ex: Julho/2026 ou 3º Trimestre/2026)." });
 
   // Use the service-role client: ciclos/extintores writes must bypass RLS.
   // This endpoint is already owner-guarded above, so it's a trusted admin op.
   const { data, error } = await supabaseAdmin.rpc("iniciar_novo_ciclo", {
-    p_mes: parsed.data.mes_referencia,
-    p_by:  req.admin.id,
+    p_mes:    parsed.data.mes_referencia,
+    p_by:     req.admin.id,
+    p_regiao: parsed.data.regiao ?? null,
   });
   if (error) return res.status(500).json({ erro: error.message });
-  log.info({ ciclo: data, mes: parsed.data.mes_referencia, by: req.admin.email }, "novo ciclo iniciado");
+  log.info({ ciclo: data, mes: parsed.data.mes_referencia, regiao: parsed.data.regiao ?? "(global)", by: req.admin.email }, "novo ciclo iniciado");
   return res.json({ ciclo_id: data, mes_referencia: parsed.data.mes_referencia });
 });
 

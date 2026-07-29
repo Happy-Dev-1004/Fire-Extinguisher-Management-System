@@ -94,15 +94,23 @@ export async function gerarFichaRegiao(
     log.info({ urls: todasUrls.length, thumbs: thumbs.size }, "fotos redimensionadas para o relatório");
   }
 
-  // Active cycle month for the header.
-  const { data: ciclo } = await supabase
-    .from("ciclos").select("mes_referencia").eq("status", "ativo").maybeSingle();
+  // Periodicidade da região (mensal/trimestral) + o ciclo ativo correto:
+  // o ciclo próprio da região se houver, senão o ciclo global (regiao IS NULL).
+  const { data: regInfo } = await supabase
+    .from("regioes").select("periodicidade").eq("nome", regiao).maybeSingle();
+  const periodicidade = ((regInfo as any)?.periodicidade ?? "mensal") as "mensal" | "trimestral";
+
+  const { data: ciclosAtivos } = await supabase
+    .from("ciclos").select("mes_referencia, regiao").eq("status", "ativo");
+  const cicloRegiao = (ciclosAtivos ?? []).find((c: any) => c.regiao === regiao)
+    ?? (ciclosAtivos ?? []).find((c: any) => c.regiao == null);
 
   const dados: DadosFicha = {
     unidade:       regiao,
-    mesReferencia: (ciclo as any)?.mes_referencia ?? "",
+    mesReferencia: (cicloRegiao as any)?.mes_referencia ?? "",
     dataInspecao:  "",
     extintores,
+    periodicidade,
   };
 
   // Active inspectors → PARTICIPANTES footer.

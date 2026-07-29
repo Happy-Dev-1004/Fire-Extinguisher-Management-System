@@ -36,6 +36,18 @@ function makeDados(n: number): DadosFicha {
   };
 }
 
+describe("renderHtml — periodicidade no título", () => {
+  it("usa MENSAL por padrão (sem periodicidade)", () => {
+    const html = renderHtml(makeDados(1));
+    expect(html).toContain("FICHA DE INSPEÇÃO MENSAL DOS EXTINTORES");
+  });
+  it("usa TRIMESTRAL quando a região é trimestral (ex.: Bertolini)", () => {
+    const html = renderHtml({ ...makeDados(1), periodicidade: "trimestral" });
+    expect(html).toContain("FICHA DE INSPEÇÃO TRIMESTRAL DOS EXTINTORES");
+    expect(html).not.toContain("FICHA DE INSPEÇÃO MENSAL DOS EXTINTORES");
+  });
+});
+
 // ── Tests ────────────────────────────────────────────────────────────────────
 describe("renderHtml — paginação", () => {
   it("3 extintores ficam numa única página (sem page-break-before)", () => {

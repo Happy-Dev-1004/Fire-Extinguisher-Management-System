@@ -369,8 +369,8 @@ export const regioesApi = {
   removerFoto: (id: string, url: string) =>
     request<ExtintorRegiao>("DELETE", `/regioes/extintor/${id}/fotos`, { url }),
 
-  novoMes: (mes_referencia: string) =>
-    request<{ ciclo_id: string; mes_referencia: string }>("POST", "/regioes/novo-mes", { mes_referencia }),
+  novoMes: (mes_referencia: string, regiao?: string) =>
+    request<{ ciclo_id: string; mes_referencia: string }>("POST", "/regioes/novo-mes", { mes_referencia, ...(regiao ? { regiao } : {}) }),
 
   seed: () =>
     request<{ inseridos: number }>("POST", "/regioes/seed"),

@@ -24,6 +24,9 @@ export function RegioesPage({ embedded = false }: { embedded?: boolean } = {}) {
   const [modalMes, setModalMes] = useState(false);
   const [mes, setMes]           = useState(mesAtual);
   const [processando, setProcessando] = useState(false);
+  // Região-alvo do "novo ciclo": null = global (regiões mensais); nome = região
+  // com ciclo próprio (ex.: Bertolini, trimestral).
+  const [regiaoAlvo, setRegiaoAlvo] = useState<{ nome: string; periodicidade: "mensal" | "trimestral" } | null>(null);
 
   useEffect(() => { void carregar(); }, []);
 
@@ -53,15 +56,22 @@ export function RegioesPage({ embedded = false }: { embedded?: boolean } = {}) {
     }
   }
 
+  function abrirNovoCiclo(alvo: { nome: string; periodicidade: "mensal" | "trimestral" } | null) {
+    setRegiaoAlvo(alvo);
+    setMes(mesAtual());
+    setModalMes(true);
+  }
+
   async function iniciarNovoMes() {
     setProcessando(true);
     try {
-      await regioesApi.novoMes(mes);
-      toast(`Novo ciclo iniciado: ${mes}. Todos os extintores foram redefinidos.`, "sucesso");
+      await regioesApi.novoMes(mes, regiaoAlvo?.nome);
+      const escopo = regiaoAlvo ? `de ${regiaoAlvo.nome}` : "(todas as regiões mensais)";
+      toast(`Novo ciclo ${escopo} iniciado: ${mes}.`, "sucesso");
       setModalMes(false);
       await carregar();
     } catch (e) {
-      toast(e instanceof Error ? e.message : "Erro ao iniciar novo mês.", "erro");
+      toast(e instanceof Error ? e.message : "Erro ao iniciar novo ciclo.", "erro");
     } finally {
       setProcessando(false);
     }
@@ -77,7 +87,7 @@ export function RegioesPage({ embedded = false }: { embedded?: boolean } = {}) {
         <div>
           {!embedded && <h1 className="page-title">Extintores</h1>}
           <p className="text-sm text-gray-500 mt-0.5">
-            Inventário de extintores por região e progresso da inspeção mensal.
+            Inventário de extintores por região e progresso da inspeção (mensal; trimestral onde indicado).
           </p>
         </div>
         <div className="flex gap-2">
@@ -89,7 +99,7 @@ export function RegioesPage({ embedded = false }: { embedded?: boolean } = {}) {
               <button onClick={semear} className="btn-secondary btn-sm" disabled={processando}>
                 <PlusCircle className="w-3.5 h-3.5" /> Gerar inventário
               </button>
-              <button onClick={() => { setMes(mesAtual()); setModalMes(true); }} className="btn-primary btn-sm" disabled={processando}>
+              <button onClick={() => abrirNovoCiclo(null)} className="btn-primary btn-sm" disabled={processando}>
                 <CalendarDays className="w-3.5 h-3.5" /> Iniciar novo mês
               </button>
             </>
@@ -130,9 +140,25 @@ export function RegioesPage({ embedded = false }: { embedded?: boolean } = {}) {
                   <MapPin className="w-5 h-5 text-gray-400" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-gray-900 truncate">{r.nome}</p>
-                  <p className="text-xs text-gray-400">{r.total_esperado} extintores</p>
+                  <div className="flex items-center gap-2">
+                    <p className="font-semibold text-gray-900 truncate">{r.nome}</p>
+                    {r.periodicidade === "trimestral" && (
+                      <span className="badge-blue text-[10px] shrink-0">Trimestral</span>
+                    )}
+                  </div>
+                  <p className="text-xs text-gray-400">
+                    {r.total_esperado} extintores{r.ciclo_mes ? ` · ${r.ciclo_mes}` : ""}
+                  </p>
                 </div>
+                {isOwner && r.periodicidade === "trimestral" && (
+                  <button
+                    onClick={(e) => { e.preventDefault(); abrirNovoCiclo({ nome: r.nome, periodicidade: r.periodicidade }); }}
+                    className="btn-secondary btn-sm shrink-0"
+                    title="Iniciar novo trimestre desta região"
+                  >
+                    <CalendarDays className="w-3.5 h-3.5" /> Novo trimestre
+                  </button>
+                )}
                 <ArrowRight className="w-4 h-4 text-gray-300 group-hover:text-brand-600 transition-colors" />
               </div>
 
@@ -151,16 +177,23 @@ export function RegioesPage({ embedded = false }: { embedded?: boolean } = {}) {
         </div>
       )}
 
-      {/* New month modal */}
-      <Modal open={modalMes} titulo="Iniciar novo mês de inspeção" onClose={() => { if (!processando) setModalMes(false); }} largura="max-w-md">
+      {/* New cycle modal (global monthly OR a single region, e.g. Bertolini trimestral) */}
+      <Modal
+        open={modalMes}
+        titulo={regiaoAlvo ? `Novo trimestre — ${regiaoAlvo.nome}` : "Iniciar novo mês de inspeção"}
+        onClose={() => { if (!processando) setModalMes(false); }}
+        largura="max-w-md"
+      >
         <div className="space-y-4">
           <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 text-sm text-amber-800">
-            Isto arquiva o ciclo atual e <strong>redefine TODOS os extintores</strong> para "não inspecionado".
-            Os valores do mês anterior são preservados no histórico. Esta ação é do proprietário.
+            {regiaoAlvo
+              ? <>Isto arquiva o ciclo atual <strong>de {regiaoAlvo.nome}</strong> e redefine os extintores <strong>dessa região</strong> para "não inspecionado". As outras regiões não são afetadas.</>
+              : <>Isto arquiva o ciclo atual e <strong>redefine os extintores das regiões mensais</strong> para "não inspecionado". Regiões com ciclo próprio (ex.: trimestral) não são afetadas.</>}
+            {" "}Os valores do período anterior são preservados no histórico. Esta ação é do proprietário.
           </div>
           <div>
-            <label className="label">Mês de referência do novo ciclo</label>
-            <input className="input" value={mes} onChange={(e) => setMes(e.target.value)} placeholder="Ex: Julho/2026" />
+            <label className="label">{regiaoAlvo ? "Trimestre de referência" : "Mês de referência do novo ciclo"}</label>
+            <input className="input" value={mes} onChange={(e) => setMes(e.target.value)} placeholder={regiaoAlvo ? "Ex: 3º Trimestre/2026" : "Ex: Julho/2026"} />
           </div>
           <div className="flex gap-3">
             <button onClick={() => setModalMes(false)} disabled={processando} className="btn-secondary flex-1">Cancelar</button>

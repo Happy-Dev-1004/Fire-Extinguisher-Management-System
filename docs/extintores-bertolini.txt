@@ -1,0 +1,122 @@
+01- Setor Fiscal - BC 06kg
+02- Sala de espera - AP 10LT
+03- Casa de Força geral - BC 12kg
+04- ADM Logber - BC 06kg
+05- Recepção - BC 06kg
+06- Copa - ABC 06kg
+07- Auditório - BC 12kg
+08- Recepção Ambulatório - AP 10LT
+09- Refeitório - AP 10LT
+10- Refeitório - AP 10LT
+11- Refeitório - AP 10LT
+12- Vestiário masculino - BC 06kg
+13- Entrada Estoque REF. - AP 10LT
+14- PRÓX. Entrada almoxarifado - AP 10LT
+15- Próx. Entrada almoxarifado - BC 06kg
+16- Almoxarifado Próx. Cafeteria
+17- Logber BMA HP 46 - AP 10LT
+18- Logber BMA HP 46 - BC 06kg
+19- Embalagem HP 47 - BC 06KG
+20- Embalagem HP 48 - CO2 06kg
+21- Embalagem após HP 49 - BC 06kg
+22- Entrada Sala Obeya - ABC 06kg
+23- Mezanino - ABC 06kg
+24- Fundos Pintura Próx. HP 41 - BC 12kg
+25- Fundos Pintura Próx. HP 41 - AP 10LT
+26- Fundos Pintura Próx. HP 43 - AP 10 LT
+27- Fundos Pintura Próx. HP 43 - AP 10LT
+28- Fundos Pintura Próx. HP 43 - AP 10LT
+29- Fundos Pintura Próx HP 43 - BC 12kg
+30- Abastecimento pintura HP 43 - BC 06kg
+31- Abastecimento Pintura HP 32 - CO2 06kg
+32- Desabastecimento Pintura HP 51 - BC 06kg
+33- Desabastecimento Pintura HP 50 - CO2 06kg
+34- Manutenção - BC 12kg
+35- Transformação Próx. HP 54 - CO2 06kg
+36- Próximo HP 56 - BC 12kg
+37- Transformação Próx. Jundiaí - CO2 06kg
+38- Transformação Próx. Jundiaí - AP 10LT
+39- Transformação Próx. Jundiaí - BC 06kg
+40- Separação e Informação HP 57 - CO2 06kg
+41- Separação e Informação HP 59 - CO2 06kg
+42- Estoque Próx. HP 69 - BC 06kg
+43- Estoque Próx HP 69 - CO2 06kg
+44- Expedição Próx. HP 60 - BC 06kg
+45- Expedição Próx. HP 68 - BC 08kg
+46- Expedição Próx. HP 68 - AP 10LT
+47- Expedição Próx. HP 68 - CO2 06kg
+48- Expedição Próx. HP 66 - CO2 06kg
+49- Expedição Próx. HP 66 - AP 10LT
+50- Expedição Próx. HP 66 - BC 06kg
+51- Expedição Próx. HP 62 - BC 06kg
+52- Expedição Próx. HP 64 - BC 06kg
+53- Expedição Próx HP 64 - AP 10LT
+54- Tampos Portão entrada - AP 10 LT
+55- Tampos Portão entrada - BC 06kg
+56- Tampos Próximo serra kit - BC 06kg
+57- Tampos Próximo mesa ADM - BC 06kg
+58- Tampos Próximo estoque meio - BC 06kg
+59- Tampos fundos máquina seccionadora - CO2 06kg
+60- Tampos Próximo painel elétrico - CO2 06kg
+61- Tampos - Próximo bebedouro - BC 06kg
+62- Tampos - Próximo bebedouro - AP 10LT
+63- Casa de Bombas - CO2 06kg
+64- Utilidades BM - CO2 06kg
+65- Utilidades BM - BC 06kg
+66- Substação BMA - CO2 06kg
+67- Coleta Seletiva - BC 06kg
+68- Serralheria - CO2 06kg
+69- Substação 01 BMA Externo - CO2 06kg
+70- Substação 01 Interno - CO2 06kg
+71- Exaustor da Solda - externo - CO2 06kg
+72- Substação 02 - Interno - CO2 06kg
+73- Substação 02- interno - BC 50kg
+74- Manutenção matrizaria - BC 12kg
+75- Tanque de Argônio - CO2 06kg
+76- Expedição BSA - Externo - CO2 06kg
+77- Abastecimento de gás - BC 06kg
+78- Abastecimento de gás - BC 06kg
+79- Abastecimento de gás - BC 50kg
+80- Banheiro Almoxarifado - BC 06kg
+81- Mezanino almoxarifado - BC 06kg
+82- Armazém expedição meio - CO2 06kg
+83- Em frente drive in - meio - BC 06kg
+84- Próximo carregamento expedição - BC 06kg
+85- Descarga da Pintura - BC 06kg
+86- Carga da Pintura - BC 06kg
+87- Usinagem - CO2 06kg
+88- Matrizaria - AP 10LT
+89- Matrizaria - BC 06kg
+90- Posto de controle logístico - CO2 06kg
+91- Manutenção industrial - CO2 06kg
+92- Linha de longarina - ABC 06kg
+93- Descarga de bobinas - BC 06kg
+94- entre porta palets de Blanks - CO2 06kg
+95- Corte de Tubos - BC 06kg
+96- Box 1 - CO2 06kg
+97- Robô de Solda Powermig - CO2 06kg
+98- Entrada Sala engenharia - CO2 06kg
+99- Sala engenharia - ABC 06kg
+100- Sala Manutenção - ABC 06kg
+101- Próx. Alimentador Máquina Fiorentini - CO2 06kg
+102- Próximo máquina Gasparini 3 metros - BC 6kg
+103- Próximo máquina Sliter - CO2 06kg
+104- Próximo máquina Sliter - BC 06kg
+105- Próximo portão 06 - CO2 06kg
+106- Robô de Solda Dalca - BC 20kg
+107- Robô de Solda Dalca - CO2 06kg
+108- Robô de Solda Dalca - BC 06kg
+109- Próximo estufa de secagem de tinta - CO2 06kg
+110- Próximo cabine de pintura - BC 12kg
+111- próximo cabine de pintura - AP 10LT
+112- Próxima cabine de pintura - CO2 06kg
+113- Próximo tanque enxague 03 - BC 06kg
+114- Substação Guarita entrada - interno - CO2 06kg
+115- Lado matrizaria - BC 06kg
+116- Tampos Lado quadro elétrico - CO2 06kg
+117- Tampos Lado quadro elétrico - AP 10 LT
+120- Drive in Robô solda - BC 06kg
+121- Drive in Robô Solda - AP 10LT
+122- Próximo Gasparini 5 metros - CO2 06kg
+123- Banheiro Almoxarifado BSA - AP 10LT
+125- manutenção industrial - CO2 06kg

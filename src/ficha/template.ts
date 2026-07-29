@@ -22,6 +22,8 @@ export interface DadosFicha {
   mesReferencia: string;
   dataInspecao: string;
   extintores: ExtintorFicha[];
+  // "mensal" (padrão) ou "trimestral" — muda o título da ficha (ex.: Bertolini).
+  periodicidade?: "mensal" | "trimestral";
   // Active inspectors to show in the PARTICIPANTES footer.
   // Falls back to PARTICIPANTES_PADRAO when not provided or empty.
   participantes?: string[];
@@ -131,6 +133,7 @@ export function renderHtml(dados: DadosFicha): string {
     : PARTICIPANTES_PADRAO;
   const logoMansurSrc = logoBase64("logo-mansur.png") || logoBase64("logo-mansur.svg");
   const logoBarrySrc  = logoBase64("logo-barry.png")  || logoBase64("logo-barry.svg");
+  const tituloPeriodo = dados.periodicidade === "trimestral" ? "TRIMESTRAL" : "MENSAL";
 
   const blocos = dados.extintores.map((ext, i) => renderExtintor(ext, i)).join("\n");
 
@@ -254,7 +257,7 @@ export function renderHtml(dados: DadosFicha): string {
 
 <div class="header">
   ${logoMansurSrc ? `<img src="${logoMansurSrc}" alt="Mansur"/>` : `<div style="width:110px;font-weight:bold;font-size:14pt">MANSUR</div>`}
-  <div class="header-title">FICHA DE INSPEÇÃO MENSAL DOS EXTINTORES</div>
+  <div class="header-title">FICHA DE INSPEÇÃO ${tituloPeriodo} DOS EXTINTORES</div>
   ${logoBarrySrc  ? `<img src="${logoBarrySrc}"  alt="Barry Callebaut"/>` : `<div style="width:130px;font-weight:bold;font-size:10pt;text-align:right">BARRY CALLEBAUT</div>`}
 </div>
 
