@@ -19,13 +19,31 @@
 ALTER TABLE regioes
   ADD COLUMN IF NOT EXISTS periodicidade TEXT NOT NULL DEFAULT 'mensal';
 
--- Uma execução anterior (versão trimestral) pode ter gravado 'trimestral' em
--- alguma região (o editor do Supabase persiste comando a comando, mesmo quando
--- um passo posterior falha). Converte antes de criar a regra nova, senão o
--- ADD CONSTRAINT falha com 23514 "violated by some row".
-UPDATE regioes SET periodicidade = 'bimestral' WHERE periodicidade = 'trimestral';
+-- Remove TODOS os CHECK que mencionem 'periodicidade', qualquer que seja o nome.
+-- Uma execução anterior criou o CHECK inline (ADD COLUMN ... CHECK), e o Postgres
+-- nomeia isso automaticamente — podendo virar regioes_periodicidade_check,
+-- _check1, _check2… Dropar por nome fixo não é confiável, então varremos o
+-- catálogo. Sem isso, um CHECK antigo com 'trimestral' continua rejeitando
+-- 'bimestral' (erro 23514).
+DO $limpa$
+DECLARE c RECORD;
+BEGIN
+  FOR c IN
+    SELECT con.conname
+      FROM pg_constraint con
+      JOIN pg_class rel ON rel.oid = con.conrelid
+     WHERE rel.relname = 'regioes'
+       AND con.contype = 'c'
+       AND pg_get_constraintdef(con.oid) ILIKE '%periodicidade%'
+  LOOP
+    EXECUTE format('ALTER TABLE regioes DROP CONSTRAINT %I', c.conname);
+  END LOOP;
+END
+$limpa$;
 
-ALTER TABLE regioes DROP CONSTRAINT IF EXISTS regioes_periodicidade_check;
+-- Só agora normaliza os valores antigos e recria a regra correta.
+UPDATE regioes SET periodicidade = 'bimestral' WHERE periodicidade NOT IN ('mensal','bimestral');
+
 ALTER TABLE regioes
   ADD CONSTRAINT regioes_periodicidade_check CHECK (periodicidade IN ('mensal','bimestral'));
 
