@@ -167,7 +167,9 @@ FROM (VALUES
   (123, '123', 'Banheiro Almoxarifado BSA', 'AP 10LT'),
   (125, '125', 'manutenção industrial', 'CO2 06kg')
 ) AS v(numero_int, numero, setor, tipo_carga)
-ON CONFLICT (regiao, numero_int) DO UPDATE
+-- O índice único (regiao, numero_int) é PARCIAL (WHERE regiao/numero_int NOT NULL),
+-- então o ON CONFLICT precisa restatar esse predicado para casar com ele (senão 42P10).
+ON CONFLICT (regiao, numero_int) WHERE regiao IS NOT NULL AND numero_int IS NOT NULL DO UPDATE
   SET setor = EXCLUDED.setor, tipo_carga = EXCLUDED.tipo_carga;
 
 -- ── 5. abre o primeiro ciclo trimestral do Bertolini (se ainda não houver) ────
