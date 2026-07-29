@@ -38,8 +38,8 @@ export interface RegiaoProgresso {
   inspecionados:          number;
   pct_inspecionado:       number;
   pct_verificado:         number;
-  periodicidade:          "mensal" | "trimestral";
-  ciclo_mes:              string | null;   // período ativo desta região (mês ou trimestre)
+  periodicidade:          "mensal" | "bimestral";
+  ciclo_mes:              string | null;   // período ativo desta região (mês ou bimestre)
 }
 
 export interface CicloAtivo {

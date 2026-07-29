@@ -41,9 +41,9 @@ describe("renderHtml — periodicidade no título", () => {
     const html = renderHtml(makeDados(1));
     expect(html).toContain("FICHA DE INSPEÇÃO MENSAL DOS EXTINTORES");
   });
-  it("usa TRIMESTRAL quando a região é trimestral (ex.: Bertolini)", () => {
-    const html = renderHtml({ ...makeDados(1), periodicidade: "trimestral" });
-    expect(html).toContain("FICHA DE INSPEÇÃO TRIMESTRAL DOS EXTINTORES");
+  it("usa BIMESTRAL quando a região é bimestral (ex.: Bertolini)", () => {
+    const html = renderHtml({ ...makeDados(1), periodicidade: "bimestral" });
+    expect(html).toContain("FICHA DE INSPEÇÃO BIMESTRAL DOS EXTINTORES");
     expect(html).not.toContain("FICHA DE INSPEÇÃO MENSAL DOS EXTINTORES");
   });
 });

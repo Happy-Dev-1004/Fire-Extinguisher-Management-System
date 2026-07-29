@@ -94,11 +94,11 @@ export async function gerarFichaRegiao(
     log.info({ urls: todasUrls.length, thumbs: thumbs.size }, "fotos redimensionadas para o relatório");
   }
 
-  // Periodicidade da região (mensal/trimestral) + o ciclo ativo correto:
+  // Periodicidade da região (mensal/bimestral) + o ciclo ativo correto:
   // o ciclo próprio da região se houver, senão o ciclo global (regiao IS NULL).
   const { data: regInfo } = await supabase
     .from("regioes").select("periodicidade").eq("nome", regiao).maybeSingle();
-  const periodicidade = ((regInfo as any)?.periodicidade ?? "mensal") as "mensal" | "trimestral";
+  const periodicidade = ((regInfo as any)?.periodicidade ?? "mensal") as "mensal" | "bimestral";
 
   const { data: ciclosAtivos } = await supabase
     .from("ciclos").select("mes_referencia, regiao").eq("status", "ativo");

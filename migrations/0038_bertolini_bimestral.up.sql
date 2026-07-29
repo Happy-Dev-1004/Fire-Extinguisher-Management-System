@@ -1,10 +1,10 @@
 -- =============================================================================
--- MIGRATION 0038: local "Bertolini" (Fase 1) com ciclo TRIMESTRAL
+-- MIGRATION 0038: local "Bertolini" (Fase 1) com ciclo BIMESTRAL
 --
--- Nova região de extintores com relatório TRIMESTRAL (as demais seguem mensais).
+-- Nova região de extintores com relatório BIMESTRAL (as demais seguem mensais).
 -- Design de menor risco: a periodicidade é por REGIÃO, e o ciclo ganha uma coluna
 -- 'regiao' NULLABLE — regiao IS NULL = o ciclo global mensal atual (as regiões já
--- existentes, sem mudança nenhuma); regiao = 'Bertolini' = ciclo próprio trimestral.
+-- existentes, sem mudança nenhuma); regiao = 'Bertolini' = ciclo próprio bimestral.
 --
 -- Seed: 122 extintores da lista do cliente (setor + tipo/carga). Faltam os nº
 -- 118/119/124 (não existem) e o nº16 vem sem tipo (a completar na tela — edição
@@ -14,7 +14,7 @@
 -- ── 1. periodicidade por região ──────────────────────────────────────────────
 ALTER TABLE regioes
   ADD COLUMN IF NOT EXISTS periodicidade TEXT NOT NULL DEFAULT 'mensal'
-    CHECK (periodicidade IN ('mensal','trimestral'));
+    CHECK (periodicidade IN ('mensal','bimestral'));
 
 -- ── 2. ciclo por região (NULL = ciclo global mensal existente) ───────────────
 ALTER TABLE ciclos
@@ -28,12 +28,12 @@ CREATE UNIQUE INDEX IF NOT EXISTS ciclos_um_ativo_por_regiao
   ON ciclos (COALESCE(regiao, '__global__'))
   WHERE status = 'ativo';
 
--- ── 3. cadastra a região Bertolini (trimestral) ──────────────────────────────
+-- ── 3. cadastra a região Bertolini (bimestral) ──────────────────────────────
 -- total_extintores = 125 (maior número da lista) para os slots baterem com a
 -- numeração real; os nº 118/119/124 ficam como slots vazios (podem ser removidos
 -- ou preenchidos na tela).
 INSERT INTO regioes (nome, total_extintores, ordem, periodicidade) VALUES
-  ('Bertolini', 125, 7, 'trimestral')
+  ('Bertolini', 125, 7, 'bimestral')
 ON CONFLICT (nome) DO UPDATE
   SET total_extintores = EXCLUDED.total_extintores,
       ordem            = EXCLUDED.ordem,
@@ -172,16 +172,16 @@ FROM (VALUES
 ON CONFLICT (regiao, numero_int) WHERE regiao IS NOT NULL AND numero_int IS NOT NULL DO UPDATE
   SET setor = EXCLUDED.setor, tipo_carga = EXCLUDED.tipo_carga;
 
--- ── 5. abre o primeiro ciclo trimestral do Bertolini (se ainda não houver) ────
+-- ── 5. abre o primeiro ciclo bimestral do Bertolini (se ainda não houver) ────
 INSERT INTO ciclos (mes_referencia, status, regiao)
-SELECT 'Trimestre atual', 'ativo', 'Bertolini'
+SELECT 'Bimestre atual', 'ativo', 'Bertolini'
 WHERE NOT EXISTS (SELECT 1 FROM ciclos WHERE regiao = 'Bertolini' AND status = 'ativo');
 
 -- ── 6. RPC iniciar_novo_ciclo com região OPCIONAL ─────────────────────────────
 -- p_regiao NULL  → comportamento antigo: arquiva o ciclo GLOBAL (regiao IS NULL)
 --                  e reseta as regiões que NÃO têm ciclo próprio.
 -- p_regiao dada  → arquiva só o ciclo daquela região e reseta só os extintores
---                  dela — usado pelo Bertolini (trimestral) e por qualquer
+--                  dela — usado pelo Bertolini (bimestral) e por qualquer
 --                  região com ciclo próprio.
 -- A assinatura antiga (p_mes, p_by) continua válida (p_regiao tem default NULL),
 -- então nada que já chama a função quebra.
@@ -209,7 +209,7 @@ BEGIN
     INSERT INTO ciclos (mes_referencia, status, iniciado_por, regiao)
     VALUES (p_mes, 'ativo', p_by, NULL) RETURNING id INTO novo_id;
   ELSE
-    -- Ciclo de UMA região (ex.: Bertolini trimestral).
+    -- Ciclo de UMA região (ex.: Bertolini bimestral).
     UPDATE ciclos SET status = 'arquivado', arquivado_em = now()
      WHERE status = 'ativo' AND regiao = p_regiao;
 

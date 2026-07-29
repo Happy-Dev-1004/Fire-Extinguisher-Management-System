@@ -22,8 +22,8 @@ export interface DadosFicha {
   mesReferencia: string;
   dataInspecao: string;
   extintores: ExtintorFicha[];
-  // "mensal" (padrão) ou "trimestral" — muda o título da ficha (ex.: Bertolini).
-  periodicidade?: "mensal" | "trimestral";
+  // "mensal" (padrão) ou "bimestral" — muda o título da ficha (ex.: Bertolini).
+  periodicidade?: "mensal" | "bimestral";
   // Active inspectors to show in the PARTICIPANTES footer.
   // Falls back to PARTICIPANTES_PADRAO when not provided or empty.
   participantes?: string[];
@@ -133,7 +133,7 @@ export function renderHtml(dados: DadosFicha): string {
     : PARTICIPANTES_PADRAO;
   const logoMansurSrc = logoBase64("logo-mansur.png") || logoBase64("logo-mansur.svg");
   const logoBarrySrc  = logoBase64("logo-barry.png")  || logoBase64("logo-barry.svg");
-  const tituloPeriodo = dados.periodicidade === "trimestral" ? "TRIMESTRAL" : "MENSAL";
+  const tituloPeriodo = dados.periodicidade === "bimestral" ? "BIMESTRAL" : "MENSAL";
 
   const blocos = dados.extintores.map((ext, i) => renderExtintor(ext, i)).join("\n");
 

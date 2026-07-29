@@ -35,7 +35,7 @@ router.get("/", async (_req: Request, res: Response) => {
   if (error) return res.status(500).json({ erro: error.message });
 
   // Active cycles. There can be several now: the global one (regiao IS NULL) plus
-  // per-region cycles (e.g. Bertolini, trimestral). Index by região for lookup.
+  // per-region cycles (e.g. Bertolini, bimestral). Index by região for lookup.
   const { data: ciclosAtivos } = await supabaseAdmin
     .from("ciclos").select("id, mes_referencia, iniciado_em, regiao").eq("status", "ativo");
   const cicloGlobal = (ciclosAtivos ?? []).find((c: any) => c.regiao == null) ?? null;
@@ -362,7 +362,7 @@ router.delete("/extintor/:id/fotos", async (req: Request, res: Response) => {
 
 // ── POST /regioes/novo-mes — archive + reset (OWNER only) ──────────────────────
 // regiao opcional: sem ela → novo ciclo GLOBAL (regiões mensais); com ela →
-// novo ciclo só daquela região (ex.: Bertolini, trimestral).
+// novo ciclo só daquela região (ex.: Bertolini, bimestral).
 const NovoMesSchema = z.object({
   mes_referencia: z.string().min(1),
   regiao:         z.string().min(1).optional(),
@@ -373,7 +373,7 @@ router.post("/novo-mes", async (req: Request, res: Response) => {
     return res.status(403).json({ erro: "Apenas o proprietário pode iniciar um novo ciclo." });
   }
   const parsed = NovoMesSchema.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ erro: "mes_referencia é obrigatório (ex: Julho/2026 ou 3º Trimestre/2026)." });
+  if (!parsed.success) return res.status(400).json({ erro: "mes_referencia é obrigatório (ex: Julho/2026 ou Jul-Ago/2026)." });
 
   // Use the service-role client: ciclos/extintores writes must bypass RLS.
   // This endpoint is already owner-guarded above, so it's a trusted admin op.
