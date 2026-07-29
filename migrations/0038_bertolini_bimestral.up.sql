@@ -29,14 +29,16 @@ DO $limpa$
 DECLARE c RECORD;
 BEGIN
   FOR c IN
-    SELECT con.conname
+    SELECT con.conname AS nome,
+           pg_get_constraintdef(con.oid) AS def
       FROM pg_constraint con
       JOIN pg_class rel ON rel.oid = con.conrelid
      WHERE rel.relname = 'regioes'
        AND con.contype = 'c'
        AND pg_get_constraintdef(con.oid) ILIKE '%periodicidade%'
   LOOP
-    EXECUTE format('ALTER TABLE regioes DROP CONSTRAINT %I', c.conname);
+    RAISE NOTICE 'periodicidade: dropando % -> %', c.nome, c.def;
+    EXECUTE format('ALTER TABLE regioes DROP CONSTRAINT %I', c.nome);
   END LOOP;
 END
 $limpa$;
