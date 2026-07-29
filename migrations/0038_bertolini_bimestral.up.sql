@@ -12,9 +12,16 @@
 -- =============================================================================
 
 -- ── 1. periodicidade por região ──────────────────────────────────────────────
+-- Cria a coluna se não existir. Se uma versão anterior desta migration já a criou
+-- com outro CHECK (ex.: 'trimestral'), o ADD COLUMN IF NOT EXISTS NÃO recria o
+-- CHECK — então trocamos o constraint explicitamente logo abaixo para garantir
+-- que 'bimestral' seja aceito, seja qual for o estado atual.
 ALTER TABLE regioes
-  ADD COLUMN IF NOT EXISTS periodicidade TEXT NOT NULL DEFAULT 'mensal'
-    CHECK (periodicidade IN ('mensal','bimestral'));
+  ADD COLUMN IF NOT EXISTS periodicidade TEXT NOT NULL DEFAULT 'mensal';
+
+ALTER TABLE regioes DROP CONSTRAINT IF EXISTS regioes_periodicidade_check;
+ALTER TABLE regioes
+  ADD CONSTRAINT regioes_periodicidade_check CHECK (periodicidade IN ('mensal','bimestral'));
 
 -- ── 2. ciclo por região (NULL = ciclo global mensal existente) ───────────────
 ALTER TABLE ciclos
