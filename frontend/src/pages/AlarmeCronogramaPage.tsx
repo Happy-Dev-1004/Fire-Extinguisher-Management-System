@@ -263,7 +263,7 @@ export function AlarmeCronogramaPage() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr>
-                      <th className="table-th" rowSpan={2}>Área (setor)</th>
+                      <th className="table-th coluna-fixa !bg-gray-50 dark:!bg-gray-800" rowSpan={2}>Área (setor)</th>
                       <th className="table-th whitespace-nowrap" rowSpan={2} title="Quanto esta área representa da área total da fábrica">% da área</th>
                       <th className="table-th whitespace-nowrap" rowSpan={2}>Sistema antigo?</th>
                       <th className="table-th" rowSpan={2}>Progresso</th>
@@ -291,9 +291,21 @@ export function AlarmeCronogramaPage() {
                       // acompanhar a digitação antes mesmo de salvar.
                       const durPrev = duracaoDias(r.data_inicio_prevista, r.data_entrega_prevista);
                       const durReal = duracaoDias(r.data_inicio_real, r.data_fim_real);
+                      const atrasado = a.situacao === "atrasado";
+                      // A célula fixa precisa repetir o fundo da linha: sendo sticky ela
+                      // fica por cima das outras e um fundo transparente deixaria o
+                      // conteúdo rolando aparecer por baixo.
+                      const fundoCelulaFixa = atrasado
+                        ? "!bg-red-50 dark:!bg-[#2b1a1c]"
+                        : "!bg-white dark:!bg-gray-900";
                       return (
-                        <tr key={k} className={`table-row ${a.situacao === "atrasado" ? "bg-red-50/60 dark:bg-red-500/10" : ""}`}>
-                          <td className="table-td font-medium text-gray-800 max-w-[200px]">{a.setor || "—"}</td>
+                        <tr key={k} className={`table-row ${atrasado ? "bg-red-50/60 dark:bg-red-500/10" : ""}`}>
+                          {/* Coluna fixa: o nome da área continua visível ao rolar as 12
+                              colunas, e nomes longos quebram em linha em vez de invadir
+                              a coluna seguinte. */}
+                          <td className={`table-td font-medium text-gray-800 coluna-fixa ${fundoCelulaFixa}`}>
+                            {a.setor || "—"}
+                          </td>
                           <td className="table-td">
                             <input
                               type="text" inputMode="decimal"
@@ -330,12 +342,12 @@ export function AlarmeCronogramaPage() {
 
                           {/* Previsto */}
                           <td className="table-td border-l border-gray-200 dark:border-gray-700">
-                            <input type="date" className="input py-1 text-sm w-[140px]"
+                            <input type="date" className="input py-1 text-sm w-[132px]"
                               value={r.data_inicio_prevista}
                               onChange={(e) => editar(k, "data_inicio_prevista", e.target.value)} />
                           </td>
                           <td className="table-td">
-                            <input type="date" className="input py-1 text-sm w-[140px]"
+                            <input type="date" className="input py-1 text-sm w-[132px]"
                               value={r.data_entrega_prevista}
                               onChange={(e) => editar(k, "data_entrega_prevista", e.target.value)} />
                           </td>
@@ -345,12 +357,12 @@ export function AlarmeCronogramaPage() {
 
                           {/* Realizado */}
                           <td className="table-td border-l border-gray-200 dark:border-gray-700">
-                            <input type="date" className="input py-1 text-sm w-[140px]"
+                            <input type="date" className="input py-1 text-sm w-[132px]"
                               value={r.data_inicio_real}
                               onChange={(e) => editar(k, "data_inicio_real", e.target.value)} />
                           </td>
                           <td className="table-td">
-                            <input type="date" className="input py-1 text-sm w-[140px]"
+                            <input type="date" className="input py-1 text-sm w-[132px]"
                               value={r.data_fim_real}
                               onChange={(e) => editar(k, "data_fim_real", e.target.value)} />
                           </td>

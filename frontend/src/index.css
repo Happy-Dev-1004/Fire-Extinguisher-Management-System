@@ -212,6 +212,23 @@
            dark:border-gray-800 dark:hover:bg-gray-800/50;
   }
 
+  /* Primeira coluna congelada em tabelas largas (ex.: cronograma, 12 colunas).
+     Fica visível durante o scroll horizontal e deixa nomes longos quebrarem em
+     linha — table-td traz whitespace-nowrap, que precisa ser desfeito aqui. */
+  .coluna-fixa {
+    position: sticky;
+    left: 0;
+    z-index: 10;
+    width: 220px;
+    min-width: 220px;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  /* O cabeçalho fica acima das células do corpo no cruzamento das duas
+     posições fixas. Seletor com elemento (não @apply) para o Tailwind não
+     achatar a especificidade e o z-index vazar para os <td>. */
+  th.coluna-fixa { z-index: 20; }
+
   /* ── Page skeleton loader ────────────────────────────────────────────── */
   .skeleton {
     @apply animate-pulse bg-gray-200 rounded-lg dark:bg-gray-700;
