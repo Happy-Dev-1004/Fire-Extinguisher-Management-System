@@ -4,27 +4,15 @@
 
 import { supabaseAdmin } from "../db-admin";
 
-export type SituacaoCronograma = "concluido" | "no_prazo" | "atrasado" | "sem_data";
+// Tipos e cálculos puros vivem em cronogramaCalculo.ts (sem dependência do
+// Supabase, para serem testáveis e reutilizáveis pelo PDF). Reexportados aqui
+// para não quebrar quem já importa de "alarme/cronograma".
+export type { AreaCronograma, SituacaoCronograma, ResumoAreaFabrica } from "./cronogramaCalculo";
+export { diasEntre, resumirAreaFabrica } from "./cronogramaCalculo";
 
-export interface AreaCronograma {
-  central_id: string;
-  central_numero: number | null;
-  central_nome: string | null;
-  setor: string;
-  total: number;
-  pendente: number;
-  instalado: number;
-  enderecado: number;
-  testado: number;
-  concluidos: number;   // "entregue" = testado
-  faltam: number;
-  pct: number;
-  data_prevista: string | null;
-  observacoes: string | null;
-  // Área já possui equipamento no sistema antigo? true=Sim, false=Não, null=não respondido.
-  sistema_antigo: boolean | null;
-  situacao: SituacaoCronograma;
-}
+import type { AreaCronograma, SituacaoCronograma } from "./cronogramaCalculo";
+import { diasEntre } from "./cronogramaCalculo";
+
 
 export async function montarCronograma(): Promise<AreaCronograma[]> {
   const { data: disp, error } = await supabaseAdmin
@@ -34,13 +22,34 @@ export async function montarCronograma(): Promise<AreaCronograma[]> {
   if (error) throw new Error(error.message);
 
   const { data: datas } = await supabaseAdmin
-    .from("cronograma_alarme").select("central_id, setor, data_prevista, observacoes, sistema_antigo");
-  const dataDe = new Map<string, { data_prevista: string | null; observacoes: string | null; sistema_antigo: boolean | null }>();
+    .from("cronograma_alarme").select(
+      "central_id, setor, data_prevista, observacoes, sistema_antigo, pct_area, " +
+      "data_inicio_prevista, data_entrega_prevista, data_inicio_real, data_fim_real");
+
+  interface InfoArea {
+    data_prevista: string | null; observacoes: string | null; sistema_antigo: boolean | null;
+    pct_area: number | null;
+    data_inicio_prevista: string | null; data_entrega_prevista: string | null;
+    data_inicio_real: string | null; data_fim_real: string | null;
+  }
+  const VAZIO: InfoArea = {
+    data_prevista: null, observacoes: null, sistema_antigo: null, pct_area: null,
+    data_inicio_prevista: null, data_entrega_prevista: null,
+    data_inicio_real: null, data_fim_real: null,
+  };
+
+  const dataDe = new Map<string, InfoArea>();
   for (const r of (datas ?? []) as any[]) {
     dataDe.set(`${r.central_id}|${r.setor}`, {
       data_prevista: r.data_prevista ?? null,
       observacoes: r.observacoes ?? null,
       sistema_antigo: r.sistema_antigo ?? null,
+      // NUMERIC chega como string no supabase-js; convertemos aqui.
+      pct_area: r.pct_area === null || r.pct_area === undefined ? null : Number(r.pct_area),
+      data_inicio_prevista:  r.data_inicio_prevista  ?? null,
+      data_entrega_prevista: r.data_entrega_prevista ?? null,
+      data_inicio_real:      r.data_inicio_real      ?? null,
+      data_fim_real:         r.data_fim_real         ?? null,
     });
   }
 
@@ -69,12 +78,15 @@ export async function montarCronograma(): Promise<AreaCronograma[]> {
     const concluidos = g.testado;
     const pct = g.total > 0 ? Math.round((concluidos / g.total) * 100) : 0;
     const faltam = g.total - concluidos;
-    const info = dataDe.get(`${g.central_id}|${g.setor}`) ?? { data_prevista: null, observacoes: null, sistema_antigo: null };
+    const info = dataDe.get(`${g.central_id}|${g.setor}`) ?? VAZIO;
+    // A entrega prevista nova tem precedência; sem ela, cai na data_prevista
+    // original (é a mesma data, só que na coluna antiga).
+    const entregaPrevista = info.data_entrega_prevista ?? info.data_prevista;
     let situacao: SituacaoCronograma;
     if (faltam === 0) situacao = "concluido";
-    else if (!info.data_prevista) situacao = "sem_data";
+    else if (!entregaPrevista) situacao = "sem_data";
     else {
-      const alvo = new Date(info.data_prevista + "T00:00:00");
+      const alvo = new Date(entregaPrevista + "T00:00:00");
       situacao = alvo < hoje ? "atrasado" : "no_prazo";
     }
     return {
@@ -83,13 +95,21 @@ export async function montarCronograma(): Promise<AreaCronograma[]> {
       pendente: g.pendente, instalado: g.instalado, enderecado: g.enderecado, testado: g.testado,
       concluidos, faltam, pct,
       data_prevista: info.data_prevista, observacoes: info.observacoes,
-      sistema_antigo: info.sistema_antigo, situacao,
+      sistema_antigo: info.sistema_antigo,
+      pct_area: info.pct_area,
+      data_inicio_prevista:  info.data_inicio_prevista,
+      data_entrega_prevista: entregaPrevista,
+      data_inicio_real:      info.data_inicio_real,
+      data_fim_real:         info.data_fim_real,
+      duracao_prevista_dias: diasEntre(info.data_inicio_prevista, entregaPrevista),
+      duracao_real_dias:     diasEntre(info.data_inicio_real, info.data_fim_real),
+      situacao,
     };
   });
 
   areas.sort((a, b) =>
     (a.central_numero ?? 99) - (b.central_numero ?? 99) ||
-    (a.data_prevista ?? "9999").localeCompare(b.data_prevista ?? "9999") ||
+    (a.data_entrega_prevista ?? "9999").localeCompare(b.data_entrega_prevista ?? "9999") ||
     a.setor.localeCompare(b.setor, "pt-BR"));
 
   return areas;

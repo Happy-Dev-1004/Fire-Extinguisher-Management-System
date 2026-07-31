@@ -26,7 +26,7 @@ import { relatorioArmazenamento } from "../alarme/armazenamento";
 import { agregarProgresso, type DispositivoProgresso } from "../alarme/progresso";
 import { buscarDispositivos, FiltrosAlarmeSchema } from "../alarme/buscaAlarme";
 import { dispositivosParaCsv, dispositivosParaPdf } from "../alarme/relatorioAlarme";
-import { montarCronograma } from "../alarme/cronograma";
+import { montarCronograma, resumirAreaFabrica } from "../alarme/cronograma";
 import { gerarCronogramaPdf } from "../ficha/gerarCronogramaPdf";
 import { ETAPAS_MANUTENCAO, calcularSituacaoManutencao } from "../alarme/manutencao";
 import { gerarManutencaoPdf, type VisitaManutencaoPdf } from "../ficha/gerarManutencaoPdf";
@@ -495,7 +495,7 @@ router.get("/armazenamento", async (_req: Request, res: Response) => {
 router.get("/cronograma", async (_req: Request, res: Response) => {
   try {
     const areas = await montarCronograma();
-    return res.json({ areas });
+    return res.json({ areas, resumo_area: resumirAreaFabrica(areas) });
   } catch (err: any) {
     log.error({ err: err.message }, "erro ao montar cronograma");
     return res.status(500).json({ erro: "Erro ao carregar o cronograma." });
@@ -517,13 +517,22 @@ router.get("/cronograma/pdf", async (req: Request, res: Response) => {
   }
 });
 
+const DataISO = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(); // ISO date or null to clear
+
 const CronogramaSchema = z.object({
   central_id:    z.string().uuid(),
   setor:         z.string().min(1),
-  data_prevista: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(), // ISO date or null to clear
+  data_prevista: DataISO,
   observacoes:   z.string().optional(),
   // Área já possui equipamento no sistema antigo? true=Sim, false=Não, null=limpa.
   sistema_antigo: z.boolean().nullable().optional(),
+  // % que a área representa da área total da fábrica (ex.: 1.5 = 1,5%).
+  pct_area: z.number().min(0).max(100).nullable().optional(),
+  // Planejamento e execução.
+  data_inicio_prevista:  DataISO,
+  data_entrega_prevista: DataISO,
+  data_inicio_real:      DataISO,
+  data_fim_real:         DataISO,
 });
 
 router.put("/cronograma", async (req: Request, res: Response) => {
@@ -531,12 +540,22 @@ router.put("/cronograma", async (req: Request, res: Response) => {
   if (!parsed.success) return res.status(400).json({ erro: "Dados inválidos.", detalhes: parsed.error.flatten().fieldErrors });
   const { central_id, setor } = parsed.data;
 
-  // Only overwrite the fields actually sent, so saving one (date OR the flag)
-  // never clears the other. central_id+setor identify the row.
+  // Only overwrite the fields actually sent, so saving one (a date OR the flag)
+  // never clears the others. central_id+setor identify the row.
+  // `in` (not `!== undefined`) so an explicit null still clears the field.
   const row: Record<string, unknown> = { central_id, setor };
-  if ("data_prevista" in parsed.data)  row.data_prevista  = parsed.data.data_prevista ?? null;
-  if (parsed.data.observacoes !== undefined)    row.observacoes    = parsed.data.observacoes;
-  if (parsed.data.sistema_antigo !== undefined) row.sistema_antigo = parsed.data.sistema_antigo;
+  const CAMPOS = [
+    "data_prevista", "observacoes", "sistema_antigo", "pct_area",
+    "data_inicio_prevista", "data_entrega_prevista", "data_inicio_real", "data_fim_real",
+  ] as const;
+  for (const campo of CAMPOS) {
+    if (campo in parsed.data) row[campo] = (parsed.data as Record<string, unknown>)[campo] ?? null;
+  }
+
+  // A data de entrega é a régua de atrasado/no prazo e vive em data_prevista.
+  // Quem edita "entrega prevista" na tela nova precisa manter as duas em sincronia,
+  // senão a coluna Situação para de acompanhar o que o cliente digitou.
+  if ("data_entrega_prevista" in parsed.data) row.data_prevista = parsed.data.data_entrega_prevista ?? null;
   const { data, error } = await supabaseAdmin
     .from("cronograma_alarme").upsert(row, { onConflict: "central_id,setor" }).select().maybeSingle();
   if (error) return res.status(400).json({ erro: error.message });

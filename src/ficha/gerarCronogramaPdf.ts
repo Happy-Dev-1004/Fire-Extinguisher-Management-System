@@ -5,7 +5,10 @@
 import fs from "fs";
 import path from "path";
 import { renderPdfFromHtml } from "../pdf/browser";
-import type { AreaCronograma, SituacaoCronograma } from "../alarme/cronograma";
+// Importa do módulo de cálculo puro (não do cronograma.ts, que carrega o
+// cliente do Supabase) — assim o PDF pode ser testado sem credenciais.
+import { resumirAreaFabrica } from "../alarme/cronogramaCalculo";
+import type { AreaCronograma, SituacaoCronograma } from "../alarme/cronogramaCalculo";
 
 function logoBase64(filename: string): string {
   const filePath = path.join(process.cwd(), "assets", filename);
@@ -23,6 +26,17 @@ function fmtData(iso: string | null): string {
   if (!iso) return "—";
   const [y, m, d] = iso.split("-");
   return `${d}/${m}/${y}`;
+}
+
+// Duração em dias corridos, já calculada no builder. "12 d" (ou "—").
+function fmtDuracao(dias: number | null): string {
+  return dias === null ? "—" : `${dias} d`;
+}
+
+// Percentual de área com vírgula decimal e sem zeros à toa: 1.5 → "1,5%".
+function fmtPct(n: number | null): string {
+  if (n === null) return "—";
+  return `${String(Number(n.toFixed(3))).replace(".", ",")}%`;
 }
 
 const SIT: Record<SituacaoCronograma, { label: string; bg: string; fg: string }> = {
@@ -53,6 +67,7 @@ export function renderHtmlCronograma(areas: AreaCronograma[]): string {
   const totalAreas = areas.length;
   const concluidas = areas.filter((a) => a.situacao === "concluido").length;
   const atrasadas  = areas.filter((a) => a.situacao === "atrasado").length;
+  const resumoArea = resumirAreaFabrica(areas);
 
   const sistemaAntigoTxt = (v: boolean | null) => v === true ? "Sim" : v === false ? "Não" : "—";
 
@@ -62,13 +77,19 @@ export function renderHtmlCronograma(areas: AreaCronograma[]): string {
       return `
       <tr>
         <td class="setor">${esc(a.setor) || "—"}</td>
+        <td class="c">${fmtPct(a.pct_area)}</td>
         <td class="c">${sistemaAntigoTxt(a.sistema_antigo)}</td>
         <td class="c">${a.concluidos}/${a.total}</td>
         <td class="prog">
           <div class="bar"><div class="fill" style="width:${a.pct}%"></div></div>
           <span class="pct">${a.pct}%</span>
         </td>
-        <td class="c data">${fmtData(a.data_prevista)}</td>
+        <td class="c data">${fmtData(a.data_inicio_prevista)}</td>
+        <td class="c data">${fmtData(a.data_entrega_prevista)}</td>
+        <td class="c dur">${fmtDuracao(a.duracao_prevista_dias)}</td>
+        <td class="c data real">${fmtData(a.data_inicio_real)}</td>
+        <td class="c data real">${fmtData(a.data_fim_real)}</td>
+        <td class="c dur">${fmtDuracao(a.duracao_real_dias)}</td>
         <td class="c"><span class="badge" style="background:${s.bg};color:${s.fg}">${s.label}</span></td>
       </tr>`;
     }).join("");
@@ -78,12 +99,22 @@ export function renderHtmlCronograma(areas: AreaCronograma[]): string {
       <table class="grade">
         <thead>
           <tr>
-            <th class="setor">ÁREA (SETOR)</th>
-            <th>SISTEMA<br/>ANTIGO?</th>
-            <th>ENTREGUES</th>
-            <th>PROGRESSO</th>
-            <th>DATA DE ENTREGA</th>
-            <th>SITUAÇÃO</th>
+            <th class="setor" rowspan="2">ÁREA (SETOR)</th>
+            <th rowspan="2">% DA<br/>ÁREA</th>
+            <th rowspan="2">SISTEMA<br/>ANTIGO?</th>
+            <th rowspan="2">ENTREGUES</th>
+            <th rowspan="2">PROGRESSO</th>
+            <th colspan="3" class="grupo">PREVISTO</th>
+            <th colspan="3" class="grupo grupo-real">REALIZADO</th>
+            <th rowspan="2">SITUAÇÃO</th>
+          </tr>
+          <tr>
+            <th>INÍCIO</th>
+            <th>ENTREGA</th>
+            <th>DURAÇÃO</th>
+            <th>INÍCIO</th>
+            <th>FIM</th>
+            <th>DURAÇÃO</th>
           </tr>
         </thead>
         <tbody>${linhas}</tbody>
@@ -107,16 +138,23 @@ export function renderHtmlCronograma(areas: AreaCronograma[]): string {
   .kpi .l { font-size: 7.5pt; color:#6b7280; text-transform: uppercase; letter-spacing:.5px; }
   .kpi.red .n { color:#991b1b; }
   .kpi.green .n { color:#166534; }
+  .kpi.blue .n { color:#1e40af; }
   .secao { margin-bottom: 10px; page-break-inside: avoid; }
   .secao-titulo { background:#111; color:#fff; font-weight:bold; font-size:9pt; padding:4px 8px; letter-spacing:.5px; }
-  table.grade { width:100%; border-collapse: collapse; }
-  .grade th, .grade td { border:1px solid #cbd5e1; padding:3px 6px; vertical-align: middle; }
-  .grade th { background:#f1f5f9; font-size:7pt; text-align:center; font-weight:bold; letter-spacing:.3px; }
-  .grade td { font-size: 8.5pt; }
+  table.grade { width:100%; border-collapse: collapse; table-layout: fixed; }
+  .grade th, .grade td { border:1px solid #cbd5e1; padding:3px 4px; vertical-align: middle; }
+  .grade th { background:#f1f5f9; font-size:6.5pt; text-align:center; font-weight:bold; letter-spacing:.2px; }
+  /* Cabeçalhos agrupados: PREVISTO (planejado) x REALIZADO (execução real). */
+  .grade th.grupo { background:#e2e8f0; font-size:7pt; letter-spacing:.6px; }
+  .grade th.grupo-real { background:#dbeafe; }
+  .grade td { font-size: 7.5pt; }
   .grade td.c { text-align:center; }
-  .grade .setor { text-align:left; width:34%; }
-  .grade .data { font-weight:bold; white-space:nowrap; }
-  .prog { width: 26%; }
+  .grade .setor { text-align:left; width:20%; word-wrap: break-word; }
+  .grade .data { font-weight:bold; white-space:nowrap; width:7%; }
+  /* Datas reais destacadas do previsto, para leitura rápida na reunião. */
+  .grade .real { color:#1e40af; }
+  .grade .dur { white-space:nowrap; width:5.5%; color:#374151; }
+  .prog { width: 13%; }
   .bar { display:inline-block; width: 70%; height:8px; background:#e5e7eb; border-radius:4px; overflow:hidden; vertical-align:middle; }
   .bar .fill { height:100%; background:#22c55e; }
   .pct { font-size:7.5pt; color:#374151; margin-left:5px; vertical-align: middle; }
@@ -140,17 +178,26 @@ export function renderHtmlCronograma(areas: AreaCronograma[]): string {
   <div class="kpi"><div class="n">${totalAreas}</div><div class="l">Áreas</div></div>
   <div class="kpi green"><div class="n">${concluidas}</div><div class="l">Concluídas</div></div>
   <div class="kpi red"><div class="n">${atrasadas}</div><div class="l">Atrasadas</div></div>
+  <div class="kpi blue">
+    <div class="n">${fmtPct(resumoArea.pct_atendido)}</div>
+    <div class="l">Área atendida${resumoArea.areas_com_pct > 0 ? ` (de ${fmtPct(resumoArea.pct_cadastrado)} cadastrada)` : ""}</div>
+  </div>
 </div>
 
 ${totalAreas > 0 ? secoes : `<div class="vazio">Nenhuma área cadastrada. Importe/cadastre os dispositivos do alarme primeiro.</div>`}
 
-<div class="rodape">Progresso: "entregues" = dispositivos com status TESTADO. Documento gerado automaticamente pelo Sistema de Gestão.</div>
+<div class="rodape">
+  Progresso: "entregues" = dispositivos com status TESTADO. "% da área" = quanto a área representa da área total da fábrica;
+  a área atendida soma apenas as áreas concluídas. Duração em dias corridos, contando o primeiro e o último dia.
+  Documento gerado automaticamente pelo Sistema de Gestão.
+</div>
 
 </body></html>`;
 
   return html;
 }
 
+// Paisagem: com 12 colunas (previsto + realizado) a tabela não cabe em retrato.
 export async function gerarCronogramaPdf(areas: AreaCronograma[]): Promise<Buffer> {
-  return renderPdfFromHtml(renderHtmlCronograma(areas));
+  return renderPdfFromHtml(renderHtmlCronograma(areas), { landscape: true });
 }

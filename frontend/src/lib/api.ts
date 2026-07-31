@@ -578,8 +578,14 @@ export const alarmeApi = {
 
   // Execution schedule (cronograma) — one row per área (central + setor).
   cronograma: () =>
-    request<{ areas: AreaCronograma[] }>("GET", "/alarme/cronograma"),
-  definirCronograma: (body: { central_id: string; setor: string; data_prevista?: string | null; observacoes?: string; sistema_antigo?: boolean | null }) =>
+    request<{ areas: AreaCronograma[]; resumo_area: ResumoAreaFabrica }>("GET", "/alarme/cronograma"),
+  definirCronograma: (body: {
+    central_id: string; setor: string;
+    data_prevista?: string | null; observacoes?: string; sistema_antigo?: boolean | null;
+    pct_area?: number | null;
+    data_inicio_prevista?: string | null; data_entrega_prevista?: string | null;
+    data_inicio_real?: string | null; data_fim_real?: string | null;
+  }) =>
     request<unknown>("PUT", "/alarme/cronograma", body),
 
   // Official schedule PDF — inline preview (object URL) + download.
@@ -695,7 +701,23 @@ export interface AreaCronograma {
   concluidos: number; faltam: number; pct: number;
   data_prevista: string | null; observacoes: string | null;
   sistema_antigo: boolean | null;
+  // % que a área representa da área total da fábrica (ex.: 1.5 = 1,5%).
+  pct_area: number | null;
+  data_inicio_prevista: string | null;
+  data_entrega_prevista: string | null;
+  data_inicio_real: string | null;
+  data_fim_real: string | null;
+  // Calculadas no backend a partir das datas — não editáveis.
+  duracao_prevista_dias: number | null;
+  duracao_real_dias: number | null;
   situacao: SituacaoCronograma;
+}
+
+// Soma dos percentuais de área: cadastrado x já atendido (áreas concluídas).
+export interface ResumoAreaFabrica {
+  pct_cadastrado: number;
+  pct_atendido: number;
+  areas_com_pct: number;
 }
 
 export interface GrupoTipo {

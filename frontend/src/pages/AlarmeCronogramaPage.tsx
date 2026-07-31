@@ -1,9 +1,9 @@
 import { useEffect, useState, useCallback } from "react";
-import { alarmeApi, type AreaCronograma, type SituacaoCronograma } from "../lib/api";
+import { alarmeApi, type AreaCronograma, type ResumoAreaFabrica, type SituacaoCronograma } from "../lib/api";
 import { toast } from "../components/Toast";
 import {
   CalendarClock, Loader2, CheckCircle2, Clock, AlertTriangle, HelpCircle, Save,
-  FileText, Download, Eye, X,
+  FileText, Download, Eye, X, PieChart,
 } from "lucide-react";
 
 const SIT_META: Record<SituacaoCronograma, { label: string; badge: string; Icon: React.ElementType }> = {
@@ -19,14 +19,61 @@ function fmtData(iso: string | null): string {
   return `${d}/${m}/${y}`;
 }
 
+// 1.5 → "1,5%" (vírgula decimal, sem zeros sobrando).
+function fmtPct(n: number | null): string {
+  if (n === null) return "—";
+  return `${String(Number(n.toFixed(3))).replace(".", ",")}%`;
+}
+
+// Campos editáveis de uma linha do cronograma. O rascunho guarda tudo como
+// string (é o que os <input> devolvem) e converte só na hora de salvar.
+interface Rascunho {
+  pct_area: string;
+  data_inicio_prevista: string;
+  data_entrega_prevista: string;
+  data_inicio_real: string;
+  data_fim_real: string;
+}
+
+function rascunhoDe(a: AreaCronograma): Rascunho {
+  return {
+    pct_area: a.pct_area === null ? "" : String(a.pct_area).replace(".", ","),
+    data_inicio_prevista:  a.data_inicio_prevista  ?? "",
+    data_entrega_prevista: a.data_entrega_prevista ?? "",
+    data_inicio_real:      a.data_inicio_real      ?? "",
+    data_fim_real:         a.data_fim_real         ?? "",
+  };
+}
+
+// Aceita "1,5" ou "1.5"; devolve null quando vazio e undefined quando inválido
+// (o undefined sinaliza "não salve isto", em vez de apagar o valor existente).
+function parsePct(txt: string): number | null | undefined {
+  const t = txt.trim();
+  if (!t) return null;
+  const n = Number(t.replace(",", "."));
+  if (!Number.isFinite(n) || n < 0 || n > 100) return undefined;
+  return n;
+}
+
+// Duração em dias corridos entre duas datas ISO, contando o primeiro e o último
+// dia. Espelha diasEntre() do backend, para a tela não esperar o save pra mostrar.
+function duracaoDias(inicio: string, fim: string): number | null {
+  if (!inicio || !fim) return null;
+  const a = Date.parse(inicio + "T00:00:00Z");
+  const b = Date.parse(fim + "T00:00:00Z");
+  if (Number.isNaN(a) || Number.isNaN(b) || b < a) return null;
+  return Math.round((b - a) / 86_400_000) + 1;
+}
+
 // Fase 2 · Cronograma — execution schedule per área (central + setor): target
 // delivery date + live install progress + on-track/late status.
 export function AlarmeCronogramaPage() {
   const [areas, setAreas] = useState<AreaCronograma[]>([]);
+  const [resumoArea, setResumoArea] = useState<ResumoAreaFabrica | null>(null);
   const [carregando, setCarregando] = useState(true);
   const [salvandoKey, setSalvandoKey] = useState<string | null>(null);
-  // Local edits to the date inputs, keyed by central_id|setor.
-  const [rascunho, setRascunho] = useState<Record<string, string>>({});
+  // Local edits to the row inputs, keyed by central_id|setor.
+  const [rascunho, setRascunho] = useState<Record<string, Rascunho>>({});
 
   // PDF export state
   const [baixando, setBaixando]     = useState(false);
@@ -40,7 +87,8 @@ export function AlarmeCronogramaPage() {
     try {
       const r = await alarmeApi.cronograma();
       setAreas(r.areas);
-      setRascunho(Object.fromEntries(r.areas.map((a) => [keyDe(a), a.data_prevista ?? ""])));
+      setResumoArea(r.resumo_area);
+      setRascunho(Object.fromEntries(r.areas.map((a) => [keyDe(a), rascunhoDe(a)])));
     } catch (e) {
       toast(e instanceof Error ? e.message : "Erro ao carregar o cronograma.", "erro");
     } finally {
@@ -82,17 +130,54 @@ export function AlarmeCronogramaPage() {
 
   async function salvar(a: AreaCronograma) {
     const k = keyDe(a);
-    const nova = rascunho[k]?.trim() || null;
+    const r = rascunho[k];
+    if (!r) return;
+
+    const pct = parsePct(r.pct_area);
+    if (pct === undefined) {
+      toast("Percentual da área inválido. Use um número entre 0 e 100 (ex.: 1,5).", "erro");
+      return;
+    }
+    // Datas invertidas geram duração negativa — barra aqui, com uma mensagem
+    // clara, em vez de deixar a coluna Duração silenciosamente vazia.
+    if (r.data_inicio_prevista && r.data_entrega_prevista && r.data_entrega_prevista < r.data_inicio_prevista) {
+      toast("A entrega prevista não pode ser anterior ao início previsto.", "erro");
+      return;
+    }
+    if (r.data_inicio_real && r.data_fim_real && r.data_fim_real < r.data_inicio_real) {
+      toast("A data real de fim não pode ser anterior ao início real.", "erro");
+      return;
+    }
+
     setSalvandoKey(k);
     try {
-      await alarmeApi.definirCronograma({ central_id: a.central_id, setor: a.setor, data_prevista: nova });
-      toast(`Data de ${a.setor} atualizada.`, "sucesso");
+      await alarmeApi.definirCronograma({
+        central_id: a.central_id, setor: a.setor,
+        pct_area: pct,
+        data_inicio_prevista:  r.data_inicio_prevista  || null,
+        data_entrega_prevista: r.data_entrega_prevista || null,
+        data_inicio_real:      r.data_inicio_real      || null,
+        data_fim_real:         r.data_fim_real         || null,
+      });
+      toast(`${a.setor || "Área"} atualizada.`, "sucesso");
       await carregar();
     } catch (e) {
-      toast(e instanceof Error ? e.message : "Erro ao salvar a data.", "erro");
+      toast(e instanceof Error ? e.message : "Erro ao salvar.", "erro");
     } finally {
       setSalvandoKey(null);
     }
+  }
+
+  function editar(k: string, campo: keyof Rascunho, valor: string) {
+    setRascunho((r) => ({ ...r, [k]: { ...r[k], [campo]: valor } }));
+  }
+
+  // Alterado = qualquer campo da linha difere do que está salvo.
+  function alterado(a: AreaCronograma): boolean {
+    const r = rascunho[keyDe(a)];
+    if (!r) return false;
+    const orig = rascunhoDe(a);
+    return (Object.keys(orig) as Array<keyof Rascunho>).some((c) => r[c] !== orig[c]);
   }
 
   // "Sistema antigo?" saves immediately on change (Sim/Não/em branco).
@@ -127,7 +212,7 @@ export function AlarmeCronogramaPage() {
             <CalendarClock className="w-6 h-6 text-brand-600" /> Cronograma de Execução
           </h1>
           <p className="text-sm text-gray-500 mt-0.5">
-            Defina a data de entrega por área e acompanhe o andamento da instalação (entregue = testado).
+            Defina o percentual da área, as datas previstas e reais por área, e acompanhe o andamento da instalação (entregue = testado).
           </p>
         </div>
         <div className="flex gap-2 shrink-0">
@@ -142,10 +227,23 @@ export function AlarmeCronogramaPage() {
 
       {/* Rollup */}
       {!carregando && totalAreas > 0 && (
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           <div className="card p-4"><p className="text-2xl font-bold text-gray-900">{totalAreas}</p><p className="text-xs text-gray-500">áreas</p></div>
           <div className="card p-4"><p className="text-2xl font-bold text-green-700">{concluidas}</p><p className="text-xs text-gray-500">concluídas</p></div>
           <div className="card p-4"><p className={`text-2xl font-bold ${atrasadas > 0 ? "text-red-700" : "text-gray-900"}`}>{atrasadas}</p><p className="text-xs text-gray-500">atrasadas</p></div>
+          <div className="card p-4">
+            <p className="text-2xl font-bold text-blue-700 flex items-center gap-1.5">
+              <PieChart className="w-4 h-4 shrink-0" /> {fmtPct(resumoArea?.pct_atendido ?? 0)}
+            </p>
+            <p className="text-xs text-gray-500">
+              da área da fábrica atendida
+              {resumoArea && resumoArea.areas_com_pct > 0 && (
+                <span className="block text-[10px] text-gray-400">
+                  {fmtPct(resumoArea.pct_cadastrado)} cadastrada em {resumoArea.areas_com_pct} área(s)
+                </span>
+              )}
+            </p>
+          </div>
         </div>
       )}
 
@@ -165,22 +263,47 @@ export function AlarmeCronogramaPage() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr>
-                      <th className="table-th">Área (setor)</th>
-                      <th className="table-th whitespace-nowrap">Sistema antigo?</th>
-                      <th className="table-th">Progresso</th>
-                      <th className="table-th whitespace-nowrap">Data de entrega</th>
-                      <th className="table-th">Situação</th>
-                      <th className="table-th w-8"></th>
+                      <th className="table-th" rowSpan={2}>Área (setor)</th>
+                      <th className="table-th whitespace-nowrap" rowSpan={2} title="Quanto esta área representa da área total da fábrica">% da área</th>
+                      <th className="table-th whitespace-nowrap" rowSpan={2}>Sistema antigo?</th>
+                      <th className="table-th" rowSpan={2}>Progresso</th>
+                      <th className="table-th text-center border-l border-gray-200 dark:border-gray-700" colSpan={3}>Previsto</th>
+                      <th className="table-th text-center border-l border-gray-200 dark:border-gray-700" colSpan={3}>Realizado</th>
+                      <th className="table-th border-l border-gray-200 dark:border-gray-700" rowSpan={2}>Situação</th>
+                      <th className="table-th w-8" rowSpan={2}></th>
+                    </tr>
+                    <tr>
+                      <th className="table-th whitespace-nowrap border-l border-gray-200 dark:border-gray-700">Início</th>
+                      <th className="table-th whitespace-nowrap">Entrega</th>
+                      <th className="table-th whitespace-nowrap">Duração</th>
+                      <th className="table-th whitespace-nowrap border-l border-gray-200 dark:border-gray-700">Início real</th>
+                      <th className="table-th whitespace-nowrap">Fim real</th>
+                      <th className="table-th whitespace-nowrap">Duração</th>
                     </tr>
                   </thead>
                   <tbody>
                     {lista.map((a) => {
                       const k = keyDe(a);
                       const meta = SIT_META[a.situacao];
-                      const alterado = (rascunho[k] ?? "") !== (a.data_prevista ?? "");
+                      const r = rascunho[k] ?? rascunhoDe(a);
+                      const temAlteracao = alterado(a);
+                      // Durações recalculadas a partir do rascunho, para o número
+                      // acompanhar a digitação antes mesmo de salvar.
+                      const durPrev = duracaoDias(r.data_inicio_prevista, r.data_entrega_prevista);
+                      const durReal = duracaoDias(r.data_inicio_real, r.data_fim_real);
                       return (
-                        <tr key={k} className={`table-row ${a.situacao === "atrasado" ? "bg-red-50/60" : ""}`}>
-                          <td className="table-td font-medium text-gray-800 max-w-[240px]">{a.setor || "—"}</td>
+                        <tr key={k} className={`table-row ${a.situacao === "atrasado" ? "bg-red-50/60 dark:bg-red-500/10" : ""}`}>
+                          <td className="table-td font-medium text-gray-800 max-w-[200px]">{a.setor || "—"}</td>
+                          <td className="table-td">
+                            <input
+                              type="text" inputMode="decimal"
+                              className="input py-1 text-sm w-[76px] text-right"
+                              placeholder="—"
+                              value={r.pct_area}
+                              onChange={(e) => editar(k, "pct_area", e.target.value)}
+                              title="Quanto esta área representa da área total da fábrica (ex.: 1,5)"
+                            />
+                          </td>
                           <td className="table-td">
                             <select
                               className="input py-1 text-sm w-[90px]"
@@ -196,33 +319,56 @@ export function AlarmeCronogramaPage() {
                               <option value="nao">Não</option>
                             </select>
                           </td>
-                          <td className="table-td min-w-[160px]">
+                          <td className="table-td min-w-[140px]">
                             <div className="flex items-center gap-2">
-                              <div className="flex-1 h-2 rounded-full bg-gray-100 overflow-hidden">
+                              <div className="flex-1 h-2 rounded-full bg-gray-100 dark:bg-gray-700 overflow-hidden">
                                 <div className="h-full bg-green-500" style={{ width: `${a.pct}%` }} />
                               </div>
                               <span className="text-xs text-gray-500 whitespace-nowrap">{a.concluidos}/{a.total}</span>
                             </div>
                           </td>
-                          <td className="table-td">
-                            <input
-                              type="date"
-                              className="input py-1 text-sm w-[150px]"
-                              value={rascunho[k] ?? ""}
-                              onChange={(e) => setRascunho((r) => ({ ...r, [k]: e.target.value }))}
-                            />
+
+                          {/* Previsto */}
+                          <td className="table-td border-l border-gray-200 dark:border-gray-700">
+                            <input type="date" className="input py-1 text-sm w-[140px]"
+                              value={r.data_inicio_prevista}
+                              onChange={(e) => editar(k, "data_inicio_prevista", e.target.value)} />
                           </td>
                           <td className="table-td">
+                            <input type="date" className="input py-1 text-sm w-[140px]"
+                              value={r.data_entrega_prevista}
+                              onChange={(e) => editar(k, "data_entrega_prevista", e.target.value)} />
+                          </td>
+                          <td className="table-td text-center text-xs text-gray-500 whitespace-nowrap">
+                            {durPrev === null ? "—" : `${durPrev} d`}
+                          </td>
+
+                          {/* Realizado */}
+                          <td className="table-td border-l border-gray-200 dark:border-gray-700">
+                            <input type="date" className="input py-1 text-sm w-[140px]"
+                              value={r.data_inicio_real}
+                              onChange={(e) => editar(k, "data_inicio_real", e.target.value)} />
+                          </td>
+                          <td className="table-td">
+                            <input type="date" className="input py-1 text-sm w-[140px]"
+                              value={r.data_fim_real}
+                              onChange={(e) => editar(k, "data_fim_real", e.target.value)} />
+                          </td>
+                          <td className="table-td text-center text-xs text-gray-500 whitespace-nowrap">
+                            {durReal === null ? "—" : `${durReal} d`}
+                          </td>
+
+                          <td className="table-td border-l border-gray-200 dark:border-gray-700">
                             <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${meta.badge}`}>
                               <meta.Icon className="w-3 h-3" /> {meta.label}
                             </span>
-                            {a.data_prevista && a.situacao !== "concluido" && (
-                              <span className="block text-[10px] text-gray-400 mt-0.5">alvo: {fmtData(a.data_prevista)}</span>
+                            {a.data_entrega_prevista && a.situacao !== "concluido" && (
+                              <span className="block text-[10px] text-gray-400 mt-0.5">alvo: {fmtData(a.data_entrega_prevista)}</span>
                             )}
                           </td>
                           <td className="table-td">
-                            {alterado && (
-                              <button onClick={() => salvar(a)} disabled={salvandoKey === k} title="Salvar data" className="btn-primary btn-sm p-1.5">
+                            {temAlteracao && (
+                              <button onClick={() => salvar(a)} disabled={salvandoKey === k} title="Salvar alterações da área" className="btn-primary btn-sm p-1.5">
                                 {salvandoKey === k ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
                               </button>
                             )}

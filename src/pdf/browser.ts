@@ -39,7 +39,12 @@ export async function launchBrowser(): Promise<Browser> {
   }
 }
 
-export async function renderPdfFromHtml(html: string): Promise<Buffer> {
+export interface OpcoesPdf {
+  // Wide tables (e.g. o cronograma, com 12 colunas) só cabem em paisagem.
+  landscape?: boolean;
+}
+
+export async function renderPdfFromHtml(html: string, opcoes: OpcoesPdf = {}): Promise<Buffer> {
   const browser = await launchBrowser();
   try {
     const page = await browser.newPage();
@@ -48,6 +53,7 @@ export async function renderPdfFromHtml(html: string): Promise<Buffer> {
     await page.setContent(html, { waitUntil: "load" });
     const pdf = await page.pdf({
       format: "A4",
+      landscape: opcoes.landscape ?? false,
       printBackground: true,
       margin: { top: "10mm", bottom: "10mm", left: "10mm", right: "10mm" },
     });
